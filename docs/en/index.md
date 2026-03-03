@@ -194,7 +194,7 @@ With Gixy-Next, you can perform an automated NGINX configuration security review
 
 ## Contributing
 
-Contributions to Gixy-Next are always welcome! You can help us in different ways, such as:
+Gixy-Next is maintained by [Joshua Rogers](https://joshua.hu), but contributions are always welcome! You can help us in different ways, such as:
 
 - Reporting bugs.
 - Suggesting new plugins for detection.
