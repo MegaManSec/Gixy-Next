@@ -89,6 +89,7 @@ nav:
     - plugins/return_bypasses_allow_deny.md
     - plugins/ssrf.md
     - plugins/stale_dns_cache.md
+    - plugins/status_page_exposed.md
     - plugins/try_files_is_evil_too.md
     - plugins/unanchored_regex.md
     - plugins/valid_referers.md
