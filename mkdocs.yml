@@ -74,6 +74,7 @@ nav:
     - plugins/error_log_off.md
     - plugins/hash_without_default.md
     - plugins/host_spoofing.md
+    - plugins/http2_misdirected_request.md
     - plugins/http_splitting.md
     - plugins/if_is_evil.md
     - plugins/invalid_regex.md
