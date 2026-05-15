@@ -6,8 +6,27 @@ from gixy.core import builtin_variables as builtins
 from gixy.core.config import Config
 from gixy.core.context import get_context, pop_context, purge_context, push_context
 from gixy.core.plugins_manager import PluginsManager
-from gixy.directives.directive import MapDirective
+from gixy.directives.block import GeoBlock, MapBlock
+from gixy.directives.directive import (
+    AuthRequestSetDirective,
+    MapDirective,
+    PerlSetDirective,
+    RootDirective,
+    SetByLuaDirective,
+    SetDirective,
+)
 from gixy.parser.nginx_parser import NginxParser
+
+# Directives that register a named variable visible throughout their enclosing
+# scope regardless of source order, matching nginx's parse-time registration.
+SCOPE_STATIC_VAR_PROVIDERS = (
+    SetDirective,
+    AuthRequestSetDirective,
+    PerlSetDirective,
+    SetByLuaDirective,
+    MapBlock,
+    GeoBlock,
+)
 
 LOG = logging.getLogger(__name__)
 
@@ -63,6 +82,8 @@ class Manager(object):
         return stats
 
     def _audit_recursive(self, tree):
+        self._prepopulate_scope_var_names(tree)
+        self._prepopulate_scope_var_values(tree)
         for directive in tree:
             self._update_variables(directive)
             self.auditor.audit(directive)
@@ -72,6 +93,28 @@ class Manager(object):
                 self._audit_recursive(directive.children)
                 if directive.self_context:
                     pop_context()
+
+    def _prepopulate_scope_var_names(self, tree):
+        context = get_context()
+        for directive in tree:
+            if isinstance(directive, SCOPE_STATIC_VAR_PROVIDERS):
+                name = directive.variable
+                if name not in context.variables["name"]:
+                    context.add_var(name, builtins.fake_var(name))
+            elif isinstance(directive, RootDirective):
+                if "document_root" not in context.variables["name"]:
+                    context.add_var("document_root", builtins.fake_var("document_root"))
+            elif directive.is_block and not directive.self_context:
+                self._prepopulate_scope_var_names(directive.children)
+
+    def _prepopulate_scope_var_values(self, tree):
+        context = get_context()
+        for directive in tree:
+            if isinstance(directive, SCOPE_STATIC_VAR_PROVIDERS + (RootDirective,)):
+                for var in directive.variables:
+                    context.add_var(var.name, var)
+            elif directive.is_block and not directive.self_context:
+                self._prepopulate_scope_var_values(directive.children)
 
     def _update_variables(self, directive):
         # TODO(buglloc): finish him!
