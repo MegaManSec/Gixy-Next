@@ -83,6 +83,7 @@ nav:
     - plugins/origins.md
     - plugins/proxy_buffering_off.md
     - plugins/proxy_pass_normalized.md
+    - plugins/quic_bpf_reuseport.md
     - plugins/regex_redos.md
     - plugins/resolver_external.md
     - plugins/return_bypasses_allow_deny.md

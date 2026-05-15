@@ -98,6 +98,7 @@ Gixy-Next can detect a wide range of NGINX security and performance misconfigura
 *   [[origins] Problems with referer/origin header validation](https://gixy.io/plugins/origins/)
 *   [[proxy_buffering_off] Disabling `proxy_buffering`](https://gixy.io/plugins/proxy_buffering_off/)
 *   [[proxy_pass_normalized] `proxy_pass` path normalization issues](https://gixy.io/plugins/proxy_pass_normalized/)
+*   [[quic_bpf_reuseport] QUIC connections silently dropped after reload](https://gixy.io/plugins/quic_bpf_reuseport/)
 *   [[regex_redos] Regular expression denial of service (ReDoS)](https://gixy.io/plugins/regex_redos/)
 *   [[resolver_external] Using external DNS nameservers](https://gixy.io/plugins/resolver_external/)
 *   [[return_bypasses_allow_deny] Return directive bypasses allow/deny restrictions](https://gixy.io/plugins/return_bypasses_allow_deny/)
