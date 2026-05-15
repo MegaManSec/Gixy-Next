@@ -90,6 +90,7 @@ Gixy-Next can detect a wide range of NGINX security and performance misconfigura
 *   [[error_log_off] `error_log` set to `off`](https://gixy.io/plugins/error_log_off/)
 *   [[hash_without_default] Missing default in hash blocks](https://gixy.io/plugins/hash_without_default/)
 *   [[host_spoofing] Request's Host header forgery](https://gixy.io/plugins/host_spoofing/)
+*   [[http2_misdirected_request] Missing HTTP/2 misdirected-request safeguard](https://gixy.io/plugins/http2_misdirected_request/)
 *   [[http_splitting] HTTP Response Splitting](https://gixy.io/plugins/http_splitting/)
 *   [[if_is_evil] If is evil when used in location context](https://gixy.io/plugins/if_is_evil/)
 *   [[invalid_regex] Invalid regex capture groups](https://gixy.io/plugins/invalid_regex/)
