@@ -110,14 +110,14 @@ class invalid_regex(Plugin):
             return
 
         operator = if_directive.args[1]
-        if operator not in ["~", "~*"]:
+        if operator not in ["~", "~*", "!~", "!~*"]:
             return
 
         pattern = if_directive.args[2]
 
         # Parse the regex to determine available groups
         try:
-            regexp = Regexp(pattern, case_sensitive=(operator == "~"))
+            regexp = Regexp(pattern, case_sensitive=(operator in ["~", "!~"]))
             available_groups = set(regexp.groups.keys())
             available_groups.discard(0)
         except Exception:
