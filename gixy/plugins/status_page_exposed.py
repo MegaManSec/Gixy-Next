@@ -12,7 +12,7 @@ class status_page_exposed(Plugin):
         "If not IP-restricted, it is accessible to anyone and useful for reconnaissance."
     )
     directives = ["stub_status"]
-    help_url = "https://gixy.io/plugins/stale_dns_cache/"
+    help_url = "https://gixy.io/plugins/status_page_exposed/"
 
     def _server_uses_only_unix_sockets(self, directive):
         """True if the enclosing server listens only on unix: sockets."""

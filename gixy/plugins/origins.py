@@ -185,7 +185,7 @@ class origins(Plugin):
             suffix_mutant_raw_filled = suffix_mutant_raw.replace("`", "b")
             prefix_mutant_raw_filled = prefix_mutant_raw.replace("`", "c")
 
-            if not self.same_origin(base_hostname_filled, base_hostname_filled):
+            if not self.same_origin(base_hostname, base_hostname_filled):
                 self.insecure_set.add(base_mutant_raw_filled)
                 continue
 
