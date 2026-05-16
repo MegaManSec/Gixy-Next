@@ -25,13 +25,16 @@ class http2_misdirected_request(Plugin):
             return
 
         http2_dir = http_block.some("http2")
-        http2_global = bool(http2_dir and http2_dir.args and http2_dir.args[0] == "on")
+        http2_global = bool(http2_dir and http2_dir.args and http2_dir.args[0].lower() == "on")
 
         for server in http_block.find_all_contexts_of_type("server"):
             ssl_reject = server.some("ssl_reject_handshake")
-            if not ssl_reject or not ssl_reject.args or ssl_reject.args[0] != "on":
+            if not ssl_reject or not ssl_reject.args or ssl_reject.args[0].lower() != "on":
                 continue
             if not self._server_is_default(server):
+                continue
+            server_http2 = server.some("http2")
+            if server_http2 and server_http2.args and server_http2.args[0].lower() == "off":
                 continue
             if not http2_global and not self._server_has_http2(server):
                 continue
@@ -53,7 +56,7 @@ class http2_misdirected_request(Plugin):
 
     def _server_has_http2(self, server):
         http2 = server.some("http2")
-        if http2 and http2.args and http2.args[0] == "on":
+        if http2 and http2.args and http2.args[0].lower() == "on":
             return True
         for listen in server.find("listen"):
             if any(t.lower() == "http2" for t in listen.args):

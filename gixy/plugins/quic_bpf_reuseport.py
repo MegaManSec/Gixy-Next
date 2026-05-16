@@ -22,7 +22,7 @@ class quic_bpf_reuseport(Plugin):
 
     def post_audit(self, root):
         quic_bpf = root.some("quic_bpf")
-        if not quic_bpf or not quic_bpf.args or quic_bpf.args[0] != "on":
+        if not quic_bpf or not quic_bpf.args or quic_bpf.args[0].lower() != "on":
             return
 
         worker_procs = root.some("worker_processes")

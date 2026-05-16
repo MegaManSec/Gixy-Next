@@ -69,7 +69,6 @@ class regex_redos(Plugin):
             return
 
         regex_pattern = directive.path
-        fail_reason = f"Could not evaluate regex for ReDoS: {regex_pattern}."
 
         modifier = "" if directive.modifier == "~" else "i"
         json_data = {"1": {"pattern": regex_pattern, "modifier": modifier}}
