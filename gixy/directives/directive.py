@@ -196,7 +196,7 @@ class SetDirective(Directive):
 
     def __init__(self, name, args):
         super(SetDirective, self).__init__(name, args)
-        self.variable = args[0].lstrip("$")
+        self.variable = args[0].lstrip("$").lower()
         self.value = args[1]
 
     @property
@@ -210,7 +210,7 @@ class AuthRequestSetDirective(Directive):
 
     def __init__(self, name, args):
         super().__init__(name, args)
-        self.variable = args[0].lstrip("$")
+        self.variable = args[0].lstrip("$").lower()
         self.value = args[1]
 
     @property
@@ -226,7 +226,7 @@ class PerlSetDirective(Directive):
 
     def __init__(self, name, args):
         super().__init__(name, args)
-        self.variable = args[0].lstrip("$")
+        self.variable = args[0].lstrip("$").lower()
         self.value = args[1]
 
     @property
@@ -240,7 +240,7 @@ class SetByLuaDirective(Directive):
 
     def __init__(self, name, args):
         super().__init__(name, args)
-        self.variable = args[0].lstrip("$")
+        self.variable = args[0].lstrip("$").lower()
         self.value = args[1]
 
     @property

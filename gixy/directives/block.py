@@ -177,15 +177,15 @@ class IfBlock(Block):
 
         if len(args) == 1:
             # if ($slow)
-            self.variable = args[
-                0
-            ]  # Do not lstrip because this is not used for defining variables
+            self.variable = args[0].lower()  # Do not lstrip because this is not used for defining variables
         elif len(args) == 2:
             # if (!-e $foo)
             self.operand, self.value = args
         elif len(args) == 3:
             # if ($request_method = POST)
-            self.variable, self.operand, self.value = args
+            self.variable = args[0].lower()
+            self.operand = args[1]
+            self.value = args[2]
         else:
             raise Exception('Unknown "if" definition, args: {0!r}'.format(args))
 
@@ -252,8 +252,8 @@ class MapBlock(Block):
 
     def __init__(self, name, args):
         super(MapBlock, self).__init__(name, args)
-        self.source = args[0]
-        self.variable = args[1].lstrip("$")
+        self.source = args[0].lower()
+        self.variable = args[1].lstrip("$").lower()
 
     def gather_map_directives(self, nodes):
         for node in nodes:
@@ -342,10 +342,10 @@ class GeoBlock(Block):
         super(GeoBlock, self).__init__(name, args)
         if len(args) == 1:  # geo uses $remote_addr as default source of the value
             source = "$remote_addr"
-            variable = args[0].lstrip("$")
+            variable = args[0].lstrip("$").lower()
         else:
-            source = args[0]
-            variable = args[1].lstrip("$")
+            source = args[0].lower()
+            variable = args[1].lstrip("$").lower()
         self.source = source
         self.variable = variable
 
