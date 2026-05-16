@@ -11,9 +11,9 @@ This plugin flags `rewrite` directives where the replacement URL contains a `?` 
 
 ## Why this is a problem
 
-This pattern is associated with CVE-2026-42945 ("nginx rift"), which can crash or allow code execution in nginx worker processes on affected versions. Whether a given deployment is vulnerable depends on the nginx version — Gixy-Next cannot determine this from the config alone, so this is reported as **INFORMATION**.
+CVE-2026-42945 ("nginx rift") is a bug in nginx itself. The only real fix is to update nginx to a patched version. Whether a given deployment is vulnerable depends on the nginx version — Gixy-Next cannot determine this from the config alone, so this is reported as **INFORMATION**.
 
-Switching to named capture groups eliminates the pattern entirely and also makes the rewrite easier to read.
+Switching to named capture groups avoids the vulnerable pattern on unpatched versions and is worth doing regardless: `$id` and `$tab` are self-documenting in a way that `$1` and `$2` are not, making rewrites easier to understand and maintain.
 
 ## Bad configuration
 
