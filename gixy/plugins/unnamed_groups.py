@@ -14,10 +14,13 @@ class unnamed_groups(Plugin):
     summary = "Unnamed capture group reference in rewrite with query string (CVE-2026-42945)."
     severity = gixy.severity.INFORMATION
     description = (
-        "Using numeric capture groups ($1, $2, …) in a rewrite replacement that "
-        "contains a query string ('?') is associated with CVE-2026-42945 — a bug in "
-        "nginx itself, fixed by updating nginx. Switching to named capture groups "
-        "avoids the pattern on unpatched versions and improves readability."
+        "This check flags a specific pattern associated with CVE-2026-42945: a rewrite "
+        "replacement that contains both a query string ('?') and numeric capture group "
+        "references ($1, $2, …). Not all uses of unnamed capture groups are flagged — "
+        "only this combination. The underlying bug is in nginx itself; if you are running "
+        "a patched version (1.30.1+/1.31.0+, or NGINX Plus R32 P6+/R36 P4+), no action "
+        "is required. On unpatched versions, switching to named capture groups avoids the "
+        "vulnerable pattern and improves readability."
     )
     help_url = "https://gixy.io/plugins/unnamed_groups/"
     directives = ["rewrite"]
