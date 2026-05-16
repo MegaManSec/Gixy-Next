@@ -18,6 +18,6 @@ class valid_referers(Plugin):
     directives = ["valid_referers"]
 
     def audit(self, directive):
-        if "none" in directive.args:
+        if any(a.lower() == "none" for a in directive.args):
             reason = "`valid_referers` includes `none`, treating requests without a Referer as trusted."
             self.add_issue(directive=directive, reason=reason)

@@ -123,7 +123,23 @@ class invalid_regex(Plugin):
         except Exception:
             return
 
-        # Check for referenced groups that don't exist
+        # For negative match operators the block only executes when the regex did NOT
+        # match, so any capture groups from this pattern are never populated here.
+        if operator in ("!~", "!~*"):
+            never_set = referenced_groups & available_groups
+            if never_set:
+                refs = ", ".join(f"${g}" for g in sorted(never_set))
+                self.add_issue(
+                    directive=directive,
+                    reason=(
+                        f"The set directive references capture group(s) {refs} inside a "
+                        f"!~ block. The block only executes when the regex did not match, "
+                        f"so these captures are never set by this condition and will be "
+                        f"empty or carry a stale value from a previous match."
+                    ),
+                )
+
+        # Check for referenced groups that don't exist in the pattern at all
         invalid_groups = referenced_groups - available_groups
 
         if invalid_groups:
