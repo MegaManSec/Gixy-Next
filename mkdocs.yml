@@ -89,6 +89,7 @@ nav:
     - plugins/regex_redos.md
     - plugins/resolver_external.md
     - plugins/return_bypasses_allow_deny.md
+    - plugins/ssl_stapling_without_resolver.md
     - plugins/ssrf.md
     - plugins/stale_dns_cache.md
     - plugins/status_page_exposed.md
