@@ -142,7 +142,7 @@ gixy --skips low_keepalive_requests,worker_rlimit_nofile_vs_connections
 To only report issues of a certain severity or higher, use the compounding `-l` flag:
 
 ```shell-session
-# -l for LOW severity issues and high, -ll for MEDIUM and higher, and -lll for only HIGH severity issues
+# -l for LOW severity issues and higher, -ll for MEDIUM and higher, and -lll for only HIGH severity issues
 gixy -ll
 ```
 
