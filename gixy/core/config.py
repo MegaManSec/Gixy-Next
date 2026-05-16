@@ -6,7 +6,7 @@ class Config(object):
         self,
         plugins=None,
         skips=None,
-        severity=gixy.severity.UNSPECIFIED,
+        severity=gixy.severity.INFORMATION,
         output_format=None,
         output_file=None,
         allow_includes=True,

@@ -78,10 +78,7 @@ url = http://127.0.0.1:8080/
 
 ### Severity
 
-This plugin reports different severities depending on the result of the external checker:
-
-- MEDIUM, if the external checker reports the expression is vulnerable to ReDoS.
-- UNSPECIFIED, if the plugin cannot evaluate the expression for one reason or another (server failure, network failure, invalid JSON, etc.)
+This plugin reports issues at MEDIUM severity when the external checker confirms a regex is vulnerable to ReDoS. If the checker cannot evaluate an expression (server failure, network failure, invalid JSON, unknown complexity), nothing is reported.
 
 ### When this check is skipped
 

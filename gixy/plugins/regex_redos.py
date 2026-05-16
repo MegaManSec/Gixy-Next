@@ -36,7 +36,6 @@ class regex_redos(Plugin):
 
     summary = "Regular expression denial of service (ReDoS)."
     severity = gixy.severity.MEDIUM
-    unknown_severity = gixy.severity.UNSPECIFIED
     description = (
         "Regular expressions with the potential for catastrophic backtracking "
         "allow an nginx server to be denial-of-service attacked with very low "
@@ -84,25 +83,16 @@ class regex_redos(Plugin):
                 timeout=60,
             )
         except Exception:
-            self.add_issue(
-                directive=directive, reason=fail_reason, severity=self.unknown_severity
-            )
             return
 
         # If we get a non-200 response, skip.
         if response.status_code != 200:
-            self.add_issue(
-                directive=directive, reason=fail_reason, severity=self.unknown_severity
-            )
             return
 
         # Attempt to parse the JSON response.
         try:
             response_json = response.json()
         except ValueError:
-            self.add_issue(
-                directive=directive, reason=fail_reason, severity=self.unknown_severity
-            )
             return
 
         # Ensure the expected data structure is present and matches the pattern.
@@ -112,9 +102,6 @@ class regex_redos(Plugin):
             or "source" not in response_json["1"]
             or response_json["1"]["source"] != regex_pattern
         ):
-            self.add_issue(
-                directive=directive, reason=fail_reason, severity=self.unknown_severity
-            )
             return
 
         recheck = response_json["1"]
@@ -124,12 +111,7 @@ class regex_redos(Plugin):
         if status not in ("vulnerable", "unknown"):
             return
 
-        # If the status is unknown, add a low-severity issue (likely the server timed out)
         if status == "unknown":
-            reason = f"Could not determine ReDoS complexity for regex: {regex_pattern}."
-            self.add_issue(
-                directive=directive, reason=reason, severity=self.unknown_severity
-            )
             return
 
         # Status is 'vulnerable' here. Report as a high-severity issue.
