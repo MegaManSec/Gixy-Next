@@ -6,27 +6,38 @@ from gixy.plugins.plugin import Plugin
 
 class unnamed_groups(Plugin):
     r"""
-    Detects rewrite directives that reference numeric capture groups ($1, $2, …)
-    in the query-string portion of the replacement URL — the pattern associated
-    with CVE-2026-42945 ("nginx rift").
+    Detects rewrite directives that combine a query string ('?') in the
+    replacement URL with numeric capture group references ($1, $2, …) anywhere
+    in that replacement — the pattern exploited by CVE-2026-42945 ("nginx rift").
+
+    The bug is a heap buffer overflow in ngx_http_rewrite_module: the length
+    calculation for capture group values uses the raw byte count, but the copy
+    applies NGX_ESCAPE_ARGS escaping (triggered by the presence of '?'), so
+    characters like '%', '+', and '&' expand from 1 to 3 bytes and overflow the
+    buffer. The overflow affects ALL $N references in the replacement, including
+    those that appear before the '?'.
 
     Whether any given nginx build is exploitable depends entirely on the nginx
     version and patch status, which cannot be determined from a config file.
     This finding is therefore informational: switching to named capture groups
     is the recommended fix and also improves readability independent of the CVE.
 
-    Flagged:
+    Flagged ($N after ?):
         rewrite ^/users/([0-9]+)/profile/(.*)$ /profile.php?id=$1&tab=$2 last;
 
-    Preferred:
+    Also flagged ($N before ?):
+        rewrite ^/(.*)$ /$1?v=2 last;
+
+    Preferred (named captures):
         rewrite ^/users/(?<id>[0-9]+)/profile/(?<tab>.*)$ /profile.php?id=$id&tab=$tab last;
     """
 
-    summary = "Numeric capture group reference in rewrite query string (CVE-2026-42945)."
+    summary = "Unnamed capture group reference in rewrite with query string (CVE-2026-42945)."
     severity = gixy.severity.INFORMATION
     description = (
-        "Referencing numeric capture groups ($1, $2, …) after a '?' in a rewrite "
-        "replacement is the pattern targeted by CVE-2026-42945 ('nginx rift'). "
+        "When a rewrite replacement contains '?' (triggering query-string escaping), "
+        "any numeric capture group reference ($1, $2, …) anywhere in that replacement "
+        "is subject to CVE-2026-42945 ('nginx rift') — a heap buffer overflow. "
         "Whether the instance is exploitable depends on the nginx version and patch "
         "status, which is not visible in the config. Switching to named capture groups "
         "is the recommended mitigation and also improves readability."
@@ -44,8 +55,7 @@ class unnamed_groups(Plugin):
         if "?" not in replacement:
             return
 
-        query_string = replacement.split("?", 1)[1]
-        capture_refs = self._CAPTURE_GROUP_REF.findall(query_string)
+        capture_refs = self._CAPTURE_GROUP_REF.findall(replacement)
         if not capture_refs:
             return
 
@@ -53,7 +63,7 @@ class unnamed_groups(Plugin):
         self.add_issue(
             directive=directive,
             reason=(
-                f"Rewrite target uses numeric capture group(s) {refs} in the query "
-                "string. See CVE-2026-42945."
+                f"Rewrite replacement contains '?' and references numeric capture "
+                f"group(s) {refs}. See CVE-2026-42945."
             ),
         )
