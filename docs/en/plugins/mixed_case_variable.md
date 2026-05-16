@@ -44,7 +44,7 @@ server {
 }
 ```
 
-`$jwt_token` is initialized and checked as lowercase, but assigned in the `if` block as `$JWT_Token`. The second `if` condition and the `proxy_set_header` directive will always see the value set by the first `set $jwt_token ""` line, never the one from the `if` block.
+`$jwt_token` and `$JWT_Token` are the same variable — NGINX normalizes both to `jwt_token`. While the code works correctly at runtime, it reads as if two separate variables are in use, hiding the relationship between the initial assignment, the `if`-block update, and the later check. This is confusing and likely masks a typo.
 
 ## Better configuration
 
