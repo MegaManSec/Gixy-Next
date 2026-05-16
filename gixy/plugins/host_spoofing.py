@@ -20,9 +20,9 @@ class host_spoofing(Plugin):
             # Not a "Host" header
             return
 
-        if value == "$http_host":
+        if value.lower() == "$http_host":
             reason = "Upstream Host is set from `$http_host`, which can be attacker-controlled. Prefer `$host`."
             self.add_issue(directive=directive, reason=reason)
-        elif value.startswith("$arg_"):
+        elif value.lower().startswith("$arg_"):
             reason = f"Upstream Host is set from query-string variable `{value}`, which is attacker-controlled."
             self.add_issue(directive=directive, reason=reason)

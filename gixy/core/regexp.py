@@ -1033,7 +1033,7 @@ class Regexp(object):
                 case_sensitive=self.case_sensitive,
             )
         for name, group in self.parsed.pattern.groupdict.items():
-            result[name] = result[group]
+            result[name.lower()] = result[group]
         return result
 
     @property

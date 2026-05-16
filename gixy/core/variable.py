@@ -24,7 +24,7 @@ def compile_script(script, ctx=None):
     for i, var in enumerate(EXTRACT_RE.split(str(script))):
         if i % 2:
             # Variable
-            var_val = var.strip("{}\x20")
+            var_val = var.strip("{}\x20").lower()
             var = context.get_var(var_val, ctx=ctx)
             if var:
                 depends.append(var)

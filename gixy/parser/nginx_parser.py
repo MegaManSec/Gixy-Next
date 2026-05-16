@@ -330,7 +330,7 @@ class NginxParser(object):
             # resolve as they commonly do in nginx deployments.
             # This intentionally diverges from commit 0ef30ce (which switches cwd
             # to the included file directory) to avoid mis-resolving patterns like
-            # sites/default.conf including conf.d/listen → /etc/nginx/conf.d/listen.
+            # sites/default.conf including conf.d/listen -> /etc/nginx/conf.d/listen.
             old_stack = self._path_stack
             self._path_stack = file_path
 

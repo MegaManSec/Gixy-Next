@@ -66,15 +66,15 @@ class proxy_pass_normalized(Plugin):
         rewritten = None
 
         for rewrite in directive.find_declarative_directives_in_scope("rewrite"):
-            if rewrite.pattern == "^" and rewrite.replace == "$request_uri":
+            if rewrite.pattern == "^" and rewrite.replace.lower() == "$request_uri":
                 if path:
                     # Check for $uri or any numbered variable in the path.
-                    if "$uri" in path or self.num_pattern.search(path):
+                    if "$uri" in path.lower() or self.num_pattern.search(path):
                         return
                     rewritten = rewrite
                     break
                 else:
-                    if "$uri" in host or self.num_pattern.search(host):
+                    if "$uri" in host.lower() or self.num_pattern.search(host):
                         return
                     rewritten = rewrite
                     break
