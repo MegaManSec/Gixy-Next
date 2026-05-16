@@ -254,11 +254,11 @@ def _normalize_value_token(token):
     """Parse a token from a drop-in variable file into a usable value.
 
     Supported forms:
-    - "" or '' → empty string (treated as not user-controlled)
-    - r'...'/r"..." → regex pattern string
-    - '...'/"..." → literal string
-    - none/null (case-insensitive) → None
-    - empty/missing value → empty string
+    - "" or '' -> empty string (treated as not user-controlled)
+    - r'...'/r"..." -> regex pattern string
+    - '...'/"..." -> literal string
+    - none/null (case-insensitive) -> None
+    - empty/missing value -> empty string
     Trailing commas are tolerated.
     """
     if token is None:
