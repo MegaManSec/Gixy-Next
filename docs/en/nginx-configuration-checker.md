@@ -39,13 +39,13 @@ Gixy-Next is an **NGINX configuration security checker**. It parses your `nginx.
 
 Gixy-Next can detect issues such as:
 
-- `ssrf` – server side request forgery risks in `proxy_pass` and similar directives
-- `http_splitting` – HTTP response splitting via unsafe variables in headers
-- `host_spoofing` – insecure use of the `Host` header
-- `alias_traversal` – path traversal through misconfigured `alias`
-- `add_header_content_type` – setting `Content-Type` via `add_header`
-- `version_disclosure` – leaking NGINX version via `server_tokens`
-- `unanchored_regex` – regular expressions without anchors in security sensitive places.
+- `ssrf` - server side request forgery risks in `proxy_pass` and similar directives
+- `http_splitting` - HTTP response splitting via unsafe variables in headers
+- `host_spoofing` - insecure use of the `Host` header
+- `alias_traversal` - path traversal through misconfigured `alias`
+- `add_header_content_type` - setting `Content-Type` via `add_header`
+- `version_disclosure` - leaking NGINX version via `server_tokens`
+- `unanchored_regex` - regular expressions without anchors in security sensitive places.
 - `stale_dns_cache` - outdated or incorrect hosts/ip addresses being used for upstream proxying due to DNS caching.
 
 In other words:
