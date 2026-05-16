@@ -28,7 +28,7 @@ class mixed_case_variable(Plugin):
         "is misleading and may indicate a typo."
     )
     help_url = "https://gixy.io/plugins/mixed_case_variable/"
-    directives = []
+    directives = []  # empty → receives every directive
 
     def __init__(self, config):
         super().__init__(config)
