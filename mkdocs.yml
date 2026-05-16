@@ -94,6 +94,7 @@ nav:
     - plugins/status_page_exposed.md
     - plugins/try_files_is_evil_too.md
     - plugins/unanchored_regex.md
+    - plugins/unnamed_groups.md
     - plugins/valid_referers.md
     - plugins/version_disclosure.md
     - plugins/worker_rlimit_nofile_vs_connections.md
