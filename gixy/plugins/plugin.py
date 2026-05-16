@@ -6,7 +6,7 @@ class Plugin(object):
     summary = ""
     description = ""
     help_url = ""
-    severity = gixy.severity.UNSPECIFIED
+    severity = gixy.severity.INFORMATION
     directives = []
     options = {}
 

@@ -21,7 +21,7 @@ class mixed_case_variable(Plugin):
     """
 
     summary = "Same variable referenced with inconsistent case."
-    severity = gixy.severity.LOW
+    severity = gixy.severity.INFORMATION
     description = (
         "NGINX normalizes all variable names to lowercase. "
         "Referencing the same variable with different cases in one config "

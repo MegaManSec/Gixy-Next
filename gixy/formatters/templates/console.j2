@@ -1,4 +1,4 @@
-{% set colors = {'DEF': '\033[0m', 'TITLE': '\033[95m', 'UNSPECIFIED': '\033[0m', 'LOW': '\033[94m', 'MEDIUM': '\033[93m', 'HIGH': '\033[91m'} %}
+{% set colors = {'DEF': '\033[0m', 'TITLE': '\033[95m', 'INFORMATION': '\033[0m', 'LOW': '\033[94m', 'MEDIUM': '\033[93m', 'HIGH': '\033[91m'} %}
 
 {{ colors.TITLE }}==================== Results ==================={{ colors.DEF }}
 {% for path, issues in reports.items() %}
@@ -37,7 +37,7 @@ Pseudo config:
 {% if stats %}
 {{ colors.TITLE }}==================== Summary ==================={{ colors.DEF }}
 Total issues:
-    Unspecified: {{ stats.UNSPECIFIED }}
+    Informational: {{ stats.INFORMATION }}
     Low: {{ stats.LOW }}
     Medium: {{ stats.MEDIUM }}
     High: {{ stats.HIGH }}

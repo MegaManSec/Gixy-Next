@@ -170,7 +170,7 @@ include /etc/nginx/sites/default.conf;
 
 ==================== Summary ===================
 Total issues:
-    Unspecified: 0
+    Informational: 0
     Low: 0
     Medium: 0
     High: 1
