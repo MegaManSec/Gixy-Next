@@ -319,7 +319,7 @@ class MapBlock(Block):
         ]
 
     def __str__(self):
-        return "{0} {1} ${2} {{".format(self.nginx_name, self.source, self.variable)
+        return "{0} {1} {2} {{".format(self.nginx_name, self.args[0], self.args[1])
 
 
 class GeoBlock(Block):
@@ -384,4 +384,4 @@ class GeoBlock(Block):
         ]
 
     def __str__(self):
-        return "{0} {1} ${2} {{".format(self.nginx_name, self.source, self.variable)
+        return "{0} {1} {{".format(self.nginx_name, " ".join(self.args))
