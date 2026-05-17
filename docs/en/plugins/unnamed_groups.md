@@ -1,44 +1,79 @@
 ---
-title: "Unnamed capture groups in rewrite with query string"
-description: "Detects rewrite directives that use numeric capture group references ($1, $2, …) in a replacement URL that also contains a query string — the pattern associated with CVE-2026-42945."
+title: "Rewrite args-flag leak before set (CVE-2026-42945)"
+description: "Detects a rewrite directive with '?' in its replacement followed by a set directive referencing a numeric capture group — the exact pattern that triggers the CVE-2026-42945 heap buffer overflow on unpatched nginx."
 ---
 
-# [unnamed_groups] Unnamed capture groups in rewrite with query string
+# [unnamed_groups] Rewrite `?` leaks args-flag to subsequent `set $N` (CVE-2026-42945)
+
+CVE-2026-42945 is a remote code execution vulnerability affecting nginx. In certain rewrite configurations on unpatched versions, an unauthenticated attacker can trigger a heap buffer overflow in a nginx worker process by sending a crafted HTTP request.
 
 ## What this check looks for
 
-This plugin flags a specific pattern associated with CVE-2026-42945: a `rewrite` directive whose replacement URL contains a `?` **and** references numeric capture groups (`$1`, `$2`, …) anywhere in that replacement. Not all uses of unnamed capture groups are flagged — only this combination.
+This plugin flags a `rewrite` directive where both of the following are true in the same block:
+
+1. The replacement string contains `?` (which activates nginx's args-escaping flag on the script engine)
+2. A subsequent `set` directive in the same scope references a numeric capture group (`$1`, `$2`, …)
+
+Because Gixy-Next cannot determine the nginx version from the configuration, any matching pattern is reported as **INFORMATION** rather than a warning — if you are already on a patched version, no action is required.
 
 ## Why this is a problem
 
-CVE-2026-42945 ("nginx rift") is a bug in nginx itself. The only real fix is to update nginx to a patched version. If you are already running a patched version (NGINX Open Source 1.30.1+ or 1.31.0+, or NGINX Plus R32 P6+ / R36 P4+), **no action is required** — this finding does not apply to you.
+CVE-2026-42945 is a bug in nginx itself — a heap buffer overflow in the rewrite script engine. The only real fix is upgrading nginx. This plugin detects the configuration shape that would be vulnerable on an unpatched server.
 
-Because Gixy-Next cannot determine the nginx version from the config alone, any matching pattern is reported as **INFORMATION** rather than a warning.
+The `?` in a rewrite replacement tells nginx to treat everything after it as query-string arguments, which requires URL-encoding special characters. On unpatched nginx, that "I am in query-string mode" flag is not cleared when the rewrite finishes. A subsequent `set $var $N` then allocates a buffer sized for the raw (unencoded) value, but writes the URL-encoded version — which can be several times longer — overflowing the buffer.
 
-On unpatched versions, switching to named capture groups avoids the vulnerable pattern. Named groups are also worth adopting regardless: `$id` and `$tab` are self-documenting in a way that `$1` and `$2` are not.
+Note that the `?` does not need to be in the same `rewrite` as any `$N` reference — the canonical trigger has no capture reference in the rewrite replacement at all:
+
+```nginx
+location / {
+    rewrite ^(.*) /new?c=1;   # just needs a ?
+    set $myvar $1;            # overflow here on unpatched nginx
+    return 200 $myvar;
+}
+```
+
+## Fix and workaround
+
+Upgrade to nginx 1.30.1+ (stable) or 1.31.0+ (mainline) — this is the real fix.
+
+If you cannot upgrade immediately, replacing numeric captures with named captures (`(?<name>...)`) removes the vulnerable pattern from your configuration and is a valid temporary workaround. Named captures are also simply easier to read and maintain — a `$uid` is clearer than a `$1` whose meaning depends on counting parentheses.
 
 ## Bad configuration
 
 ```nginx
-# $1 and $2 in the query string
-rewrite ^/users/([0-9]+)/profile/(.*)$ /profile.php?id=$1&tab=$2 last;
+location / {
+    rewrite ^(.*) /new?c=1;
+    set $myvar $1;
+}
+```
 
-# $1 in the path — also flagged when ? is present anywhere in the replacement
-rewrite ^/(.*)$ /$1?v=2 last;
+```nginx
+location / {
+    rewrite ^/users/([0-9]+)/profile/(.*)$ /profile.php?id=$1&tab=$2;
+    set $extra $2;
+}
 ```
 
 ## Better configuration
 
-```nginx
-rewrite ^/users/(?<id>[0-9]+)/profile/(?<tab>.*)$ /profile.php?id=$id&tab=$tab last;
+Replace numeric captures with named captures so that no `set` directive references `$1`, `$2`, etc.:
 
-rewrite ^/(?<path>.*)$ /$path?v=2 last;
+```nginx
+location / {
+    rewrite ^(?<path>.*) /new?c=1;
+    set $myvar $path;
+}
+```
+
+```nginx
+location / {
+    rewrite ^/users/(?<uid>[0-9]+)/profile/(?<tab>.*)$ /profile.php?id=$uid&tab=$tab last;
+}
 ```
 
 ## Additional notes
 
-- Rewrites with no `?` in the replacement are not flagged, even if they use positional captures.
-- Named capture group references (`$id`, `$path`, etc.) and nginx built-in variables (`$arg_id`, etc.) are not flagged.
-- If nginx is already patched, this finding requires no action — it is reported as INFORMATION precisely because vulnerability depends on the nginx version.
-- Affected (unpatched) versions: NGINX Open Source 0.6.27–1.30.0, NGINX Plus R32–R36.
+- A `set $var $N` that appears **before** the `rewrite` in the same block is not flagged — `is_args` is only set after the `rewrite` runs, so earlier `set` directives are not affected.
+- A `rewrite` with no `?` in its replacement never sets `is_args` and is not flagged, even if it is followed by `set $var $N`.
+- Affected versions: NGINX Open Source 0.6.27–1.30.0 (fixed in 1.30.1/1.31.0), NGINX Plus R32–R36 (fixed in R32 P6 / R36 P4).
 - For more information see [CVE-2026-42945 on NVD](https://nvd.nist.gov/vuln/detail/CVE-2026-42945).
