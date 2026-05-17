@@ -26,6 +26,8 @@ BUILTIN_VARIABLES = {
     "upstream_http_": "",
     # https://nginx.org/en/docs/http/ngx_http_upstream_module.html#var_upstream_cookie_
     "upstream_cookie_": "",
+    # https://nginx.org/en/docs/http/ngx_http_upstream_module.html#var_upstream_trailer_
+    "upstream_trailer_": None,
     # https://nginx.org/en/docs/http/ngx_http_proxy_module.html#var_proxy_add_x_forwarded_for
     "proxy_add_x_forwarded_for": "",
     # https://nginx.org/en/docs/http/ngx_http_proxy_module.html#var_proxy_host
@@ -34,9 +36,19 @@ BUILTIN_VARIABLES = {
     "proxy_port": "",
     # https://nginx.org/en/docs/http/ngx_http_core_module.html#var_proxy_protocol_addr
     # https://nginx.org/en/docs/stream/ngx_stream_core_module.html#var_proxy_protocol_addr
+    "proxy_protocol_addr": None,
     # https://nginx.org/en/docs/http/ngx_http_core_module.html#var_proxy_protocol_port
     # https://nginx.org/en/docs/stream/ngx_stream_core_module.html#var_proxy_protocol_port
     "proxy_protocol_port": "",
+    # https://nginx.org/en/docs/http/ngx_http_core_module.html#var_proxy_protocol_server_addr
+    # https://nginx.org/en/docs/stream/ngx_stream_core_module.html#var_proxy_protocol_server_addr
+    "proxy_protocol_server_addr": None,
+    # https://nginx.org/en/docs/http/ngx_http_core_module.html#var_proxy_protocol_server_port
+    # https://nginx.org/en/docs/stream/ngx_stream_core_module.html#var_proxy_protocol_server_port
+    "proxy_protocol_server_port": None,
+    # https://nginx.org/en/docs/http/ngx_http_core_module.html#var_proxy_protocol_tlv_
+    # https://nginx.org/en/docs/stream/ngx_stream_core_module.html#var_proxy_protocol_tlv_
+    "proxy_protocol_tlv_": None,
     # https://nginx.org/en/docs/http/ngx_http_fastcgi_module.html#var_fastcgi_path_info
     "fastcgi_path_info": "",
     # https://nginx.org/en/docs/http/ngx_http_fastcgi_module.html#var_fastcgi_script_name
@@ -76,6 +88,8 @@ BUILTIN_VARIABLES = {
     "secure_link_expires": "",
     # https://nginx.org/en/docs/http/ngx_http_core_module.html#var_sent_http_
     "sent_http_": "",
+    # https://nginx.org/en/docs/http/ngx_http_core_module.html#var_sent_trailer_
+    "sent_trailer_": None,
     # https://nginx.org/en/docs/http/ngx_http_core_module.html#var_server_name
     "server_name": "",
     # "Secure" variables that can't content or strictly limited user input
@@ -99,6 +113,10 @@ BUILTIN_VARIABLES = {
     # https://nginx.org/en/docs/http/ngx_http_core_module.html#var_connection_requests
     # https://nginx.org/en/docs/http/ngx_http_log_module.html#var_connection_requests
     "connection_requests": None,
+    # https://nginx.org/en/docs/http/ngx_http_core_module.html#var_connection_time
+    # https://nginx.org/en/docs/http/ngx_http_log_module.html#var_connection_time
+    # https://nginx.org/en/docs/stream/ngx_stream_core_module.html#var_connection_time
+    "connection_time": None,
     # https://nginx.org/en/docs/http/ngx_http_stub_status_module.html#var_connections_active
     "connections_active": None,
     # https://nginx.org/en/docs/http/ngx_http_stub_status_module.html#var_connections_reading
@@ -122,12 +140,21 @@ BUILTIN_VARIABLES = {
     "gzip_ratio": None,
     # https://nginx.org/en/docs/http/ngx_http_v2_module.html#var_http2
     "http2": None,
+    # https://nginx.org/en/docs/http/ngx_http_v3_module.html#var_http3
+    "http3": None,
     # https://nginx.org/en/docs/http/ngx_http_core_module.html#var_https
     "https": None,
     # https://nginx.org/en/docs/http/ngx_http_referer_module.html#var_invalid_referer
     "invalid_referer": None,
     # https://nginx.org/en/docs/http/ngx_http_core_module.html#var_is_args
     "is_args": None,
+    # https://nginx.org/en/docs/http/ngx_http_core_module.html#var_is_request_port
+    "is_request_port": None,
+    # https://nginx.org/en/docs/http/ngx_http_limit_conn_module.html#var_limit_conn_status
+    # https://nginx.org/en/docs/stream/ngx_stream_limit_conn_module.html#var_limit_conn_status
+    "limit_conn_status": None,
+    # https://nginx.org/en/docs/http/ngx_http_limit_req_module.html#var_limit_req_status
+    "limit_req_status": None,
     # https://nginx.org/en/docs/http/ngx_http_auth_jwt_module.html
     "jwt_": None,
     # https://nginx.org/en/docs/http/ngx_http_browser_module.html#var_modern_browser
@@ -151,6 +178,7 @@ BUILTIN_VARIABLES = {
     "protocol": None,
     # https://nginx.org/en/docs/http/ngx_http_realip_module.html#var_realip_remote_addr
     # https://nginx.org/en/docs/stream/ngx_stream_realip_module.html#var_realip_remote_addr
+    "realip_remote_addr": None,
     # https://nginx.org/en/docs/http/ngx_http_realip_module.html#var_realip_remote_port
     # https://nginx.org/en/docs/stream/ngx_stream_realip_module.html#var_realip_remote_port
     "realip_remote_port": None,
@@ -167,6 +195,8 @@ BUILTIN_VARIABLES = {
     "request_length": None,
     # https://nginx.org/en/docs/http/ngx_http_core_module.html#var_request_method
     "request_method": None,
+    # https://nginx.org/en/docs/http/ngx_http_core_module.html#var_request_port
+    "request_port": None,
     # https://nginx.org/en/docs/http/ngx_http_core_module.html#var_request_time
     # https://nginx.org/en/docs/http/ngx_http_log_module.html#var_request_time
     "request_time": None,

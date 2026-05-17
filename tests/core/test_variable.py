@@ -1,3 +1,5 @@
+import pytest
+
 from gixy.core import builtin_variables as builtins
 from gixy.core.context import get_context, purge_context, push_context
 from gixy.core.regexp import Regexp
@@ -161,3 +163,25 @@ def test_custom_variable_dropin_more_cases(tmp_path):
 
     v = builtins.builtin_var("none")
     assert v is not None
+
+
+@pytest.mark.parametrize(
+    "name",
+    [
+        "http3",
+        "connection_time",
+        "request_port",
+        "is_request_port",
+        "limit_conn_status",
+        "limit_req_status",
+        "proxy_protocol_addr",
+        "proxy_protocol_server_addr",
+        "proxy_protocol_server_port",
+        "proxy_protocol_tlv_authority",
+        "realip_remote_addr",
+        "sent_trailer_grpc_status",
+        "upstream_trailer_grpc_status",
+    ],
+)
+def test_modern_nginx_variables_recognized(name):
+    assert builtins.is_builtin(name), f"{name!r} should be a recognized builtin"
