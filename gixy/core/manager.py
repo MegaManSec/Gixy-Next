@@ -15,6 +15,7 @@ from gixy.directives.directive import (
     SetByLuaDirective,
     SetDirective,
 )
+from gixy.core.regexp import Regexp
 from gixy.parser.nginx_parser import NginxParser
 
 # Directives that register a named variable visible throughout their enclosing
@@ -105,6 +106,18 @@ class Manager(object):
                 if "document_root" not in context.variables["name"]:
                     context.add_var("document_root", builtins.fake_var("document_root"))
             elif directive.is_block and not directive.self_context:
+                if directive.provide_variables:
+                    value = getattr(directive, 'value', None)
+                    if value:
+                        try:
+                            for name in Regexp(value).groups.keys():
+                                if isinstance(name, str):
+                                    if name not in context.variables["name"]:
+                                        context.add_var(name, builtins.fake_var(name))
+                                elif name != 0 and name not in context.variables["index"]:
+                                    context.add_var(name, builtins.fake_var(str(name)))
+                        except Exception:
+                            pass
                 self._prepopulate_scope_var_names(directive.children)
 
     def _prepopulate_scope_var_values(self, tree):
@@ -114,6 +127,9 @@ class Manager(object):
                 for var in directive.variables:
                     context.add_var(var.name, var)
             elif directive.is_block and not directive.self_context:
+                if directive.provide_variables:
+                    for var in directive.variables:
+                        context.add_var(var.name, var)
                 self._prepopulate_scope_var_values(directive.children)
 
     def _update_variables(self, directive):
