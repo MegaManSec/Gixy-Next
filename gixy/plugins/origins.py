@@ -351,7 +351,7 @@ class origins(Plugin):
             value = node.value.strip().strip("\"'")
             if not value.startswith("$"):
                 continue
-            dest_var = value.lstrip("$")
+            dest_var = value.lstrip("$").lower()
 
             # Find map blocks that populate this variable from $http_origin
             for mb in root.find_recursive("map"):

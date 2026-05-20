@@ -33,6 +33,8 @@ class http2_misdirected_request(Plugin):
                 continue
             if not self._server_is_default(server):
                 continue
+            if not self._server_is_ssl(server):
+                continue
             server_http2 = server.some("http2")
             if server_http2 and server_http2.args and server_http2.args[0].lower() == "off":
                 continue
@@ -51,6 +53,12 @@ class http2_misdirected_request(Plugin):
     def _server_is_default(self, server):
         for listen in server.find("listen"):
             if any(t.lower() in ("default_server", "default") for t in listen.args):
+                return True
+        return False
+
+    def _server_is_ssl(self, server):
+        for listen in server.find("listen"):
+            if any(t.lower() in ("ssl", "quic", "http3") for t in listen.args):
                 return True
         return False
 

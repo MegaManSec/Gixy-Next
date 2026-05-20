@@ -11,6 +11,7 @@ from gixy.directives.directive import (
     AuthRequestSetDirective,
     MapDirective,
     PerlSetDirective,
+    RewriteDirective,
     RootDirective,
     SetByLuaDirective,
     SetDirective,
@@ -105,25 +106,37 @@ class Manager(object):
             elif isinstance(directive, RootDirective):
                 if "document_root" not in context.variables["name"]:
                     context.add_var("document_root", builtins.fake_var("document_root"))
+            elif isinstance(directive, RewriteDirective):
+                # Rewrite captures persist in script-engine state and are
+                # referenceable by subsequent directives in this scope
+                # regardless of source order.
+                self._register_regex_captures(directive.pattern)
             elif directive.is_block and not directive.self_context:
                 if directive.provide_variables:
                     value = getattr(directive, 'value', None)
                     if value:
-                        try:
-                            for name in Regexp(value).groups.keys():
-                                if isinstance(name, str):
-                                    if name not in context.variables["name"]:
-                                        context.add_var(name, builtins.fake_var(name))
-                                elif name != 0 and name not in context.variables["index"]:
-                                    context.add_var(name, builtins.fake_var(str(name)))
-                        except Exception:
-                            pass
+                        self._register_regex_captures(value)
                 self._prepopulate_scope_var_names(directive.children)
+
+    def _register_regex_captures(self, pattern):
+        """Add fake vars for every named/numeric capture in `pattern` to the
+        current scope, so forward references compile cleanly during the names
+        pass."""
+        context = get_context()
+        try:
+            for name in Regexp(pattern).groups.keys():
+                if isinstance(name, str):
+                    if name not in context.variables["name"]:
+                        context.add_var(name, builtins.fake_var(name))
+                elif name != 0 and name not in context.variables["index"]:
+                    context.add_var(name, builtins.fake_var(str(name)))
+        except Exception:
+            pass
 
     def _prepopulate_scope_var_values(self, tree):
         context = get_context()
         for directive in tree:
-            if isinstance(directive, SCOPE_STATIC_VAR_PROVIDERS + (RootDirective,)):
+            if isinstance(directive, SCOPE_STATIC_VAR_PROVIDERS + (RootDirective, RewriteDirective)):
                 for var in directive.variables:
                     context.add_var(var.name, var)
             elif directive.is_block and not directive.self_context:

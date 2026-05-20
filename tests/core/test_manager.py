@@ -315,6 +315,63 @@ http { server {
     assert _missing(caplog) == []
 
 
+# ---------------------------------------------------------------------------
+# Numeric / named capture groups from `rewrite` directives
+# ---------------------------------------------------------------------------
+# A `rewrite ... ;` directive registers $1, $2, … (and any named captures)
+# in its enclosing scope. Subsequent `set $x $1;` directives must resolve
+# without spurious "Can't find variable" noise — and forward references that
+# precede the rewrite must also resolve via the prepopulate names pass.
+
+def test_rewrite_numeric_capture_set_after_same_level(caplog):
+    _audit("""
+http { server {
+    rewrite ^/([0-9]+)$ /new last;
+    set $z $1;
+} }
+""", caplog)
+    assert _missing(caplog) == []
+
+
+def test_rewrite_numeric_capture_set_before_same_level(caplog):
+    # Forward reference: the prepopulate names pass must register $1 from
+    # the rewrite before the `set` is compiled.
+    _audit("""
+http { server {
+    set $z $1;
+    rewrite ^/([0-9]+)$ /new last;
+} }
+""", caplog)
+    assert _missing(caplog) == []
+
+
+def test_rewrite_named_capture_visible_at_same_level(caplog):
+    _audit("""
+http { server {
+    rewrite ^/(?P<id>[0-9]+)$ /api?lookup=$id last;
+    set $z $id;
+} }
+""", caplog)
+    assert _missing(caplog) == []
+
+
+def test_rewrite_capture_does_not_leak_to_sibling_location(caplog):
+    # Captures from a rewrite in location /a must not be visible in /b —
+    # LocationBlock is a real scope boundary (self_context=True).
+    _audit("""
+http { server {
+    location /a {
+        rewrite ^/([0-9]+)$ /new last;
+        set $a $1;
+    }
+    location /b {
+        set $b $1;
+    }
+} }
+""", caplog)
+    assert any("'1'" in r.getMessage() for r in _missing(caplog))
+
+
 def test_prepopulated_map_taint_still_fires_security_check():
     # map-after-server routes tainted $uri through $target; http_splitting must still fire
     config = """
