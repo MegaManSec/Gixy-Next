@@ -9,10 +9,10 @@ CVE-2026-42945 is a remote code execution vulnerability affecting nginx. In cert
 
 ## What this check looks for
 
-This plugin flags a `rewrite` directive where both of the following are true in the same block:
+This plugin flags a `rewrite` directive where both of the following are true within the same scope (the same block, or across `if`/`include`/`map`/`geo` boundaries that do not introduce a new context):
 
 1. The replacement string contains `?` (which activates nginx's args-escaping flag on the script engine)
-2. A subsequent `set` directive in the same scope references a numeric capture group (`$1`, `$2`, …)
+2. A subsequent `set` directive references a numeric capture group (`$1`, `$2`, …)
 
 Because Gixy-Next cannot determine the nginx version from the configuration, any matching pattern is reported as **INFORMATION** rather than a warning — if you are already on a patched version, no action is required.
 

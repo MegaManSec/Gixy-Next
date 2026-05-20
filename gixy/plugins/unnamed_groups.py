@@ -42,27 +42,34 @@ class unnamed_groups(Plugin):
         if len(directive.args) > 2 and directive.args[2].lower() in self._TERMINATING_FLAGS:
             return
 
-        parent = directive.parent
-        if not parent:
-            return
-
-        past_self = False
-        for sibling in parent.children:
-            if sibling is directive:
-                past_self = True
-                continue
-            if not past_self:
-                continue
-            if self._has_set_with_capture(sibling):
-                self.add_issue(
-                    directive=directive,
-                    reason=(
-                        "A `rewrite` with `?` in its replacement is followed by a `set` "
-                        "directive referencing a numeric capture group — on unpatched nginx "
-                        "(< 1.30.1/1.31.0) this causes a heap buffer overflow (CVE-2026-42945)."
-                    ),
-                )
-                return
+        # Walk outward through grouping blocks (if/include/map/geo) so that a
+        # `set $N` placed after the enclosing if-block — or any other non-scope
+        # boundary — is still detected. The script-engine args flag persists
+        # across the if exit, so the canonical trigger fires there too.
+        node = directive
+        parent = node.parent
+        while parent:
+            past_self = False
+            for sibling in parent.children:
+                if sibling is node:
+                    past_self = True
+                    continue
+                if not past_self:
+                    continue
+                if self._has_set_with_capture(sibling):
+                    self.add_issue(
+                        directive=directive,
+                        reason=(
+                            "A `rewrite` with `?` in its replacement is followed by a `set` "
+                            "directive referencing a numeric capture group — on unpatched nginx "
+                            "(< 1.30.1/1.31.0) this causes a heap buffer overflow (CVE-2026-42945)."
+                        ),
+                    )
+                    return
+            if not getattr(parent, "is_block", False) or getattr(parent, "self_context", True):
+                break
+            node = parent
+            parent = parent.parent
 
     def _has_set_with_capture(self, node):
         if node.name == "set" and len(node.args) >= 2:
