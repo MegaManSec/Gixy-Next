@@ -12,6 +12,16 @@ import gixy.core.sre_parse.sre_parse as sre_parse
 
 LOG = logging.getLogger(__name__)
 
+# Sentinels emitted by AtToken.generate() and consumed by Regexp.generate(). They
+# stand in for `^` / `$` during AST walking so that interior anchors — produced when
+# an anchor lives inside an alternation whose group has sibling tokens (e.g. `($|/).*`)
+# — can be detected and the resulting impossible-match candidates dropped before they
+# reach plugins. Translated back to `^` / `$` at the boundaries of valid candidates.
+# Chosen outside `range(1, 126)` so they can't collide with negated-class output
+# from `_build_reverse_list`, and outside CATEGORIES["ANY"] so `.` can't emit them.
+_AT_BEGIN_SENTINEL = "\x00"
+_AT_END_SENTINEL = "\x7f"
+
 
 def _build_reverse_list(original):
     result = []
@@ -722,9 +732,9 @@ class AtToken(Token):
     def generate(self, context):
         if context.anchored:
             if self.begin:
-                return "^"
+                return _AT_BEGIN_SENTINEL
             if self.end:
-                return "$"
+                return _AT_END_SENTINEL
         return None
 
     def __str__(self):
@@ -996,6 +1006,17 @@ class Regexp(object):
 
         context = GenerationContext(char, anchored=anchored, max_repeat=max_repeat)
         for val in self.root.generate(context=context):
+            body = val.lstrip(_AT_BEGIN_SENTINEL).rstrip(_AT_END_SENTINEL)
+            if _AT_BEGIN_SENTINEL in body or _AT_END_SENTINEL in body:
+                # Interior anchor: a `^` reached past position 0 or content
+                # sits after a `$`. The AST walk can produce these when an
+                # anchor lives in an alternation whose group has sibling
+                # tokens (e.g. `($|/).*`); they correspond to impossible
+                # match paths and would mislead downstream consumers.
+                continue
+            leading = "^" if val.startswith(_AT_BEGIN_SENTINEL) else ""
+            trailing = "$" if val.endswith(_AT_END_SENTINEL) else ""
+            val = leading + body + trailing
             if anchored and self.strict and not val.startswith("^"):
                 yield "^" + val
             else:

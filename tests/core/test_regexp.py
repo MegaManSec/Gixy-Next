@@ -271,11 +271,54 @@ def test_negative_must_startswith(regexp, char, strict):
     (r'^http://(foo|bar)|baz', ['^http://foo', '^http://bar', 'baz']),
     (r'[^\x00-\x7b|\x7e-\xff]', ['\x7d']),
     (r'(a|b|c)', ['a', 'b', 'c']),
-    (r'[xyz]', ['x', 'y', 'z'])
+    (r'[xyz]', ['x', 'y', 'z']),
+    # Issue #111: `$` end-anchor inside an alternation whose group has a
+    # sibling token. The `$`-branch combined with the trailing `.*` used
+    # to yield impossible-match strings like `^foo$|||||` with `$` mid-
+    # string. After the sentinel-based fix, those candidates are dropped.
+    (
+        r'^foo($|/)(?P<x>.*)',
+        ['^foo$', '^foo/', '^foo/|||||'],
+    ),
+    # Semantically equivalent rewrite from the same issue: the named
+    # capture lives inside the `/` branch. Must yield the same set.
+    (
+        r'^foo($|/(?P<x>.*))',
+        ['^foo$', '^foo/', '^foo/|||||'],
+    ),
+    # Interior `^` inside an alternation: `^bar` can never match past
+    # position 3, so the `foo^bar...` candidate must be dropped.
+    (r'foo(^bar|baz)', ['foobaz']),
+    # Redundant trailing `$` collapses to one.
+    (r'^foo$$', ['^foo$']),
 ))
 def test_generate(regexp, values):
     reg = Regexp(regexp)
     assert sorted(reg.generate('|', anchored=True)) == sorted(values)
+
+
+def test_generate_drops_interior_end_anchor_candidates():
+    """`$` inside `($|/)` followed by sibling `.*` must not leak into candidate strings (issue #111)."""
+    reg = Regexp(r'^https?://example\.com($|/)(?P<path>.*)')
+    candidates = list(reg.generate('`', anchored=True, max_repeat=5))
+
+    assert candidates, 'expected non-empty candidate set'
+    for candidate in candidates:
+        body = candidate.lstrip('^').rstrip('$')
+        assert '$' not in body, (
+            'candidate {!r} has interior `$` anchor — would mislead '
+            'the origins plugin into generating bogus bypass strings'.format(candidate)
+        )
+        assert '^' not in body, 'candidate {!r} has interior `^` anchor'.format(candidate)
+
+
+def test_generate_ast_shape_invariance_for_issue_111():
+    """The two semantically equivalent regex forms from issue #111 must yield identical candidate sets after the fix."""
+    sibling_form = Regexp(r'^https?://example\.com($|/)(?P<path>.*)')
+    inner_form = Regexp(r'^https?://example\.com($|/(?P<path>.*))')
+    sibling_candidates = sorted(sibling_form.generate('`', anchored=True, max_repeat=5))
+    inner_candidates = sorted(inner_form.generate('`', anchored=True, max_repeat=5))
+    assert sibling_candidates == inner_candidates
 
 
 def test_strict_generate():

@@ -136,7 +136,14 @@ class origins(Plugin):
 
         regexp = Regexp(pattern, case_sensitive=case_sensitive)
         for candidate_match in regexp.generate("`", anchored=True, max_repeat=5):
-            candidate_match = candidate_match.encode("idna").decode()
+            try:
+                candidate_match = candidate_match.encode("idna").decode()
+            except UnicodeError:
+                # Generated candidate isn't a valid DNS string (empty label,
+                # over-long label, etc., per RFC 3490). Python 3.11+ rejects
+                # these strictly; older versions tolerated them. Keep the raw
+                # value — downstream sanitisation and parse_url handle it.
+                pass
 
             candidate_match = re.sub(
                 r'[^A-Za-z0-9\-._~:/?#\[\]@!$&\'()*+,;=`^%"]', "`", candidate_match
