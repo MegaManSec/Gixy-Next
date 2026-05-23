@@ -99,6 +99,7 @@ Gixy-Next can detect a wide range of NGINX security and performance misconfigura
 *   [[missing_worker_processes] Missing `worker_processes`](https://gixy.io/plugins/missing_worker_processes/)
 *   [[mixed_case_variable] Mixed-case variable references](https://gixy.io/plugins/mixed_case_variable/)
 *   [[origins] Problems with referer/origin header validation](https://gixy.io/plugins/origins/)
+*   [[overlapping_captures] Overlapping captures in rewrite redirect/args context](https://gixy.io/plugins/overlapping_captures/)
 *   [[proxy_buffering_off] Disabling `proxy_buffering`](https://gixy.io/plugins/proxy_buffering_off/)
 *   [[proxy_pass_normalized] `proxy_pass` path normalization issues](https://gixy.io/plugins/proxy_pass_normalized/)
 *   [[quic_bpf_reuseport] QUIC connections silently dropped after reload](https://gixy.io/plugins/quic_bpf_reuseport/)

@@ -83,6 +83,7 @@ nav:
     - plugins/missing_worker_processes.md
     - plugins/mixed_case_variable.md
     - plugins/origins.md
+    - plugins/overlapping_captures.md
     - plugins/proxy_buffering_off.md
     - plugins/proxy_pass_normalized.md
     - plugins/quic_bpf_reuseport.md
