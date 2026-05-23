@@ -15,7 +15,7 @@
 
   const WHEEL_URL = new URL("/extra/gixy_next-0.0.0-py3-none-any.whl", window.location.origin).href;
 
-  const severityOrder = ["CRITICAL", "HIGH", "MEDIUM", "LOW", "INFO", "UNKNOWN"];
+  const severityOrder = ["CRITICAL", "HIGH", "MEDIUM", "LOW", "INFORMATION", "UNKNOWN"];
 
   const state = {
     initPromise: null,
@@ -157,7 +157,7 @@ server {
 
     summaryEl.appendChild(document.createTextNode(`Findings: ${all.length}`));
 
-    for (const sev of ["CRITICAL", "HIGH", "MEDIUM", "LOW", "INFO"]) {
+    for (const sev of ["CRITICAL", "HIGH", "MEDIUM", "LOW", "INFORMATION"]) {
       const n = counts.get(sev) || 0;
       if (!n) continue;
 
