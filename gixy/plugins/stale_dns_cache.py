@@ -65,7 +65,7 @@ class stale_dns_cache(Plugin):
             else:
                 break
 
-        if is_ipv6(parsed_host, False) or is_ipv4(parsed_host, False):
+        if is_ipv6(parsed_host) or is_ipv4(parsed_host, False):
             return
 
         h = parsed_host.lower().rstrip(".")
@@ -116,7 +116,7 @@ class stale_dns_cache(Plugin):
                         continue
 
                     parsed_upstream_host = parsed_upstream_server.group("host")
-                    if is_ipv6(parsed_upstream_host, False) or is_ipv4(
+                    if is_ipv6(parsed_upstream_host) or is_ipv4(
                         parsed_upstream_host, False
                     ):
                         continue
