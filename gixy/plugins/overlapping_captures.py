@@ -176,9 +176,15 @@ class overlapping_captures(Plugin):
     def _is_capturing_paren(self, regex, i):
         # True iff regex[i] starts a capturing group (named or unnamed).
         # Non-capturing groups, lookarounds, atomic groups, inline flags,
-        # comments, and named backreferences/recursion return False.
+        # comments, named backreferences/recursion, and PCRE verbs return
+        # False.
         n = len(regex)
-        if i + 1 >= n or regex[i + 1] != "?":
+        if i + 1 >= n:
+            return True
+        nxt = regex[i + 1]
+        if nxt == "*":
+            return False  # PCRE verb: `(*UTF)`, `(*MARK:name)`, `(*COMMIT)`, etc.
+        if nxt != "?":
             return True  # plain `(`: unnamed capture
         if i + 2 >= n:
             return False
