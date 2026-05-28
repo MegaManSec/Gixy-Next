@@ -65,41 +65,41 @@ nav:
   - "In-Browser Scanner": scanner.md
   - "Live Config Dump: nginx -T": nginx-config-dump.md
   - Plugins:
-    - plugins/add_header_content_type.md
-    - plugins/add_header_multiline.md
-    - plugins/add_header_redefinition.md
-    - plugins/alias_traversal.md
-    - plugins/allow_without_deny.md
-    - plugins/default_server_flag.md
-    - plugins/error_log_off.md
-    - plugins/hash_without_default.md
-    - plugins/host_spoofing.md
-    - plugins/http2_misdirected_request.md
-    - plugins/http_splitting.md
-    - plugins/if_is_evil.md
-    - plugins/invalid_regex.md
-    - plugins/low_keepalive_requests.md
-    - plugins/merge_slashes_on.md
-    - plugins/missing_worker_processes.md
-    - plugins/mixed_case_variable.md
-    - plugins/origins.md
-    - plugins/overlapping_captures.md
-    - plugins/proxy_buffering_off.md
-    - plugins/proxy_pass_normalized.md
-    - plugins/quic_bpf_reuseport.md
-    - plugins/regex_redos.md
-    - plugins/resolver_external.md
-    - plugins/return_bypasses_allow_deny.md
-    - plugins/ssl_stapling_without_resolver.md
-    - plugins/ssrf.md
-    - plugins/stale_dns_cache.md
-    - plugins/status_page_exposed.md
-    - plugins/try_files_is_evil_too.md
-    - plugins/unanchored_regex.md
-    - plugins/unnamed_groups.md
-    - plugins/valid_referers.md
-    - plugins/version_disclosure.md
-    - plugins/worker_rlimit_nofile_vs_connections.md
+      - plugins/add_header_content_type.md
+      - plugins/add_header_multiline.md
+      - plugins/add_header_redefinition.md
+      - plugins/alias_traversal.md
+      - plugins/allow_without_deny.md
+      - plugins/default_server_flag.md
+      - plugins/error_log_off.md
+      - plugins/hash_without_default.md
+      - plugins/host_spoofing.md
+      - plugins/http2_misdirected_request.md
+      - plugins/http_splitting.md
+      - plugins/if_is_evil.md
+      - plugins/invalid_regex.md
+      - plugins/low_keepalive_requests.md
+      - plugins/merge_slashes_on.md
+      - plugins/missing_worker_processes.md
+      - plugins/mixed_case_variable.md
+      - plugins/origins.md
+      - plugins/overlapping_captures.md
+      - plugins/proxy_buffering_off.md
+      - plugins/proxy_pass_normalized.md
+      - plugins/quic_bpf_reuseport.md
+      - plugins/regex_redos.md
+      - plugins/resolver_external.md
+      - plugins/return_bypasses_allow_deny.md
+      - plugins/ssl_stapling_without_resolver.md
+      - plugins/ssrf.md
+      - plugins/stale_dns_cache.md
+      - plugins/status_page_exposed.md
+      - plugins/try_files_is_evil_too.md
+      - plugins/unanchored_regex.md
+      - plugins/unnamed_groups.md
+      - plugins/valid_referers.md
+      - plugins/version_disclosure.md
+      - plugins/worker_rlimit_nofile_vs_connections.md
   - "Configuration Guide": configuration.md
   - "Custom Variables & Drop-ins": variables-dropins.md
   - "Contributing to Gixy-Next": contributing.md

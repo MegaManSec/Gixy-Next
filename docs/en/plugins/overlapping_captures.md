@@ -14,9 +14,9 @@ This plugin flags a `rewrite` directive where all of the following are true:
 1. The regex has two captures (named or unnamed) where one is nested inside the other, for example `^/((.*))$` or `^/(?<outer>(.*))$`, and the replacement references both by `$N` (with neither `$N` repeated).
 2. The replacement contains no nginx variables other than the `$N` references (no `$host`, `${uri}`, etc.).
 3. The captures end up URI-escaped on output — any of:
-    * an explicit `redirect` or `permanent` flag,
-    * the replacement starts with `http://` or `https://` (implicit redirect), or
-    * the replacement contains a `?` (other than a sole trailing one, which nginx strips) and at least two of the referenced `$N` appear after it.
+    - an explicit `redirect` or `permanent` flag,
+    - the replacement starts with `http://` or `https://` (implicit redirect), or
+    - the replacement contains a `?` (other than a sole trailing one, which nginx strips) and at least two of the referenced `$N` appear after it.
 
 Because Gixy-Next cannot determine the nginx version from the configuration, any matching pattern is reported as **INFORMATION** rather than a warning — if you are already on a patched version, no action is required.
 

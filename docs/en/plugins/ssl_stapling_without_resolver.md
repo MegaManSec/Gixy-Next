@@ -9,10 +9,10 @@ description: "Detects SSL servers where ssl_stapling on is effective but no reso
 
 This plugin flags `server` blocks where all of the following are true:
 
-* The server handles SSL/TLS connections (`listen ... ssl;`, `listen ... quic;`, or `listen ... http3;`)
-* `ssl_stapling on;` is in effect — declared directly in the server or inherited from the enclosing `http {}` block
-* No `resolver` directive is reachable in the server's scope or any enclosing scope
-* No `ssl_stapling_file` is set (a pre-loaded OCSP response removes the need for a resolver)
+- The server handles SSL/TLS connections (`listen ... ssl;`, `listen ... quic;`, or `listen ... http3;`)
+- `ssl_stapling on;` is in effect — declared directly in the server or inherited from the enclosing `http {}` block
+- No `resolver` directive is reachable in the server's scope or any enclosing scope
+- No `ssl_stapling_file` is set (a pre-loaded OCSP response removes the need for a resolver)
 
 ## Why this is a problem
 
@@ -77,7 +77,7 @@ http {
 
 ## Additional notes
 
-* A `resolver` declared in the same server block is also sufficient; http-level is just the most common pattern.
-* If you pre-load the stapled response via `ssl_stapling_file`, nginx uses that file directly and does not need a resolver.
-* A server that overrides with `ssl_stapling off;` is not flagged, even when the http block enables stapling globally.
-* Non-SSL servers (plain `listen 80;`) are skipped — stapling is irrelevant there.
+- A `resolver` declared in the same server block is also sufficient; http-level is just the most common pattern.
+- If you pre-load the stapled response via `ssl_stapling_file`, nginx uses that file directly and does not need a resolver.
+- A server that overrides with `ssl_stapling off;` is not flagged, even when the http block enables stapling globally.
+- Non-SSL servers (plain `listen 80;`) are skipped — stapling is irrelevant there.

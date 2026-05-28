@@ -42,15 +42,15 @@ OK
 
 ## Better configuration
 
-1) Prefer safer variables (for example `$request_uri` over `$uri` when you need the raw input).
+1. Prefer safer variables (for example `$request_uri` over `$uri` when you need the raw input).
 
-2) Constrain captures so they cannot contain whitespace or control characters:
+2. Constrain captures so they cannot contain whitespace or control characters:
 
-```nginx
-# Disallow slashes and whitespace in the capture
-location ~ ^/some/(?<action>[^/\s]+)$ {
-    add_header X-Action $action;
-}
-```
+   ```nginx
+   # Disallow slashes and whitespace in the capture
+   location ~ ^/some/(?<action>[^/\s]+)$ {
+       add_header X-Action $action;
+   }
+   ```
 
-3) If you must reflect client input, validate it first and keep the allowed character set tight.
+3. If you must reflect client input, validate it first and keep the allowed character set tight.

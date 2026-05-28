@@ -1,0 +1,21 @@
+# yamllint config for the project.
+# Line-length is disabled to match the markdown convention.
+extends: default
+
+rules:
+  # GitHub Actions YAML conventionally omits `---`.
+  document-start: disable
+
+  # `on:` in GitHub Actions workflows is a key, not a boolean; yamllint
+  # default treats it as truthy. Skip the truthy check on keys.
+  truthy:
+    check-keys: false
+
+  # Disabled by project choice; long lines in mkdocs.yml `repo_url`,
+  # `site_description`, plugin args, etc. read more naturally on one line.
+  line-length: disable
+
+  # Both 4-space (mkdocs style) and 6-space sequence indentation are valid
+  # YAML; accept whichever the file uses, as long as it is consistent.
+  indentation:
+    indent-sequences: consistent

@@ -115,9 +115,9 @@ if ($http_origin ~* ((^https://www\.yandex\.ru)|(^https://ya\.ru)$)) {
 
 Common issues here:
 
-* alternation with uneven anchoring,
-* missing `$` anchors,
-* reflecting `$http_origin` directly when the allowlist is not strict.
+- alternation with uneven anchoring,
+- missing `$` anchors,
+- reflecting `$http_origin` directly when the allowlist is not strict.
 
 ## Safer configuration patterns
 
@@ -137,9 +137,9 @@ add_header Access-Control-Allow-Credentials "true" always;
 
 This is better because:
 
-* only allowlisted origins are reflected,
-* everything else becomes an empty value,
-* the pattern is fully anchored and describes the full Origin syntax.
+- only allowlisted origins are reflected,
+- everything else becomes an empty value,
+- the pattern is fully anchored and describes the full Origin syntax.
 
 ### Keep Origin rules strict (Origin has no path)
 
@@ -147,15 +147,15 @@ If you need to validate `Origin`, always anchor the entire value, including any 
 
 Good structure to aim for:
 
-* `^https://`
-* optional subdomain
-* exact registrable domain
-* optional `:port`
-* `$`
+- `^https://`
+- optional subdomain
+- exact registrable domain
+- optional `:port`
+- `$`
 
 ## Notes for Referer validation
 
-If your goal is anti-hotlinking or basic referer checks, consider using `valid_referers` (from `ngx_http_referer_module`, [here](https://nginx.org/en/docs/http/ngx_http_referer_module.html)) instead of hand-rolled regex in `if`. It is not perfect, but it is easier to audit than ad-hoc patterns.
+If your goal is anti-hotlinking or basic referer checks, consider using `valid_referers` (see the [`ngx_http_referer_module` documentation](https://nginx.org/en/docs/http/ngx_http_referer_module.html)) instead of hand-rolled regex in `if`. It is not perfect, but it is easier to audit than ad-hoc patterns.
 
 ## Configuration
 

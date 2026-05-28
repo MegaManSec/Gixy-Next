@@ -49,9 +49,9 @@ gixy ./nginx-dump.conf
 
 This workflow is especially handy when:
 
-* Your NGINX config is spread across many `include` files
-* You want your CI pipeline to scan exactly what NGINX is loading
-* You are auditing production config without giving the scanner direct filesystem access
+- Your NGINX config is spread across many `include` files
+- You want your CI pipeline to scan exactly what NGINX is loading
+- You are auditing production config without giving the scanner direct filesystem access
 
 ## Scan with Docker
 

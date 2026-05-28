@@ -37,7 +37,7 @@ vars-dirs = /etc/gixy/vars,~/.config/gixy/vars
 
 Each non-empty, non-comment line defines one variable:
 
-```
+```text
 name value
 ```
 
@@ -45,18 +45,18 @@ Variable names must be written without the leading `$` (for example `brotli_rati
 
 A few value styles are supported:
 
-* Quoted literals, treated as literal, fixed values: `'...'` or `"..."`.
+- Quoted literals, treated as literal, fixed values: `'...'` or `"..."`.
 
-* Regex patterns, treated as regular expressions describing what the value is allowed to contain: `r'...'` or `r"..."`.
+- Regex patterns, treated as regular expressions describing what the value is allowed to contain: `r'...'` or `r"..."`.
 
-* `none` or `null` (case-insensitive), marking the variable as "non user-controlled" for the purpose of analysis.
+- `none` or `null` (case-insensitive), marking the variable as "non user-controlled" for the purpose of analysis.
 
 Also:
 
-* Blank lines are ignored
-* Lines starting with `#` or `;` are ignored
-* You may use `name value`, `name = value`, or `name: value`
-* A trailing comma after the value is accepted (handy if you are copy/pasting)
+- Blank lines are ignored
+- Lines starting with `#` or `;` are ignored
+- You may use `name value`, `name = value`, or `name: value`
+- A trailing comma after the value is accepted (handy if you are copy/pasting)
 
 ### Examples
 
