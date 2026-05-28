@@ -15,9 +15,9 @@ It only reports findings when the enclosing `server` is reachable over TCP (i.e.
 
 `stub_status` reveals operational details such as active connections and request handling state. While it does not expose application data directly, it is valuable for reconnaissance:
 
-* confirms the server is NGINX and that a status endpoint exists,
-* provides traffic and connection signals that help time attacks,
-* can reveal load patterns and availability.
+- confirms the server is NGINX and that a status endpoint exists,
+- provides traffic and connection signals that help time attacks,
+- can reveal load patterns and availability.
 
 If the endpoint is publicly reachable, anyone can query it.
 
@@ -80,6 +80,6 @@ server {
 
 ## Additional notes
 
-* This plugin treats `allow all` as not a whitelist and does not count it as a restriction.
-* Servers that listen only on `unix:` sockets are ignored by this check, since they are not reachable over the network.
-* Prefer keeping the endpoint unadvertised (non-obvious path) in addition to access control, but do not rely on obscurity alone.
+- This plugin treats `allow all` as not a whitelist and does not count it as a restriction.
+- Servers that listen only on `unix:` sockets are ignored by this check, since they are not reachable over the network.
+- Prefer keeping the endpoint unadvertised (non-obvious path) in addition to access control, but do not rely on obscurity alone.

@@ -34,16 +34,16 @@ gixy --write-config ./gixy.conf
 
 The format is intentionally boring:
 
-* `key = value`
-* `#` starts a comment
-* optional `[sections]` (mainly used for plugin settings)
+- `key = value`
+- `#` starts a comment
+- optional `[sections]` (mainly used for plugin settings)
 
 Values may be quoted or not, and lists should be comma-separated.
 
 Most keys match the long CLI flags with the leading `--` removed. For example:
 
-* CLI: `--disable-includes`
-* Config: `disable-includes = true`
+- CLI: `--disable-includes`
+- Config: `disable-includes = true`
 
 `[sections]` blocks are equivalent to their appended, CLI flag usage. For example, the config equivalent of `--add-header-redefinition-headers X-Frame-Options` is:
 

@@ -44,7 +44,6 @@ location /api/ {
 
 If you do need to add or reshape the path, do it explicitly using captures so you control what is forwarded, use `$request_uri`, and use `return`:
 
-
 ```nginx
 location /api/ {
   rewrite ^ $request_uri;

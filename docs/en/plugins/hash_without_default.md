@@ -79,6 +79,6 @@ This is why the plugin does not warn on `map` blocks with a single mapping entry
 
 ## Additional notes
 
-* If the variable controls an allow/deny decision, prefer deny-by-default and add allow rules narrowly.
-* For routing decisions, choose a safe fallback upstream and keep it explicit.
-* If you rely on the "empty disables behavior" pattern (for example, rate limiting keys), keep the `map` minimal and document the intent.
+- If the variable controls an allow/deny decision, prefer deny-by-default and add allow rules narrowly.
+- For routing decisions, choose a safe fallback upstream and keep it explicit.
+- If you rely on the "empty disables behavior" pattern (for example, rate limiting keys), keep the `map` minimal and document the intent.

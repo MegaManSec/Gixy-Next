@@ -13,8 +13,8 @@ nginx -T
 
 The `-T` flag is an addition to nginx's `-t` flag:
 
-* `-t` tests the configuration: nginx checks syntax, tries to open all files referenced by the config (includes, certificates, logs, etc.), and resolves any static hostnames in the config.
-* `-T` does the same test, and additionally dumps all loaded configuration files to standard output, as a *single* output to stdout.
+- `-t` tests the configuration: nginx checks syntax, tries to open all files referenced by the config (includes, certificates, logs, etc.), and resolves any static hostnames in the config.
+- `-T` does the same test, and additionally dumps all loaded configuration files to standard output, as a *single* output to stdout.
 
 This is useful because nginx configs are usually a pile of `include`s across multiple files, and this turns that pile into a single artifact you can diff, grep, attach to a ticket, or feed into tooling.
 
@@ -22,7 +22,7 @@ Gixy-Next can use this single-file configuration dump and parse each section, tr
 
 The configuration dump is printed to stdout, while the status of the configuration is printed to stderr, which looks like this:
 
-```
+```text
 nginx: the configuration file /etc/nginx/nginx.conf syntax is ok
 nginx: configuration file /etc/nginx/nginx.conf test is successful
 ```
@@ -94,7 +94,6 @@ server {
 ### Representative `nginx -T` output
 
 Running `nginx -T`, we get in `stderr`:
-
 
 ```text
 nginx: the configuration file /etc/nginx/nginx.conf syntax is ok
@@ -174,15 +173,15 @@ This error means that nginx cannot resolve one of the hostnames in your configur
 
 Using `nginx -T` can be useful for a few reasons, namely:
 
-* You want to see the full configuration of what `nginx` actually loads after all `include`s are loaded and so on.
-* You want to analyze the full configuration on a system other than the one that is actually running NGINX.
-* You want a CI artifact: "this is the config that will be run".
+- You want to see the full configuration of what `nginx` actually loads after all `include`s are loaded and so on.
+- You want to analyze the full configuration on a system other than the one that is actually running NGINX.
+- You want a CI artifact: "this is the config that will be run".
 
 ## Gixy-Next and nginx -T
 
 Gixy-Next will automatically detect when a configuration dump like this is scanned. The file being scanned MUST begin with:
 
-```
+```text
 # configuration file
 ```
 

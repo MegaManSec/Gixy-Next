@@ -34,7 +34,6 @@ location ~ /site(.*) {
 
 If `$1` can start with `.` (or contain `/`), you can end up with traversal-style paths reaching outside the intended directory.
 
-
 ## Better configuration
 
 If the alias points to a directory, make the location look like a directory too:

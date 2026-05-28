@@ -9,9 +9,9 @@ description: "Detects the quic_bpf + reuseport + multiple workers combination th
 
 This plugin flags configurations where all three of the following are present simultaneously:
 
-* `quic_bpf on;` in the main context
-* `reuseport` on a QUIC listen socket
-* `worker_processes` greater than 1 (or `auto`)
+- `quic_bpf on;` in the main context
+- `reuseport` on a QUIC listen socket
+- `worker_processes` greater than 1 (or `auto`)
 
 ## Why this is a problem
 
@@ -53,6 +53,6 @@ http {
 
 ## Additional notes
 
-* The bug does not trigger with `worker_processes 1` since there is only one worker and no BPF map handoff occurs.
-* If `worker_processes` is not set, NGINX defaults to 1, which is also safe.
-* Removing `reuseport` from the QUIC listener also avoids the bug, though at the cost of reduced multi-core performance.
+- The bug does not trigger with `worker_processes 1` since there is only one worker and no BPF map handoff occurs.
+- If `worker_processes` is not set, NGINX defaults to 1, which is also safe.
+- Removing `reuseport` from the QUIC listener also avoids the bug, though at the cost of reduced multi-core performance.

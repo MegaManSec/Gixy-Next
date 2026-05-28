@@ -94,12 +94,12 @@ gixy -ll /etc/nginx/nginx.conf
 | Tool       | Syntax validation | Includes / multi file configs | Security misconfig checks | Best practice checks | CI/CD friendly |
 | ---------- | ----------------- | ----------------------------- | ------------------------- | -------------------- | -------------- |
 | `nginx -t` | Yes               | Yes                           | No                        | No                   | Sort of        |
-| Gixy-Next     | Parses config     | Yes                           | Yes                       | Yes (via plugins)    | Yes            |
+| Gixy-Next  | Parses config     | Yes                           | Yes                       | Yes (via plugins)    | Yes            |
 
 They are complementary:
 
-* Always run `nginx -t` before reloads to avoid broken configs.
-* Run **Gixy-Next** as your NGINX configuration checker before changes hit production, to catch security and logic issues.
+- Always run `nginx -t` before reloads to avoid broken configs.
+- Run **Gixy-Next** as your NGINX configuration checker before changes hit production, to catch security and logic issues.
 
 ## Example: treating Gixy-Next as a gatekeeper
 
@@ -121,20 +121,20 @@ A simple manual workflow:
 
 This way:
 
-* Gixy-Next acts as your **NGINX configuration checker** and security auditor.
-* `nginx -t` remains the last line of defense against syntax errors.
+- Gixy-Next acts as your **NGINX configuration checker** and security auditor.
+- `nginx -t` remains the last line of defense against syntax errors.
 
 ## When to use each tool
 
 Use **`nginx -t`** when:
 
-* You just edited a configuration file and want to be sure NGINX will start.
-* You are troubleshooting a reload failure.
+- You just edited a configuration file and want to be sure NGINX will start.
+- You are troubleshooting a reload failure.
 
 Use **Gixy-Next** when:
 
-* You want to perform an **NGINX configuration security audit**.
-* You are onboarding a new application or team and want to catch common misconfigurations.
-* You are preparing for compliance (PCI DSS, etc) and need a repeatable NGINX security check.
+- You want to perform an **NGINX configuration security audit**.
+- You are onboarding a new application or team and want to catch common misconfigurations.
+- You are preparing for compliance (PCI DSS, etc) and need a repeatable NGINX security check.
 
 Used together, they give you both correctness and security: one checks that NGINX can read your configuration, the other checks that attackers will not enjoy it.

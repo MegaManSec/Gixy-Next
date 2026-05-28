@@ -9,10 +9,10 @@ description: "Detects TLS default_server blocks with ssl_reject_handshake and HT
 
 This plugin flags `server` blocks where all of the following are true:
 
-* `ssl_reject_handshake on;` is present
-* the server is marked `default_server` (or `default`) on a `listen` directive
-* HTTP/2 is enabled (via `http2 on;` or `listen ... http2;`)
-* there is no `location /` or `location = /` that returns 421
+- `ssl_reject_handshake on;` is present
+- the server is marked `default_server` (or `default`) on a `listen` directive
+- HTTP/2 is enabled (via `http2 on;` or `listen ... http2;`)
+- there is no `location /` or `location = /` that returns 421
 
 ## Why this is a problem
 
@@ -50,6 +50,6 @@ http {
 
 ## Additional notes
 
-* Both the modern `http2 on;` directive (NGINX 1.25.1+) and the older `listen ... http2;` syntax are recognised.
-* `location = / { return 421; }` (exact match) is also accepted as a valid safeguard.
-* This check only applies when `ssl_reject_handshake on` is explicitly set; without it the pattern is not in use and the check does not fire.
+- Both the modern `http2 on;` directive (NGINX 1.25.1+) and the older `listen ... http2;` syntax are recognised.
+- `location = / { return 421; }` (exact match) is also accepted as a valid safeguard.
+- This check only applies when `ssl_reject_handshake on` is explicitly set; without it the pattern is not in use and the check does not fire.

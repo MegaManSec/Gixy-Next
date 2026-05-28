@@ -1,0 +1,28 @@
+{
+  "default": true,
+
+  // Line length is disabled by project choice (long URLs and prose lines).
+  "MD013": false,
+
+  // mkdocs uses both a YAML `title:` and a body `#` heading; the frontmatter
+  // title is metadata, not a rendered heading.
+  "MD025": { "front_matter_title": "" },
+
+  // Hierarchical sub-headings ("CLI" / "Config" under different parent
+  // options) are legitimate; only flag true sibling duplicates.
+  "MD024": { "siblings_only": true },
+
+  // README badges and the in-browser scanner UI need raw HTML elements.
+  "MD033": { "allowed_elements": ["a", "img", "div"] },
+
+  // Tabs inside code blocks reproduce gixy's literal output verbatim.
+  "MD010": { "code_blocks": false },
+
+  // Misfires on mkdocs-material admonition content (indented under `!!!`)
+  // and on indented HTML in `docs/en/scanner.md`. Actual code blocks are
+  // uniformly fenced.
+  "MD046": false,
+
+  // Lock unordered list marker to `-` project-wide.
+  "MD004": { "style": "dash" }
+}
