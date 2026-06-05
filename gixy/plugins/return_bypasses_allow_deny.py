@@ -22,6 +22,35 @@ class return_bypasses_allow_deny(Plugin):
         super(return_bypasses_allow_deny, self).__init__(config)
         self._reported_parents = set()
 
+    @staticmethod
+    def _is_internal_only_location(node):
+        """True for locations only reachable via internal redirect.
+
+        Named locations (`location @name`) and locations carrying the
+        `internal` directive cannot be hit by an external request, so a
+        `return` inside them does not bypass the parent's allow/deny: any
+        client that ever reaches the return has already passed the access
+        phase of the originating location.
+        """
+        if getattr(node, "name", None) != "location":
+            return False
+        if getattr(node, "path", "").startswith("@"):
+            return True
+        return bool(getattr(node, "is_internal", False))
+
+    def _find_descendants_excluding_internal_locations(self, node, name):
+        result = []
+        for child in node.children:
+            if self._is_internal_only_location(child):
+                continue
+            if child.name == name:
+                result.append(child)
+            if getattr(child, "is_block", False):
+                result.extend(
+                    self._find_descendants_excluding_internal_locations(child, name)
+                )
+        return result
+
     def audit(self, directive):
         parent = directive.parent
 
@@ -33,10 +62,16 @@ class return_bypasses_allow_deny(Plugin):
             return
         self._reported_parents.add(key)
 
-        return_directive = list(parent.find_recursive("return"))
+        return_directive = self._find_descendants_excluding_internal_locations(
+            parent, "return"
+        )
         if return_directive:
-            all_allow_directives = list(parent.find_recursive("allow"))
-            all_deny_directives = list(parent.find_recursive("deny"))
+            all_allow_directives = (
+                self._find_descendants_excluding_internal_locations(parent, "allow")
+            )
+            all_deny_directives = (
+                self._find_descendants_excluding_internal_locations(parent, "deny")
+            )
             self.add_issue(
                 directive=[directive]
                 + return_directive
