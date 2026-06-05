@@ -27,8 +27,51 @@ class status_page_exposed(Plugin):
                 )
         return False
 
+    @staticmethod
+    def _resolve_inherited(scope, name):
+        """Return the effective value of an inheritable single-value directive.
+
+        Walks up from `scope` to the root. The first scope that declares the
+        directive wins (closest scope), matching nginx inheritance. If a scope
+        declares the directive more than once, the last occurrence is used.
+        Returns None when the directive is unset anywhere up the chain.
+        """
+        current = scope
+        while current:
+            matches = [
+                c
+                for c in current.children
+                if (c.name or "").lower() == name and c.args
+            ]
+            if matches:
+                return matches[-1].args[0].lower()
+            current = current.parent
+        return None
+
+    def _has_inherited_auth(self, directive):
+        """True if auth_request or auth_basic is enabled at or above this scope."""
+        for name in ("auth_request", "auth_basic"):
+            value = self._resolve_inherited(directive.parent, name)
+            if value is not None and value != "off":
+                return True
+        return False
+
+    @staticmethod
+    def _location_is_internal_only(directive):
+        """True if the directive is inside a `location` carrying `internal`."""
+        for parent in directive.parents:
+            if parent.name == "location":
+                return bool(getattr(parent, "is_internal", False))
+        return False
+
     def audit(self, directive):
         if self._server_uses_only_unix_sockets(directive):
+            return
+
+        if self._location_is_internal_only(directive):
+            return
+
+        if self._has_inherited_auth(directive):
             return
 
         parent = directive.parent
