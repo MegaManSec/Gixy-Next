@@ -94,7 +94,6 @@ Gixy-Next can detect a wide range of NGINX security and performance misconfigura
 - [[if_is_evil] If is evil when used in location context](https://gixy.io/plugins/if_is_evil/)
 - [[invalid_regex] Invalid regex capture groups](https://gixy.io/plugins/invalid_regex/)
 - [[low_keepalive_requests] Low `keepalive_requests`](https://gixy.io/plugins/low_keepalive_requests/)
-- [[merge_slashes_on] Enabling merge_slashes](https://gixy.io/plugins/merge_slashes_on/)
 - [[missing_worker_processes] Missing `worker_processes`](https://gixy.io/plugins/missing_worker_processes/)
 - [[mixed_case_variable] Mixed-case variable references](https://gixy.io/plugins/mixed_case_variable/)
 - [[origins] Problems with referer/origin header validation](https://gixy.io/plugins/origins/)
