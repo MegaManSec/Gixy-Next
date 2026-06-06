@@ -5,7 +5,7 @@ description: "Flags unsafe or brittle Origin/Referer validation logic (most ofte
 
 # [origins] Weak `Referer` / `Origin` validation
 
-This check looks for common mistakes when using `$http_origin` or `$http_referer` to gate security behavior (CORS, clickjacking headers, etc.). It focuses on regex-based validation in `if` conditions and in `map`-based CORS allowlists that reflect an origin into a response header.
+This check looks for common mistakes when using `$http_origin` or `$http_referer` to gate security behavior (CORS, clickjacking headers, etc.). It covers brittle regex-based validation in `if` conditions and `map`-based CORS allowlists, as well as configurations that reflect the request `Origin` into `Access-Control-Allow-Origin` unconditionally.
 
 ## What it detects
 
@@ -29,6 +29,27 @@ It can also flag values that contain uppercase letters or unusual characters in 
 ### Common header typo
 
 `$http_referrer` is not a valid NGINX variable for the HTTP Referer header. The correct variable is `$http_referer`.
+
+### Unconditional reflection of the Origin
+
+Reflecting `$http_origin` straight back into `Access-Control-Allow-Origin` accepts *any* origin — there is no allowlist at all. The plugin flags this whether the request Origin is reflected directly, through a `set`, or via a non-regex `map` default:
+
+```nginx
+# Direct reflection — every origin is allowed
+add_header Access-Control-Allow-Origin $http_origin always;
+
+# Indirect, via set
+set $cors $http_origin;
+add_header Access-Control-Allow-Origin $cors always;
+
+# Non-regex map that defaults to reflecting the origin
+map $http_origin $cors {
+    default $http_origin;
+}
+add_header Access-Control-Allow-Origin $cors always;
+```
+
+A literal-key `map` allowlist (for example `https://trusted.example $http_origin;` with a safe `default`) is *not* flagged: only the listed origins are echoed back. Like the `map` analysis below, this detection runs only on a full configuration scan (one that includes an `http { .. }` block).
 
 ## Why this is a problem
 
