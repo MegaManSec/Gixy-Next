@@ -41,4 +41,8 @@ If your NGINX already defaults to 1000, you can also omit the directive and keep
 
 The "right" number depends on your traffic and timeouts, but the takeaway is simple: avoid values that force constant reconnecting. If you are tuning performance, look at `keepalive_timeout` and (for upstream keepalive) the `keepalive` directive in `upstream` blocks as well.
 
+This check applies only to the client-facing `keepalive_requests` in the `http`, `server`, or `location` context. It does not flag `keepalive_requests` inside an `upstream {}` block — that is a different directive (the maximum number of requests per upstream keep-alive connection, since NGINX 1.15.3), where small values are normal.
+
+`keepalive_requests 0` is flagged. NGINX tests the per-connection request count with `requests >= keepalive_requests` and applies no special case for `0`, so a value of `0` makes the condition always true: the connection is closed after every request and client keep-alive is disabled entirely — the most aggressive form of the connection churn this check warns about.
+
 In some systems like Burp Proxy, receiving the error "Stream failed to close correctly" indicates that the configuration of the server is using a too-low value of `keepalive_requests`. In mitm-proxy, this error is described as "HTTP/2 protocol error: Invalid ConnectionInputs.RECV_HEADERS in state ConnectionState.CLOSED". If you are unable to change the server configuration, you may also disable HTTP/2 in the browser / proxy. For more information about when this error can show up, read [this post](https://joshua.hu/http2-burp-proxy-mitmproxy-nginx-failing-load-resources-chromium).
