@@ -6,7 +6,7 @@ import tldextract
 import gixy
 from gixy.core.regexp import Regexp
 from gixy.directives.block import MapBlock
-from gixy.directives.directive import AddHeaderDirective, MapDirective
+from gixy.directives.directive import AddHeaderDirective, MapDirective, SetDirective
 from gixy.plugins.plugin import Plugin
 
 _EXTRACT = tldextract.TLDExtract(
@@ -347,6 +347,23 @@ class origins(Plugin):
         name = self.directive_type.split("_")[1]
         self._analyze_and_report(directive.value, case_sensitive, name, directive)
 
+    @staticmethod
+    def _is_origin_reflection(value):
+        """True if a (quote-stripped) value is a bare reflection of $http_origin."""
+        return value.lstrip("$").strip("{}").lower() == "http_origin"
+
+    def _report_reflection(self, directive):
+        """Flag unconditional reflection of the request Origin into Access-Control-Allow-Origin."""
+        reason = (
+            "Reflecting `$http_origin` into `Access-Control-Allow-Origin` allows any "
+            "origin to pass the CORS check. Echo only origins from a trusted allowlist."
+        )
+        self.add_issue(
+            directive=directive,
+            reason=reason,
+            severity=self.severity_insecure_origin,
+        )
+
     def post_audit(self, root):
         """Analyze map-based CORS allowlists: map $http_origin $var; add_header Access-Control-Allow-Origin $var"""
         # Find add_header directives that set Access-Control-Allow-Origin to a variable
@@ -358,7 +375,22 @@ class origins(Plugin):
             value = node.value.strip().strip("\"'")
             if not value.startswith("$"):
                 continue
+
+            # add_header Access-Control-Allow-Origin $http_origin; -> reflects every origin
+            if self._is_origin_reflection(value):
+                self._report_reflection(node)
+                continue
+
             dest_var = value.lstrip("$").lower()
+
+            # set $var $http_origin; add_header ... $var; -> indirect reflection
+            for sd in root.find_recursive("set"):
+                if not isinstance(sd, SetDirective):
+                    continue
+                if sd.variable != dest_var:
+                    continue
+                if self._is_origin_reflection(sd.value.strip().strip("\"'")):
+                    self._report_reflection([sd, node])
 
             # Find map blocks that populate this variable from $http_origin
             for mb in root.find_recursive("map"):
@@ -373,8 +405,14 @@ class origins(Plugin):
                 for md in mb.gather_map_directives(mb.children):
                     if not isinstance(md, MapDirective):
                         continue
-                    # Only consider regex map keys
+                    # A non-regex `default $http_origin;` echoes every origin back.
+                    # A literal key (`https://trusted.example $http_origin;`) is an
+                    # exact-match allowlist, so only `default` reflects unconditionally.
                     if not md.is_regex:
+                        if md.src_val == "default" and self._is_origin_reflection(
+                            (md.dest_val or "").strip().strip("\"'")
+                        ):
+                            self._report_reflection([md, node])
                         continue
                     src = md.src_val or ""
                     # Determine case sensitivity and pattern
