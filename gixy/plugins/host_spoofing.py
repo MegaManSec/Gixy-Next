@@ -20,9 +20,16 @@ class host_spoofing(Plugin):
             # Not a "Host" header
             return
 
-        if value.lower() == "$http_host":
+        val = value.lower()
+        if val == "$http_host":
             reason = "Upstream Host is set from `$http_host`, which can be attacker-controlled. Prefer `$host`."
             self.add_issue(directive=directive, reason=reason)
-        elif value.lower().startswith("$arg_"):
+        elif val == "$http_x_forwarded_host":
+            reason = "Upstream Host is set from `$http_x_forwarded_host` (X-Forwarded-Host request header), which is attacker-controlled. Prefer `$host`."
+            self.add_issue(directive=directive, reason=reason)
+        elif val.startswith("$arg_"):
             reason = f"Upstream Host is set from query-string variable `{value}`, which is attacker-controlled."
+            self.add_issue(directive=directive, reason=reason)
+        elif val.startswith("$cookie_"):
+            reason = f"Upstream Host is set from cookie variable `{value}`, which is attacker-controlled."
             self.add_issue(directive=directive, reason=reason)

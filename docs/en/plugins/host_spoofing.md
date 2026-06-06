@@ -1,13 +1,13 @@
 ---
 title: "Host Header Spoofing"
-description: "Detects unsafe use of the raw Host header ($http_host). Forwarding or trusting it can enable phishing, cache poisoning, and SSRF. Prefer $host and a strict server_name list."
+description: "Detects setting the Host from client-controlled values ($http_host, $http_x_forwarded_host, $cookie_*, $arg_*). Forwarding or trusting them can enable phishing, cache poisoning, and SSRF. Prefer $host and a strict server_name list."
 ---
 
 # [host_spoofing] Host header forgery
 
 ## What this check looks for
 
-This plugin flags configurations that forward or rely on the raw `Host` request header via `$http_host`, especially when it is passed upstream or used to build redirects/URLs.
+This plugin flags configurations that set the `Host` from a client-controlled value — `$http_host`, `$http_x_forwarded_host` (the `X-Forwarded-Host` request header), a `$cookie_*` value, or a query-string `$arg_*` — especially when it is passed upstream or used to build redirects/URLs.
 
 ## Why this is a problem
 
@@ -50,4 +50,4 @@ server {
 
 ## Additional notes
 
-In general, apply the same rule to any usage of `$http_host`: it should generally be considered untrusted.
+In general, apply the same rule to any client-controlled value used as the host — `$http_*` request headers (such as `$http_x_forwarded_host`), `$cookie_*`, and `$arg_*`: they should all be considered untrusted. Only `$host` is normalized by NGINX and tied to `server_name` selection.
