@@ -79,7 +79,6 @@ nav:
       - plugins/if_is_evil.md
       - plugins/invalid_regex.md
       - plugins/low_keepalive_requests.md
-      - plugins/merge_slashes_on.md
       - plugins/missing_worker_processes.md
       - plugins/mixed_case_variable.md
       - plugins/origins.md
