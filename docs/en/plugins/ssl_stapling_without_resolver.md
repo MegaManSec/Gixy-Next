@@ -79,5 +79,6 @@ http {
 
 - A `resolver` declared in the same server block is also sufficient; http-level is just the most common pattern.
 - If you pre-load the stapled response via `ssl_stapling_file`, nginx uses that file directly and does not need a resolver.
+- If `ssl_stapling_responder` is set to an IP-literal URL (for example `http://192.0.2.1/ocsp`), no DNS resolution happens, so the server is not flagged. A hostname responder — or none at all, where nginx falls back to the certificate's AIA URL — still requires a resolver.
 - A server that overrides with `ssl_stapling off;` is not flagged, even when the http block enables stapling globally.
 - Non-SSL servers (plain `listen 80;`) are skipped — stapling is irrelevant there.
