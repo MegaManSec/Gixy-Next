@@ -20,7 +20,7 @@ jobs:
         run: |
           apt-get update
           apt-get install -y git
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10  # v6.0.3
       - name: Install dependencies & test
         env:
           PYTHONWARNINGS: always
@@ -43,9 +43,9 @@ jobs:
             experimental: true
     continue-on-error: ${{ matrix.experimental || false }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10  # v6.0.3
       - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405  # v6.2.0
         with:
           python-version: ${{ matrix.python-version }}
           cache: pip
