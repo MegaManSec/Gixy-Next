@@ -133,15 +133,28 @@ class Manager(object):
         except Exception:
             pass
 
+    @staticmethod
+    def _provided_variables(directive):
+        """Variables a directive contributes to the scope, tolerant of regexes
+        the engine can't parse (PCRE atomic groups, possessive quantifiers).
+
+        Such a regex yields no analyzable captures rather than aborting the
+        whole audit, mirroring _register_regex_captures.
+        """
+        try:
+            return directive.variables
+        except Exception:
+            return []
+
     def _prepopulate_scope_var_values(self, tree):
         context = get_context()
         for directive in tree:
             if isinstance(directive, SCOPE_STATIC_VAR_PROVIDERS + (RootDirective, RewriteDirective)):
-                for var in directive.variables:
+                for var in self._provided_variables(directive):
                     context.add_var(var.name, var)
             elif directive.is_block and not directive.self_context:
                 if directive.provide_variables:
-                    for var in directive.variables:
+                    for var in self._provided_variables(directive):
                         context.add_var(var.name, var)
                 self._prepopulate_scope_var_values(directive.children)
 
@@ -151,7 +164,7 @@ class Manager(object):
             return
 
         context = get_context()
-        for var in directive.variables:
+        for var in self._provided_variables(directive):
             if var.name == 0 and not isinstance(directive, MapDirective):
                 # All regexps must clean indexed variables
                 context.clear_index_vars()

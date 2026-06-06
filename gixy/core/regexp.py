@@ -1077,7 +1077,7 @@ class Regexp(object):
                 FIX_NAMED_GROUPS_RE.sub("(?P<\\1>", self.source)
             )
         except sre_parse.error as e:
-            LOG.fatal("Failed to parse regex: %s (%s)", self.source, str(e))
+            LOG.debug("Failed to parse regex: %s (%s)", self.source, str(e))
             raise e
 
         return self._parsed
