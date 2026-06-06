@@ -81,5 +81,6 @@ server {
 ## Additional notes
 
 - This plugin treats `allow all` as not a whitelist and does not count it as a restriction.
+- `allow`/`deny` are resolved with NGINX inheritance: rules set on an enclosing `server`/`http` scope protect a `stub_status` location that declares none of its own. (A location that sets its *own* `allow`/`deny` does not inherit the parent's, matching `ngx_http_access_module`, so in that case it must repeat them.)
 - Servers that listen only on `unix:` sockets are ignored by this check, since they are not reachable over the network.
 - Prefer keeping the endpoint unadvertised (non-obvious path) in addition to access control, but do not rely on obscurity alone.
