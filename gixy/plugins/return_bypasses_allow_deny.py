@@ -62,20 +62,30 @@ class return_bypasses_allow_deny(Plugin):
             return
         self._reported_parents.add(key)
 
-        return_directive = self._find_descendants_excluding_internal_locations(
+        # `return` and `rewrite ... permanent|redirect` both emit their response
+        # during the rewrite phase, before the access phase where allow/deny run.
+        # (`rewrite ... last|break` keep processing, so they do not bypass.)
+        bypassing = self._find_descendants_excluding_internal_locations(
             parent, "return"
         )
-        if return_directive:
-            all_allow_directives = (
-                self._find_descendants_excluding_internal_locations(parent, "allow")
+        bypassing += [
+            d
+            for d in self._find_descendants_excluding_internal_locations(
+                parent, "rewrite"
             )
-            all_deny_directives = (
-                self._find_descendants_excluding_internal_locations(parent, "deny")
+            if len(d.args) >= 3 and d.args[-1].lower() in ("permanent", "redirect")
+        ]
+        if bypassing:
+            all_allow_directives = self._find_descendants_excluding_internal_locations(
+                parent, "allow"
+            )
+            all_deny_directives = self._find_descendants_excluding_internal_locations(
+                parent, "deny"
             )
             self.add_issue(
                 directive=[directive]
-                + return_directive
+                + bypassing
                 + all_allow_directives
                 + all_deny_directives,
-                reason="`allow`/`deny` do not restrict responses produced by `return` in the same scope.",
+                reason="`allow`/`deny` do not restrict responses produced by `return` or `rewrite ... permanent|redirect` in the same scope.",
             )

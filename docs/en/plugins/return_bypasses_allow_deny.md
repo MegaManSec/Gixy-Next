@@ -1,17 +1,17 @@
 ---
 title: "Return Bypasses Allow/Deny"
-description: "Detects return directives placed alongside allow/deny in the same effective scope. return short-circuits request processing and can make access controls misleading."
+description: "Detects return (and rewrite ... permanent|redirect) placed alongside allow/deny in the same scope. They emit a response in the rewrite phase, before access control runs, making allow/deny misleading."
 ---
 
-# [return_bypasses_allow_deny] `return` bypasses `allow` and `deny`
+# [return_bypasses_allow_deny] `return` / `rewrite ... permanent|redirect` bypass `allow`/`deny`
 
 ## What this check looks for
 
-This plugin warns when `return` appears in the same context as `allow`/`deny`.
+This plugin warns when `return` — or a `rewrite ... permanent` / `rewrite ... redirect` — appears in the same context as `allow`/`deny`.
 
 ## Why this is a problem
 
-`return` runs in the rewrite phase and ends request processing immediately. Access controls (`allow`/`deny`) are evaluated later. That means a `return` placed next to access rules can effectively ignore them, even if the config looks like it should be restricted.
+`return` — and a `rewrite` with a `permanent` (301) or `redirect` (302) flag — run in the rewrite phase and emit a response immediately. Access controls (`allow`/`deny`) are evaluated later, in the access phase. That means such a directive placed next to access rules can effectively ignore them, even if the config looks like it should be restricted. (A `rewrite ... last` or `rewrite ... break` keeps processing into the access phase, so it is *not* flagged.)
 
 In other words: the block reads like "allow X, deny everyone else", but the request never actually reaches the access phase: it simply returns unconditionally.
 
@@ -27,7 +27,7 @@ location /admin/ {
 }
 ```
 
-The response is served to everyone, including clients you intended to deny.
+The response is served to everyone, including clients you intended to deny. The same happens if you replace the `return` with `rewrite ^ https://example.test/ permanent;` (or `redirect`) — the redirect is issued before the access phase.
 
 ## Better configuration
 
