@@ -1,13 +1,13 @@
 ---
 title: "Server Side Request Forgery"
-description: "Detects SSRF-prone proxy_pass patterns where user input controls the upstream scheme/host/path. This can allow attackers to make NGINX reach internal services."
+description: "Detects SSRF-prone proxy_pass, fastcgi_pass, uwsgi_pass, scgi_pass, and grpc_pass patterns where user input controls the upstream address. This can allow attackers to make NGINX reach internal services."
 ---
 
 # [ssrf] Server Side Request Forgery
 
 ## What this check looks for
 
-This plugin looks for `proxy_pass` usage where the upstream address is built from variables that can be influenced by the client (scheme, host, port, or path). That is the classic NGINX SSRF shape.
+This plugin looks for `proxy_pass`, `fastcgi_pass`, `uwsgi_pass`, `scgi_pass`, or `grpc_pass` usage where the upstream address is built from variables that can be influenced by the client (host, port, and — for `proxy_pass`/`grpc_pass` — the scheme or path). That is the classic NGINX SSRF shape.
 
 ## Why this is a problem
 
