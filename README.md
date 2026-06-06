@@ -112,7 +112,7 @@ Gixy-Next can detect a wide range of NGINX security and performance misconfigura
 - [[try_files_is_evil_too] `try_files` directive is evil without open_file_cache](https://gixy.io/plugins/try_files_is_evil_too/)
 - [[unanchored_regex] Unanchored regular expressions](https://gixy.io/plugins/unanchored_regex/)
 - [[unnamed_groups] Unnamed capture groups in rewrite query string](https://gixy.io/plugins/unnamed_groups/)
-- [[valid_referers] none in valid_referers](https://gixy.io/plugins/valid_referers/)
+- [[valid_referers] none/blocked in valid_referers](https://gixy.io/plugins/valid_referers/)
 - [[version_disclosure] Using insecure values for server_tokens](https://gixy.io/plugins/version_disclosure/)
 - [[worker_rlimit_nofile_vs_connections] `worker_rlimit_nofile` must be at least twice `worker_connections`](https://gixy.io/plugins/worker_rlimit_nofile_vs_connections/)
 
