@@ -11,7 +11,9 @@ This plugin checks regex usage in directives like:
 
 - `location ~ ...`
 - `if ($var ~ ...)`
+- `server_name ~ ...`
 - `rewrite ...`
+- `map` regex keys (`~...`)
 
 It warns about patterns that may cause catastrophic backtracking. This issue is also known as [ReDoS](https://en.wikipedia.org/wiki/ReDoS).
 
