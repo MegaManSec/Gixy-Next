@@ -1,5 +1,26 @@
+import re
+
 import gixy
+from gixy.directives.directive import is_ipv4, is_ipv6
 from gixy.plugins.plugin import Plugin
+
+_SCHEME_RE = re.compile(r'^https?://', re.IGNORECASE)
+
+
+def _responder_host(url):
+    """Return the host portion of an ssl_stapling_responder URL, or None."""
+    url = _SCHEME_RE.sub('', url)
+    # Strip path/query/fragment
+    url = url.split('/')[0]
+    # Strip port from non-bracketed hosts
+    if url.startswith('['):
+        # IPv6 bracketed: [addr] or [addr]:port
+        bracket_end = url.find(']')
+        if bracket_end == -1:
+            return None
+        return url[:bracket_end + 1]
+    url = url.rsplit(':', 1)[0]
+    return url or None
 
 
 class ssl_stapling_without_resolver(Plugin):
@@ -31,6 +52,13 @@ class ssl_stapling_without_resolver(Plugin):
         # ssl_stapling_file pre-loads the OCSP response; no resolver needed.
         if self._in_scope(server, "ssl_stapling_file"):
             return
+
+        # ssl_stapling_responder with an IP-literal URL connects directly — no DNS needed.
+        responder = self._effective(server, "ssl_stapling_responder")
+        if responder and responder.args:
+            host = _responder_host(responder.args[0])
+            if host and (is_ipv4(host) or is_ipv6(host)):
+                return
 
         if self._in_scope(server, "resolver"):
             return
