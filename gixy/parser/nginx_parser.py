@@ -23,6 +23,7 @@ class NginxParser(object):
         self.parser = raw_parser.RawParser()
         self._init_directives()
         self._path_stack = None
+        self._active_includes = set()
 
     def parse_file(self, path, root=None, display_path=None):
         """Parse an nginx configuration file from disk.
@@ -302,8 +303,19 @@ class NginxParser(object):
         exists = False
         for file_path in sorted(glob.iglob(path)):
             exists = True
-            # parse the include into current context
-            self.parse_file(file_path, parent)
+            # Skip includes already on the active parse stack: a self / mutual
+            # / transitive include cycle would otherwise recurse forever or
+            # duplicate the cycle's directives many times over.
+            canonical = os.path.realpath(file_path)
+            if canonical in self._active_includes:
+                LOG.warning("Skipping circular include: %s", file_path)
+                continue
+            self._active_includes.add(canonical)
+            try:
+                # parse the include into current context
+                self.parse_file(file_path, parent)
+            finally:
+                self._active_includes.discard(canonical)
 
         if not exists:
             # Align behavior with nginx: unmatched glob patterns are not warnings

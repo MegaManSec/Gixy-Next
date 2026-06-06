@@ -219,6 +219,40 @@ server {
     assert isinstance(tree_direct.children[0], HttpBlock)
     assert isinstance(tree_compat.children[0], HttpBlock)
 
+
+def test_include_self_cycle_is_broken(tmp_path):
+    """A file that includes itself must not recurse forever."""
+    (tmp_path / "self.conf").write_text("worker_processes 1;\ninclude self.conf;\n")
+    root = NginxParser(cwd=str(tmp_path), allow_includes=True).parse_file(
+        str(tmp_path / "self.conf")
+    )
+    assert isinstance(root, Root)
+    assert len(root.children) < 10
+
+
+def test_include_mutual_cycle_is_broken(tmp_path):
+    """An A <-> B mutual include cycle is broken instead of recursing."""
+    (tmp_path / "a.conf").write_text("include b.conf;\n")
+    (tmp_path / "b.conf").write_text("include a.conf;\n")
+    root = NginxParser(cwd=str(tmp_path), allow_includes=True).parse_file(
+        str(tmp_path / "a.conf")
+    )
+    assert isinstance(root, Root)
+    assert len(root.children) < 10
+
+
+def test_include_transitive_cycle_is_broken(tmp_path):
+    """An A -> B -> C -> A transitive include cycle is broken."""
+    (tmp_path / "a.conf").write_text("include b.conf;\n")
+    (tmp_path / "b.conf").write_text("include c.conf;\n")
+    (tmp_path / "c.conf").write_text("include a.conf;\n")
+    root = NginxParser(cwd=str(tmp_path), allow_includes=True).parse_file(
+        str(tmp_path / "a.conf")
+    )
+    assert isinstance(root, Root)
+    assert len(root.children) < 10
+
+
 def assert_config(config, expected):
     tree = _parse(config)
     assert isinstance(tree, Directive)
