@@ -26,8 +26,13 @@ class missing_worker_processes(Plugin):
         self.has_directive = False
 
     def audit(self, directive):
-        # If it's set, assume it's intentional and do not report anything.
-        self.has_directive = True
+        # Only count worker_processes when it is in the main (root) context.
+        # nginx only allows this directive in the main context; if placed inside
+        # http{} or server{} nginx -t rejects it, so it must not suppress the warning.
+        # The root Block has name=None and parent=None; a main-context directive's
+        # parent is that root instance.
+        if directive.parent is not None and directive.parent.name is None:
+            self.has_directive = True
         return
 
     def post_audit(self, root):
