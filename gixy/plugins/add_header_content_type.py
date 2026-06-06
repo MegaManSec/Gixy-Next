@@ -12,19 +12,25 @@ class add_header_content_type(Plugin):
     severity = gixy.severity.LOW
     description = "Do not set Content-Type using add_header; use default_type instead."
     help_url = "https://gixy.io/plugins/add_header_content_type/"
-    directives = ["add_header"]
+    directives = ["add_header", "more_set_headers"]
 
     def audit(self, directive):
-        if directive.header == "content-type":
-            # Check if *_hide_header Content-Type is present in the same scope
-            # This is a valid pattern to override backend Content-Type
-            if self._has_hide_header_content_type(directive):
-                return
+        ct_value = next(
+            (v for h, v in directive.headers.items() if h.lower() == "content-type"),
+            None,
+        )
+        if ct_value is None:
+            return
 
-            reason = "Use `default_type {default_type};` instead of `add_header`/`more_set_headers` to set Content-Type.".format(
-                default_type=directive.value
-            )
-            self.add_issue(directive=directive, reason=reason)
+        # Check if *_hide_header Content-Type is present in the same scope
+        # This is a valid pattern to override backend Content-Type
+        if self._has_hide_header_content_type(directive):
+            return
+
+        reason = "Use `default_type {default_type};` instead of `add_header`/`more_set_headers` to set Content-Type.".format(
+            default_type=ct_value
+        )
+        self.add_issue(directive=directive, reason=reason)
 
     def _has_hide_header_content_type(self, directive):
         """Check if *_hide_header Content-Type exists in the same scope or parent scopes"""
