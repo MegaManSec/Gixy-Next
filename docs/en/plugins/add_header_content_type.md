@@ -1,17 +1,17 @@
 ---
 title: "Duplicate Content-Type"
-description: "Flags cases where add_header is used to set Content-Type, which can create duplicate Content-Type headers. Prefer default_type, or hide the upstream header first."
+description: "Flags setting Content-Type via add_header or more_set_headers, which can create duplicate Content-Type headers. Prefer default_type, or hide the upstream header first."
 ---
 
-# [add_header_content_type] Using `add_header` to set `Content-Type`
+# [add_header_content_type] Using `add_header`/`more_set_headers` to set `Content-Type`
 
 ## What this check looks for
 
-This plugin looks for configurations that try to set the `Content-Type` response header using `add_header`.
+This plugin looks for configurations that set the `Content-Type` response header using `add_header` or `more_set_headers` (the headers-more module). The header name is matched case-insensitively.
 
 ## Why this is a problem
 
-NGINX can end up sending two `Content-Type` headers: one from the upstream, and one you added. Different clients handle duplicates differently, and caches may store an unexpected value. If you are trying to set a fallback MIME type for static content, `default_type` is the right tool.
+NGINX can end up sending two `Content-Type` headers: one from the upstream, and one you added. Different clients handle duplicates differently, and caches may store an unexpected value. If you are trying to set a fallback MIME type for static content, `default_type` is the right tool. The same recommendation applies when the header is set via `more_set_headers`: prefer `default_type` over hand-setting `Content-Type`.
 
 ## Bad configuration
 
