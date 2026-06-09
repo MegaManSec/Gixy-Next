@@ -162,7 +162,7 @@ class LocationBlock(Block):
         regexp = self._regexp
         if not regexp:
             return False
-        return regexp.needs_tail_anchor()
+        return regexp.needs_anchor()
 
 
 class IfBlock(Block):

@@ -1085,12 +1085,53 @@ class Regexp(object):
     def __str__(self):
         return str(self.root)
 
-    def needs_tail_anchor(self):
-        """Check if the regex needs a tail anchor to be effective."""
+    def needs_anchor(self):
+        """True when some alternative can match anywhere in the input.
 
-        # If the regex is anchored at the end, no issue.
-        if self.source.endswith("$"):
+        A regex is considered anchored when every top-level alternative is
+        pinned to the start (``^``/``\\A``) or the end (``$``/``\\z``) of the
+        input; anything else lets the engine retry at every position and match
+        URLs it was never meant to match.
+        """
+        # PCRE's `\z` end anchor is read as a literal `z` by the vendored
+        # parser, so recognize it on the source before walking the tree.
+        if re.search(r"(?<!\\)(?:\\\\)*\\z$", self.source):
             return False
+        try:
+            parsed = self.parsed
+        except Exception:
+            return False
+        return not _is_anchored(list(parsed))
 
-        extension_pattern = re.compile(r"\\\.[A-Za-z0-9]+$")
-        return bool(extension_pattern.search(self.source))
+
+_ANCHORS_BEGIN = frozenset((sre_parse.AT_BEGINNING, sre_parse.AT_BEGINNING_STRING))
+_ANCHORS_END = frozenset((sre_parse.AT_END, sre_parse.AT_END_STRING))
+
+
+def _seq_anchored(seq, anchors, last):
+    """True if the token sequence is pinned by one of `anchors` at its
+    first (last=False) or last (last=True) meaningful token."""
+    if not seq:
+        return False
+    op, av = seq[-1] if last else seq[0]
+    if op == sre_parse.AT:
+        return av in anchors
+    if op == sre_parse.SUBPATTERN:
+        return _seq_anchored(list(av[-1]), anchors, last)
+    if op == sre_parse.ASSERT:
+        return _seq_anchored(list(av[-1]), anchors, last)
+    if op == sre_parse.BRANCH:
+        return all(_seq_anchored(list(alt), anchors, last) for alt in av[1])
+    if op in (sre_parse.MAX_REPEAT, sre_parse.MIN_REPEAT):
+        min_count, _, items = av
+        return min_count >= 1 and _seq_anchored(list(items), anchors, last)
+    return False
+
+
+def _is_anchored(seq):
+    """True if every alternative is anchored at the start or at the end."""
+    if len(seq) == 1 and seq[0][0] == sre_parse.BRANCH:
+        return all(_is_anchored(list(alt)) for alt in seq[0][1][1])
+    return _seq_anchored(seq, _ANCHORS_BEGIN, last=False) or _seq_anchored(
+        seq, _ANCHORS_END, last=True
+    )
