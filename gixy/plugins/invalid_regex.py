@@ -2,6 +2,7 @@ import re
 
 import gixy
 from gixy.core.regexp import Regexp
+from gixy.directives.directive import MapDirective
 from gixy.plugins.plugin import Plugin
 
 
@@ -59,16 +60,21 @@ class invalid_regex(Plugin):
             self._audit_scope(directive, directive.args)
 
     @staticmethod
-    def _regex_groups(pattern, case_sensitive=True):
-        """Available capture group numbers of `pattern`, or None if it cannot
+    def _regexp_groups(regexp):
+        """Available capture group numbers of a Regexp, or None if it cannot
         be parsed (PCRE-only syntax and the like)."""
         try:
-            regexp = Regexp(pattern, case_sensitive=case_sensitive)
             available = {g for g in regexp.groups if isinstance(g, int)}
             available.discard(0)
             return available
         except Exception:
             return None
+
+    @classmethod
+    def _regex_groups(cls, pattern, case_sensitive=True):
+        """Available capture group numbers of `pattern`, or None if it cannot
+        be parsed (PCRE-only syntax and the like)."""
+        return cls._regexp_groups(Regexp(pattern, case_sensitive=case_sensitive))
 
     def _find_refs(self, strings):
         refs = set()
@@ -124,20 +130,16 @@ class invalid_regex(Plugin):
         """
         gather = getattr(directive, "gather_map_directives", None)
         if gather is None:
-            # Map *entries* share the nginx name "map"; only the block has
-            # children to gather.
+            # Not the map block but an entry: entries carry their *key* as
+            # `.name`, so one whose key is literally "map" (geo entries use
+            # the same class) can be dispatched here too.
             return
 
         for child in gather(directive.children):
-            if not getattr(child, "is_regex", False):
-                continue
-
-            src = child.src_val
-            if src.startswith("~*"):
-                pattern, case_sensitive = src[2:], False
-            elif src.startswith("~"):
-                pattern, case_sensitive = src[1:], True
-            else:
+            # MapDirective parses regex keys into `.regex`; static keys
+            # (and `default`) carry None and run no regex of their own.
+            regex = getattr(child, "regex", None)
+            if regex is None:
                 continue
 
             value = child.dest_val
@@ -148,7 +150,7 @@ class invalid_regex(Plugin):
             if not referenced_groups:
                 continue
 
-            available_groups = self._regex_groups(pattern, case_sensitive)
+            available_groups = self._regexp_groups(regex)
             if available_groups is None:
                 continue
 
@@ -159,7 +161,7 @@ class invalid_regex(Plugin):
                     directive=child,
                     reason=(
                         f"The map value references capture group(s) {invalid_list}, "
-                        f'but the pattern "{pattern}" does not define them; '
+                        f'but the pattern "{regex.source}" does not define them; '
                         f"the reference is always empty."
                     ),
                 )
@@ -310,9 +312,9 @@ class invalid_regex(Plugin):
                 break
             groups |= provided
 
-        if groups is not None and root is not None and base is not root:
-            for pattern, case_sensitive in self._map_patterns(root):
-                provided = self._regex_groups(pattern, case_sensitive)
+        if groups is not None and root is not None:
+            for regexp in self._map_patterns(root):
+                provided = self._regexp_groups(regexp)
                 if provided is None:
                     groups = None
                     break
@@ -326,6 +328,12 @@ class invalid_regex(Plugin):
         `block`: regex locations, regex if conditions, rewrites and regex
         server_names."""
         for child in getattr(block, "children", []):
+            if isinstance(child, MapDirective):
+                # map/geo entries carry arbitrary key strings as `.name`,
+                # which may collide with the directive names matched below;
+                # regex map keys are collected by _map_patterns instead.
+                continue
+
             name = (getattr(child, "name", None) or "").lower()
             args = getattr(child, "args", None) or []
 
@@ -346,17 +354,13 @@ class invalid_regex(Plugin):
                 yield from self._provider_patterns(child)
 
     def _map_patterns(self, root):
-        """Yield (pattern, case_sensitive) for every regex map key in the config."""
+        """Yield the parsed Regexp of every regex map key in the config."""
         for child in getattr(root, "children", []):
             gather = getattr(child, "gather_map_directives", None)
             if gather is not None:
                 for entry in gather(child.children):
-                    if not getattr(entry, "is_regex", False):
-                        continue
-                    src = entry.src_val
-                    if src.startswith("~*"):
-                        yield src[2:], False
-                    elif src.startswith("~"):
-                        yield src[1:], True
+                    regex = getattr(entry, "regex", None)
+                    if regex is not None:
+                        yield regex
             if getattr(child, "is_block", False):
                 yield from self._map_patterns(child)
