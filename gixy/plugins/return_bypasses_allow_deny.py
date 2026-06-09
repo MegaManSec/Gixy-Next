@@ -18,6 +18,11 @@ class return_bypasses_allow_deny(Plugin):
     help_url = "https://gixy.io/plugins/return_bypasses_allow_deny/"
     directives = ["allow", "deny"]
 
+    REDIRECT_FLAGS = ("permanent", "redirect")
+    # nginx also redirects whenever the replacement is an absolute URL,
+    # regardless of flag; its prefix check is case-sensitive (ngx_http_rewrite).
+    REDIRECT_PREFIXES = ("http://", "https://", "$scheme")
+
     def __init__(self, config):
         super(return_bypasses_allow_deny, self).__init__(config)
         self._reported_parents = set()
@@ -37,6 +42,17 @@ class return_bypasses_allow_deny(Plugin):
         if getattr(node, "path", "").startswith("@"):
             return True
         return bool(getattr(node, "is_internal", False))
+
+    @classmethod
+    def _rewrite_emits_redirect(cls, directive):
+        """True when this rewrite responds with a redirect from the rewrite
+        phase: it carries a `permanent`/`redirect` flag, or its replacement
+        is an absolute URL — the latter redirects whatever the flag, `last`
+        and `break` included."""
+        args = directive.args
+        if len(args) >= 3 and args[-1].lower() in cls.REDIRECT_FLAGS:
+            return True
+        return len(args) >= 2 and args[1].startswith(cls.REDIRECT_PREFIXES)
 
     def _find_descendants_excluding_internal_locations(self, node, name):
         result = []
@@ -62,20 +78,31 @@ class return_bypasses_allow_deny(Plugin):
             return
         self._reported_parents.add(key)
 
-        return_directive = self._find_descendants_excluding_internal_locations(
+        # `return` and any redirecting rewrite emit their response during the
+        # rewrite phase, before the access phase where allow/deny run.
+        # (`rewrite ... last|break` with a plain URI replacement keeps
+        # processing, so it does not bypass.)
+        bypassing = self._find_descendants_excluding_internal_locations(
             parent, "return"
         )
-        if return_directive:
-            all_allow_directives = (
-                self._find_descendants_excluding_internal_locations(parent, "allow")
+        bypassing += [
+            d
+            for d in self._find_descendants_excluding_internal_locations(
+                parent, "rewrite"
             )
-            all_deny_directives = (
-                self._find_descendants_excluding_internal_locations(parent, "deny")
+            if self._rewrite_emits_redirect(d)
+        ]
+        if bypassing:
+            all_allow_directives = self._find_descendants_excluding_internal_locations(
+                parent, "allow"
+            )
+            all_deny_directives = self._find_descendants_excluding_internal_locations(
+                parent, "deny"
             )
             self.add_issue(
                 directive=[directive]
-                + return_directive
+                + bypassing
                 + all_allow_directives
                 + all_deny_directives,
-                reason="`allow`/`deny` do not restrict responses produced by `return` in the same scope.",
+                reason="`allow`/`deny` do not restrict responses produced by `return` or by a redirecting `rewrite` in the same scope.",
             )
