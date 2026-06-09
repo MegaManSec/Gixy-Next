@@ -14,22 +14,68 @@ class invalid_regex(Plugin):
         rewrite "(?i)/" $1 break;  # (?i) is a non-capturing flag, no groups exist
         rewrite "^/path" $1 redirect;  # No capturing groups in pattern
         if ($uri ~ "^/test") { set $x $1; }  # No capturing groups in pattern
+        map $uri $dest { ~^/old/ $1; }  # No capturing groups in pattern
+        location ~ ^/static/ { return 301 /$1; }  # No groups anywhere in scope
     """
 
     summary = "Using a nonexistent regex capture group."
     severity = gixy.severity.MEDIUM
     description = "Referencing a capture group (like $1, $2) that does not exist in the regex pattern will result in an empty value."
     help_url = "https://gixy.io/plugins/invalid_regex/"
-    directives = ["rewrite", "set"]
+    directives = [
+        "rewrite",
+        "set",
+        "return",
+        "proxy_pass",
+        "add_header",
+        "more_set_headers",
+        "try_files",
+        "map",
+    ]
 
-    # Pattern to find $1, $2, etc. references in strings
-    CAPTURE_GROUP_REF = re.compile(r"\$([1-9]\d*)")
+    # Pattern to find $1..$9 references in strings. nginx reads exactly one
+    # digit after `$` (ngx_http_script_compile), so `$12` is capture $1
+    # followed by a literal "2" and `$10`-style references don't exist.
+    CAPTURE_GROUP_REF = re.compile(r"\$([1-9])")
+
+    REGEX_OPERATORS = ("~", "~*", "!~", "!~*")
+
+    def __init__(self, config):
+        super(invalid_regex, self).__init__(config)
+        self._scope_groups_cache = {}
 
     def audit(self, directive):
         if directive.name == "rewrite":
             self._audit_rewrite(directive)
+        elif directive.name == "map":
+            self._audit_map(directive)
         elif directive.name == "set":
-            self._audit_set(directive)
+            if not self._audit_set(directive):
+                # Not in an `if` with a regex condition: fall back to the
+                # conservative whole-scope check.
+                if len(directive.args) >= 2:
+                    self._audit_scope(directive, directive.args[1:2])
+        else:
+            self._audit_scope(directive, directive.args)
+
+    @staticmethod
+    def _regex_groups(pattern, case_sensitive=True):
+        """Available capture group numbers of `pattern`, or None if it cannot
+        be parsed (PCRE-only syntax and the like)."""
+        try:
+            regexp = Regexp(pattern, case_sensitive=case_sensitive)
+            available = {g for g in regexp.groups if isinstance(g, int)}
+            available.discard(0)
+            return available
+        except Exception:
+            return None
+
+    def _find_refs(self, strings):
+        refs = set()
+        for value in strings:
+            for match in self.CAPTURE_GROUP_REF.finditer(value):
+                refs.add(int(match.group(1)))
+        return refs
 
     def _audit_rewrite(self, directive):
         """Audit rewrite directives for invalid group references."""
@@ -40,20 +86,13 @@ class invalid_regex(Plugin):
         replacement = directive.args[1]
 
         # Find all referenced capture groups in the replacement string
-        referenced_groups = set()
-        for match in self.CAPTURE_GROUP_REF.finditer(replacement):
-            referenced_groups.add(int(match.group(1)))
-
+        referenced_groups = self._find_refs([replacement])
         if not referenced_groups:
             return
 
         # Parse the regex to determine available groups
-        try:
-            regexp = Regexp(pattern, case_sensitive=True)
-            available_groups = set(regexp.groups.keys())
-            # Remove group 0 (the full match) from available groups
-            available_groups.discard(0)
-        except Exception:
+        available_groups = self._regex_groups(pattern, case_sensitive=True)
+        if available_groups is None:
             # If we can't parse the regex, skip this check
             return
 
@@ -76,20 +115,68 @@ class invalid_regex(Plugin):
 
             self.add_issue(directive=directive, reason=reason)
 
-    def _audit_set(self, directive):
-        """Audit set directives that may reference regex groups from parent if blocks."""
-        if len(directive.args) < 2:
+    def _audit_map(self, directive):
+        """Audit regex entries of map blocks.
+
+        When a map regex matches (or fails to match), it resets the request's
+        numbered captures, so `$N` in an entry's value can only refer to that
+        entry's own pattern.
+        """
+        gather = getattr(directive, "gather_map_directives", None)
+        if gather is None:
+            # Map *entries* share the nginx name "map"; only the block has
+            # children to gather.
             return
+
+        for child in gather(directive.children):
+            if not getattr(child, "is_regex", False):
+                continue
+
+            src = child.src_val
+            if src.startswith("~*"):
+                pattern, case_sensitive = src[2:], False
+            elif src.startswith("~"):
+                pattern, case_sensitive = src[1:], True
+            else:
+                continue
+
+            value = child.dest_val
+            if not value:
+                continue
+
+            referenced_groups = self._find_refs([value])
+            if not referenced_groups:
+                continue
+
+            available_groups = self._regex_groups(pattern, case_sensitive)
+            if available_groups is None:
+                continue
+
+            invalid_groups = referenced_groups - available_groups
+            if invalid_groups:
+                invalid_list = ", ".join(f"${g}" for g in sorted(invalid_groups))
+                self.add_issue(
+                    directive=child,
+                    reason=(
+                        f"The map value references capture group(s) {invalid_list}, "
+                        f'but the pattern "{pattern}" does not define them; '
+                        f"the reference is always empty."
+                    ),
+                )
+
+    def _audit_set(self, directive):
+        """Audit set directives inside if blocks with regex conditions.
+
+        Returns True when the directive was handled here (it sits inside an
+        `if` with a regex operator), False otherwise.
+        """
+        if len(directive.args) < 2:
+            return False
 
         value = directive.args[1]
 
         # Find all referenced capture groups
-        referenced_groups = set()
-        for match in self.CAPTURE_GROUP_REF.finditer(value):
-            referenced_groups.add(int(match.group(1)))
-
-        if not referenced_groups:
-            return
+        referenced_groups = self._find_refs([value])
 
         # Check if this set is inside an if block with a regex
         parent = directive.parent
@@ -103,25 +190,27 @@ class invalid_regex(Plugin):
 
         if not if_directive:
             # Not in an if block, can't determine regex context
-            return
+            return False
 
         # Check if the if condition has a regex operator
         if not hasattr(if_directive, "args") or len(if_directive.args) < 3:
-            return
+            return False
 
         operator = if_directive.args[1]
-        if operator not in ["~", "~*", "!~", "!~*"]:
-            return
+        if operator not in self.REGEX_OPERATORS:
+            return False
+
+        if not referenced_groups:
+            return True
 
         pattern = if_directive.args[2]
 
         # Parse the regex to determine available groups
-        try:
-            regexp = Regexp(pattern, case_sensitive=(operator in ["~", "!~"]))
-            available_groups = set(regexp.groups.keys())
-            available_groups.discard(0)
-        except Exception:
-            return
+        available_groups = self._regex_groups(
+            pattern, case_sensitive=(operator in ["~", "!~"])
+        )
+        if available_groups is None:
+            return True
 
         # For negative match operators the block only executes when the regex did NOT
         # match, so any capture groups from this pattern are never populated here.
@@ -157,3 +246,117 @@ class invalid_regex(Plugin):
                 )
 
             self.add_issue(directive=directive, reason=reason)
+
+        return True
+
+    def _audit_scope(self, directive, strings):
+        """Conservative whole-scope check for any other directive.
+
+        nginx's `$N` always refers to the most recent regex evaluation, which
+        cannot be pinned down statically. But when *no* regex that could
+        possibly run for the request defines group N, the reference is
+        guaranteed empty — only that case is reported.
+        """
+        referenced_groups = self._find_refs(strings)
+        if not referenced_groups:
+            return
+
+        available_groups = self._collect_scope_groups(directive)
+        if available_groups is None:
+            # An unparseable provider regex could define anything: stay quiet.
+            return
+
+        invalid_groups = referenced_groups - available_groups
+        if invalid_groups:
+            invalid_list = ", ".join(f"${g}" for g in sorted(invalid_groups))
+            self.add_issue(
+                directive=directive,
+                reason=(
+                    f"The directive references capture group(s) {invalid_list}, "
+                    f"but no regex in the enclosing configuration (location, if, "
+                    f"rewrite, server_name, or map) defines them; the reference "
+                    f"is always empty."
+                ),
+            )
+
+    def _collect_scope_groups(self, directive):
+        """Union of capture groups defined by every regex that could populate
+        `$N` for a request handled in this directive's scope: the enclosing
+        server's location/if/rewrite/server_name patterns plus any map regex
+        keys in the whole config (maps evaluate lazily). Returns None when a
+        provider pattern cannot be parsed."""
+        server = None
+        root = None
+        node = directive.parent
+        while node:
+            if getattr(node, "name", None) == "server" and server is None:
+                server = node
+            root = node
+            node = getattr(node, "parent", None)
+
+        base = server or root
+        if base is None:
+            return set()
+
+        cache_key = id(base)
+        if cache_key in self._scope_groups_cache:
+            return self._scope_groups_cache[cache_key]
+
+        groups = set()
+        for pattern, case_sensitive in self._provider_patterns(base):
+            provided = self._regex_groups(pattern, case_sensitive)
+            if provided is None:
+                groups = None
+                break
+            groups |= provided
+
+        if groups is not None and root is not None and base is not root:
+            for pattern, case_sensitive in self._map_patterns(root):
+                provided = self._regex_groups(pattern, case_sensitive)
+                if provided is None:
+                    groups = None
+                    break
+                groups |= provided
+
+        self._scope_groups_cache[cache_key] = groups
+        return groups
+
+    def _provider_patterns(self, block):
+        """Yield (pattern, case_sensitive) for every capture provider under
+        `block`: regex locations, regex if conditions, rewrites and regex
+        server_names."""
+        for child in getattr(block, "children", []):
+            name = (getattr(child, "name", None) or "").lower()
+            args = getattr(child, "args", None) or []
+
+            if name == "location" and len(args) == 2 and args[0] in ("~", "~*"):
+                yield args[1], args[0] == "~"
+            elif name == "if" and len(args) == 3 and args[1] in self.REGEX_OPERATORS:
+                yield args[2], args[1] in ("~", "!~")
+            elif name == "rewrite" and args:
+                yield args[0], True
+            elif name == "server_name":
+                for arg in args:
+                    if arg.startswith("~*"):
+                        yield arg[2:], False
+                    elif arg.startswith("~"):
+                        yield arg[1:], True
+
+            if getattr(child, "is_block", False):
+                yield from self._provider_patterns(child)
+
+    def _map_patterns(self, root):
+        """Yield (pattern, case_sensitive) for every regex map key in the config."""
+        for child in getattr(root, "children", []):
+            gather = getattr(child, "gather_map_directives", None)
+            if gather is not None:
+                for entry in gather(child.children):
+                    if not getattr(entry, "is_regex", False):
+                        continue
+                    src = entry.src_val
+                    if src.startswith("~*"):
+                        yield src[2:], False
+                    elif src.startswith("~"):
+                        yield src[1:], True
+            if getattr(child, "is_block", False):
+                yield from self._map_patterns(child)
