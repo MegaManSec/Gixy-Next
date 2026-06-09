@@ -1,17 +1,17 @@
 ---
 title: "Return Bypasses Allow/Deny"
-description: "Detects return (and rewrite ... permanent|redirect) placed alongside allow/deny in the same scope. They emit a response in the rewrite phase, before access control runs, making allow/deny misleading."
+description: "Detects return (and redirecting rewrite directives) placed alongside allow/deny in the same scope. They emit a response in the rewrite phase, before access control runs, making allow/deny misleading."
 ---
 
-# [return_bypasses_allow_deny] `return` / `rewrite ... permanent|redirect` bypass `allow`/`deny`
+# [return_bypasses_allow_deny] `return` / redirecting `rewrite` bypass `allow`/`deny`
 
 ## What this check looks for
 
-This plugin warns when `return` — or a `rewrite ... permanent` / `rewrite ... redirect` — appears in the same context as `allow`/`deny`.
+This plugin warns when `return` — or a `rewrite` that emits a redirect — appears in the same context as `allow`/`deny`. A `rewrite` emits a redirect when it carries a `permanent` (301) or `redirect` (302) flag, and also — regardless of flag — when its replacement is an absolute URL starting with `http://`, `https://`, or `$scheme`.
 
 ## Why this is a problem
 
-`return` — and a `rewrite` with a `permanent` (301) or `redirect` (302) flag — run in the rewrite phase and emit a response immediately. Access controls (`allow`/`deny`) are evaluated later, in the access phase. That means such a directive placed next to access rules can effectively ignore them, even if the config looks like it should be restricted. (A `rewrite ... last` or `rewrite ... break` keeps processing into the access phase, so it is *not* flagged.)
+`return` — and a redirecting `rewrite` — run in the rewrite phase and emit a response immediately. Access controls (`allow`/`deny`) are evaluated later, in the access phase. That means such a directive placed next to access rules can effectively ignore them, even if the config looks like it should be restricted. (A `rewrite ... last` or `rewrite ... break` whose replacement is a plain URI keeps processing toward the access phase, so it is *not* flagged. With an absolute-URL replacement, however, NGINX redirects immediately even under `last` or `break`.)
 
 In other words: the block reads like "allow X, deny everyone else", but the request never actually reaches the access phase: it simply returns unconditionally.
 
@@ -27,7 +27,7 @@ location /admin/ {
 }
 ```
 
-The response is served to everyone, including clients you intended to deny. The same happens if you replace the `return` with `rewrite ^ https://example.test/ permanent;` (or `redirect`) — the redirect is issued before the access phase.
+The response is served to everyone, including clients you intended to deny. The same happens if you replace the `return` with `rewrite ^ https://example.test/ permanent;`, or even a flagless `rewrite ^ https://example.test$request_uri;` — the redirect is issued before the access phase.
 
 ## Better configuration
 
