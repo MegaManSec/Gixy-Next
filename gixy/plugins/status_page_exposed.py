@@ -1,4 +1,5 @@
 import gixy
+from gixy.core.utils import resolve_inherited_single
 from gixy.plugins.plugin import Plugin
 
 
@@ -27,32 +28,11 @@ class status_page_exposed(Plugin):
                 )
         return False
 
-    @staticmethod
-    def _resolve_inherited(scope, name):
-        """Return the effective value of an inheritable single-value directive.
-
-        Walks up from `scope` to the root. The first scope that declares the
-        directive wins (closest scope), matching nginx inheritance. If a scope
-        declares the directive more than once, the last occurrence is used.
-        Returns None when the directive is unset anywhere up the chain.
-        """
-        current = scope
-        while current:
-            matches = [
-                c
-                for c in current.children
-                if (c.name or "").lower() == name and c.args
-            ]
-            if matches:
-                return matches[-1].args[0].lower()
-            current = current.parent
-        return None
-
     def _has_inherited_auth(self, directive):
         """True if auth_request or auth_basic is enabled at or above this scope."""
         for name in ("auth_request", "auth_basic"):
-            value = self._resolve_inherited(directive.parent, name)
-            if value is not None and value != "off":
+            match = resolve_inherited_single(directive.parent, name)
+            if match is not None and match.args[0].lower() != "off":
                 return True
         return False
 
