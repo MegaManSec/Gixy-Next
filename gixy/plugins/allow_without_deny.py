@@ -1,4 +1,5 @@
 import gixy
+from gixy.core.utils import resolve_inherited_single
 from gixy.plugins.plugin import Plugin
 
 
@@ -14,9 +15,29 @@ class allow_without_deny(Plugin):
     help_url = "https://gixy.io/plugins/allow_without_deny/"
     directives = ["allow"]
 
+    AUTH_DIRECTIVES = ("auth_basic", "auth_request", "auth_jwt")
+
     def __init__(self, config):
         super(allow_without_deny, self).__init__(config)
         self._reported_parents = set()
+
+    def _is_satisfy_any_with_auth(self, scope):
+        """True for the intended 'IP allowlist OR authentication' pattern.
+
+        Under `satisfy any`, clients outside the allow list get NGX_DECLINED
+        from the access module and fall through to the auth modules, so a
+        missing `deny all` changes nothing: they still must authenticate.
+        Without an auth module the allow list is decorative and the warning
+        stands.
+        """
+        satisfy = resolve_inherited_single(scope, "satisfy")
+        if satisfy is None or satisfy.args[0].lower() != "any":
+            return False
+        for name in self.AUTH_DIRECTIVES:
+            auth = resolve_inherited_single(scope, name)
+            if auth is not None and auth.args[0].lower() != "off":
+                return True
+        return False
 
     def audit(self, directive):
         parent = directive.parent
@@ -24,6 +45,8 @@ class allow_without_deny(Plugin):
             return
         if directive.args == ["all"]:
             # for example, "allow all" in a nested location which allows access to otherwise forbidden parent location
+            return
+        if self._is_satisfy_any_with_auth(parent):
             return
 
         key = id(parent)
