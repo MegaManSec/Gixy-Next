@@ -124,9 +124,9 @@ class invalid_regex(Plugin):
     def _audit_map(self, directive):
         """Audit regex entries of map blocks.
 
-        When a map regex matches (or fails to match), it resets the request's
-        numbered captures, so `$N` in an entry's value can only refer to that
-        entry's own pattern.
+        When a map regex matches, it resets the request's numbered captures
+        (a non-matching entry leaves them untouched), so `$N` in an entry's
+        value can only refer to that entry's own pattern.
         """
         gather = getattr(directive, "gather_map_directives", None)
         if gather is None:
@@ -214,8 +214,9 @@ class invalid_regex(Plugin):
         if available_groups is None:
             return True
 
-        # For negative match operators the block only executes when the regex did NOT
-        # match, so any capture groups from this pattern are never populated here.
+        # For negative match operators the block only executes when the regex did
+        # NOT match — and a failed evaluation clears the request's numbered
+        # captures — so any capture groups from this pattern are never populated.
         if operator in ("!~", "!~*"):
             never_set = referenced_groups & available_groups
             if never_set:
@@ -225,8 +226,8 @@ class invalid_regex(Plugin):
                     reason=(
                         f"The set directive references capture group(s) {refs} inside a "
                         f"!~ block. The block only executes when the regex did not match, "
-                        f"so these captures are never set by this condition and will be "
-                        f"empty or carry a stale value from a previous match."
+                        f"and the failed evaluation clears the numbered captures, so "
+                        f"these references are always empty here."
                     ),
                 )
 
