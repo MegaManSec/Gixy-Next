@@ -34,6 +34,16 @@ location ~ \.php {
 }
 ```
 
+In alternations, every branch needs its own anchor — `^/foo|/bar` anchors
+only the first branch, so the second still matches anywhere:
+
+```nginx
+# Matches /bar, /x/bar, /foo/bar/baz, ...
+location ~ ^/foo|/bar {
+    # ...
+}
+```
+
 ## Better configuration
 
 Anchor patterns to reflect what you really mean:
@@ -44,6 +54,10 @@ location ~ ^/v1/ {
 }
 
 location ~ \.php$ {
+    # ...
+}
+
+location ~ ^/foo$|^/bar$ {
     # ...
 }
 ```

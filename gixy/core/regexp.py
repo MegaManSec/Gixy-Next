@@ -125,6 +125,55 @@ def _merge_variants(variants):
     return "".join(result)
 
 
+_ANCHORS_BEGIN = frozenset((sre_parse.AT_BEGINNING, sre_parse.AT_BEGINNING_STRING))
+_ANCHORS_END = frozenset((sre_parse.AT_END, sre_parse.AT_END_STRING))
+
+# An unescaped `\z` (PCRE's absolute-end anchor, unknown to the vendored
+# parser): an odd run of backslashes ending in `z`.
+_PCRE_Z_ANCHOR_RE = re.compile(r"(?<!\\)((?:\\\\)*)\\z")
+
+
+def _seq_anchored(seq, anchors, last):
+    """True if the token sequence is pinned by one of `anchors` at its
+    first (last=False) or last (last=True) meaningful token."""
+    if not seq:
+        return False
+    op, av = seq[-1] if last else seq[0]
+    if op == sre_parse.AT:
+        return av in anchors
+    if op == sre_parse.SUBPATTERN:
+        return _seq_anchored(list(av[-1]), anchors, last)
+    if op == sre_parse.ASSERT:
+        # A lookaround can carry the anchor itself, e.g. (?=^/foo)bar ...
+        if _seq_anchored(list(av[-1]), anchors, last):
+            return True
+        # ... or, being zero-width, merely stand between anchor and edge.
+        return _seq_anchored(seq[:-1] if last else seq[1:], anchors, last)
+    if op == sre_parse.ASSERT_NOT:
+        return _seq_anchored(seq[:-1] if last else seq[1:], anchors, last)
+    if op == sre_parse.BRANCH:
+        return all(_seq_anchored(list(alt), anchors, last) for alt in av[1])
+    if op in (sre_parse.MAX_REPEAT, sre_parse.MIN_REPEAT):
+        min_count, _, items = av
+        return min_count >= 1 and _seq_anchored(list(items), anchors, last)
+    return False
+
+
+def _is_anchored(seq):
+    """True if every alternative is anchored at the start or at the end."""
+    if len(seq) == 1:
+        op, av = seq[0]
+        if op == sre_parse.BRANCH:
+            return all(_is_anchored(list(alt)) for alt in av[1])
+        if op == sre_parse.SUBPATTERN:
+            # A group wrapping the whole pattern: each alternative inside
+            # still picks its own side.
+            return _is_anchored(list(av[-1]))
+    return _seq_anchored(seq, _ANCHORS_BEGIN, last=False) or _seq_anchored(
+        seq, _ANCHORS_END, last=True
+    )
+
+
 class Token(object):
     type = None
 
@@ -1085,12 +1134,22 @@ class Regexp(object):
     def __str__(self):
         return str(self.root)
 
-    def needs_tail_anchor(self):
-        """Check if the regex needs a tail anchor to be effective."""
+    def needs_anchor(self):
+        """True when some alternative can match anywhere in the input.
 
-        # If the regex is anchored at the end, no issue.
-        if self.source.endswith("$"):
+        A regex is considered anchored when every top-level alternative is
+        pinned to the start (``^``/``\\A``) or the end (``$``/``\\z``) of the
+        input; anything else lets the engine retry at every position and match
+        URLs it was never meant to match.
+        """
+        # PCRE's `\z` end anchor is read as a literal `z` by the vendored
+        # parser; rewrite it to the equivalent `\Z` so the walk can see it.
+        normalized = _PCRE_Z_ANCHOR_RE.sub(r"\1\\Z", self.source)
+        try:
+            if normalized != self.source:
+                parsed = Regexp(normalized, case_sensitive=self.case_sensitive).parsed
+            else:
+                parsed = self.parsed
+        except Exception:
             return False
-
-        extension_pattern = re.compile(r"\\\.[A-Za-z0-9]+$")
-        return bool(extension_pattern.search(self.source))
+        return not _is_anchored(list(parsed))
