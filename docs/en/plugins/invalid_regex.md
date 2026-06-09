@@ -13,7 +13,17 @@ Common places this shows up:
 
 - `rewrite` replacement strings
 - `set` inside an `if ($var ~ regex)` block
+- regex `map` entries whose value references captures the key pattern does not define
+- `return`, `proxy_pass`, `add_header`/`more_set_headers`, `try_files` and `set` values referencing `$N` when no regex anywhere in the enclosing server (location, if, rewrite, server_name) or any map key defines that group
 - patterns that use non-capturing groups like `(?:...)` or inline modifiers like `(?i)` and then expect numbered captures
+
+Note that NGINX reads exactly one digit after `$`: `$12` means capture `$1`
+followed by a literal `2`, so only `$1` through `$9` exist.
+
+Because `$N` always refers to the most recent regex evaluation at runtime,
+the whole-scope check is deliberately conservative: it only reports a
+reference when **no** regex that could run for the request defines that
+group, which makes the reference provably empty.
 
 ## Why this is a problem
 
@@ -36,6 +46,29 @@ rewrite "^/path" /$1 redirect;
 ```
 
 The pattern has zero capture groups, so `$1` is always empty.
+
+### Case 3: map value without a capture
+
+```nginx
+map $uri $dest {
+    ~^/old/ $1;
+}
+```
+
+When a map regex is evaluated it resets the request's numbered captures, so
+`$1` in the value can only come from the entry's own pattern — which defines
+no groups here. The value is always empty.
+
+### Case 4: no capture provider anywhere in scope
+
+```nginx
+location ~ ^/static/ {
+    return 301 https://example.com/$1;
+}
+```
+
+No regex in the enclosing server defines a capture group, so `$1` is
+guaranteed empty.
 
 ## Better configuration
 
