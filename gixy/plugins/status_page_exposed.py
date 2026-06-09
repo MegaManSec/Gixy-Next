@@ -64,6 +64,37 @@ class status_page_exposed(Plugin):
                 return bool(getattr(parent, "is_internal", False))
         return False
 
+    @staticmethod
+    def _effective_access(directive):
+        """Resolve effective (has_allow, has_deny_all) for this scope.
+
+        allow/deny are inherited from the nearest ancestor scope that declares
+        any of them, all-or-nothing (ngx_http_access_module): once a scope sets
+        its own allow/deny, the parent's are not inherited. So we evaluate the
+        closest scope that declares either and stop there.
+        """
+        scope = directive.parent
+        while scope:
+            allow_deny = [
+                c for c in scope.children if (c.name or "").lower() in ("allow", "deny")
+            ]
+            if allow_deny:
+                has_allow = any(
+                    (c.name or "").lower() == "allow"
+                    and c.args
+                    and c.args[0].lower() != "all"  # "allow all" is not a whitelist
+                    for c in allow_deny
+                )
+                has_deny_all = any(
+                    (c.name or "").lower() == "deny"
+                    and c.args
+                    and c.args[0].lower() == "all"
+                    for c in allow_deny
+                )
+                return has_allow, has_deny_all
+            scope = scope.parent
+        return False, False
+
     def audit(self, directive):
         if self._server_uses_only_unix_sockets(directive):
             return
@@ -74,24 +105,10 @@ class status_page_exposed(Plugin):
         if self._has_inherited_auth(directive):
             return
 
-        parent = directive.parent
-        if not parent:
+        if not directive.parent:
             return
 
-        has_allow = False
-        has_deny_all = False
-
-        for child in parent.children:
-            name = (child.name or "").lower()
-            args = [a.lower() for a in (child.args or [])]
-
-            if name == "allow":
-                # "allow all" is NOT a whitelist, so don't count it
-                if args and args[0] != "all":
-                    has_allow = True
-            elif name == "deny":
-                if args and args[0] == "all":
-                    has_deny_all = True
+        has_allow, has_deny_all = self._effective_access(directive)
 
         if not has_allow or not has_deny_all:
             reasons = []
