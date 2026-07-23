@@ -114,7 +114,7 @@ class BaseFormatter(object):
             printable = type(leap) not in self.skip_parents
             # Special hack for includes
             # TODO(buglloc): fix me
-            have_parentheses = type(leap) != block.IncludeBlock
+            have_parentheses = leap.__class__ is not block.IncludeBlock
 
             if printable:
                 if leap.is_block and result:

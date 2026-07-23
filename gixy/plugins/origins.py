@@ -121,7 +121,9 @@ class origins(Plugin):
                 return
 
             return parsed_url
-        except:
+        except (TypeError, ValueError, IndexError):
+            # IndexError: url[0] above on an empty candidate (e.g. generated
+            # from a fully-optional pattern like '^(http://mysite.com)?$').
             self.invalid_set.add(url)
 
     def _analyze_and_report(self, pattern, case_sensitive, name, directive):
@@ -283,6 +285,7 @@ class origins(Plugin):
                     if not parsed_url.scheme or not parsed_url.hostname:
                         self.invalid_set.add(url)
                         self.insecure_set.remove(url)
+                        continue
                     if name == "origin":
                         if (
                             len(
@@ -295,7 +298,7 @@ class origins(Plugin):
                         ):
                             self.invalid_set.add(url)
                             self.insecure_set.remove(url)
-                except:
+                except (TypeError, ValueError):
                     continue
             if self.insecure_set:
                 invalids = ", ".join(self.insecure_set).replace("`", "a")
