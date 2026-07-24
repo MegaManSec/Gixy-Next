@@ -1,6 +1,5 @@
-site_name: "Gixy-Next: NGINX Configuration Security Scanner"
-site_long_name: "Gixy-Next: NGINX Security Scanner & Configuration Hardening"
-site_description: "Gixy-Next (Gixy) is an open source NGINX security, hardening, and configuration compliance scanner. Run automated NGINX configuration security audits and compliance checks, find performance misconfigurations in nginx.conf, and harden your NGINX servers."
+site_name: "Gixy-Next: NGINX Security Scanner & Configuration Hardening"
+site_description: "Gixy-Next is an open source static analyzer for NGINX configurations. It detects security vulnerabilities, unsafe directives, compliance issues, and performance misconfigurations in nginx.conf before deployment."
 site_url: https://gixy.io/
 repo_url: https://github.com/MegaManSec/Gixy-Next
 repo_name: MegaManSec/Gixy-Next
@@ -32,6 +31,8 @@ theme:
         name: Switch to system preference
   features:
     - content.code.copy
+hooks:
+  - docs/hooks/inject_version.py
 plugins:
   - privacy
   - optimize
@@ -47,7 +48,26 @@ plugins:
       reconfigure_material: true
       fallback_to_default: true
   - llmstxt:
-      markdown_description: The Gixy-Next security scanner and configuration checker statically analyzes NGINX configurations to find security issues, performance issues, and hardening opportunities before they reach production.
+      markdown_description: |-
+        The Gixy-Next security scanner and configuration checker statically analyzes NGINX configurations to find security issues, performance issues, and hardening opportunities before they reach production.
+
+        Official project resources:
+
+        - Source code: https://github.com/MegaManSec/Gixy-Next
+        - PyPI package: https://pypi.org/project/Gixy-Next/
+        - Releases and changelog: https://github.com/MegaManSec/Gixy-Next/releases
+        - Issue tracker: https://github.com/MegaManSec/Gixy-Next/issues
+        - License: MPL-2.0 (https://www.mozilla.org/en-US/MPL/2.0/)
+
+        Quickstart:
+
+        ```
+        pip3 install gixy-next
+        gixy /etc/nginx/nginx.conf
+        nginx -T | gixy -
+        ```
+
+        Output semantics: findings are reported by plugin with a severity of INFORMATION, LOW, MEDIUM, or HIGH. The CLI exits with code 1 if any issues are found (or on fatal errors) and 0 otherwise. `include` directives are resolved automatically, and `nginx -T` dump files are auto-detected.
       full_output: llms-full.txt
       sections:
         Overview and usage:
