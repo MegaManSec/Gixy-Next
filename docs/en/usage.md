@@ -29,6 +29,17 @@ gixy /opt/nginx/nginx.conf
 cat /opt/nginx/nginx.conf | gixy -
 ```
 
+## Scan a directory of configs
+
+You can also point `gixy` at a directory instead of a single file. It will recursively walk it looking for `nginx.conf` and any other `*.conf` files, skipping directories like `.git`, `.hg`, `.svn`, `node_modules`, `__pycache__`, and other dotdirs, and then scan every config file it finds:
+
+```shell-session
+# Recursively scan every *.conf file under /etc/nginx
+gixy /etc/nginx
+```
+
+Each discovered file is analyzed independently and reported under its own path, so this works well for scanning `sites-available`/`conf.d`-style layouts in one go instead of listing every file by hand.
+
 ## Scan a rendered config dump
 
 One of the easiest ways to get consistent results from `gixy` is to scan the fully rendered live configuration that NGINX sees (see [nginx -T Live Configuration Dump](https://gixy.io/nginx-config-dump)). NGINX can print that with `nginx -T`.
