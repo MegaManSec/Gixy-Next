@@ -9,6 +9,11 @@ __pycache__/
 /bin/
 /lib/
 pyvenv.cfg
+.venv/
+venv/
 
 # Packaging metadata
 *.egg-info/
+
+# Local scan output artifacts
+*.sarif

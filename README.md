@@ -28,6 +28,15 @@ gixy
 gixy /opt/nginx.conf
 ```
 
+### Scan a directory
+
+Instead of a single file, you can point `gixy` at a directory. It will recursively scan it for `nginx.conf` and any other `*.conf` files (skipping VCS/dependency directories like `.git` and `node_modules`) and analyze each one found:
+
+```shell-session
+# Recursively find and scan every *.conf file under /etc/nginx
+gixy /etc/nginx
+```
+
 You can also export your NGINX configuration to a single dump file (see [nginx -T Live Configuration Dump](https://gixy.io/nginx-config-dump)):
 
 ```shell-session
@@ -182,6 +191,13 @@ You can also use `-f json` to get a reproducible, machine-readable JSON output:
 ```shell-session
 $ gixy -f json
 [{"config":"\nserver {\n\n\tlocation ~ /v1/((?<action>[^.]*)\\.json)?$ {\n\t\tadd_header X-Action $action;\n\t}\n}","description":"Using variables that can contain \"\\n\" or \"\\r\" may lead to http injection.","file":"/etc/nginx/nginx.conf","line":4,"path":"/etc/nginx/nginx.conf","plugin":"http_splitting","reason":"At least variable \"$action\" can contain \"\\n\"","reference":"https://gixy.io/plugins/http_splitting/","severity":"HIGH","summary":"Possible HTTP-Splitting vulnerability."}]
+```
+
+You can also use `-f sarif` to get a [SARIF 2.1.0](https://sarifweb.azurewebsites.net/) log, e.g. for uploading to GitHub code scanning:
+
+```shell-session
+# Write a SARIF report to a file, e.g. for `github/codeql-action/upload-sarif`
+gixy -f sarif -o gixy-results.sarif
 ```
 
 More flags for usage can be found by passing `--help` to `gixy`. You can also find more information in the [Usage Guide](https://gixy.io/usage/).

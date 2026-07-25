@@ -29,6 +29,17 @@ gixy /opt/nginx/nginx.conf
 cat /opt/nginx/nginx.conf | gixy -
 ```
 
+## Scan a directory of configs
+
+You can also point `gixy` at a directory instead of a single file. It will recursively walk it looking for `nginx.conf` and any other `*.conf` files, skipping directories like `.git`, `.hg`, `.svn`, `node_modules`, `__pycache__`, and other dotdirs, and then scan every config file it finds:
+
+```shell-session
+# Recursively scan every *.conf file under /etc/nginx
+gixy /etc/nginx
+```
+
+Each discovered file is analyzed independently and reported under its own path, so this works well for scanning `sites-available`/`conf.d`-style layouts in one go instead of listing every file by hand.
+
 ## Scan a rendered config dump
 
 One of the easiest ways to get consistent results from `gixy` is to scan the fully rendered live configuration that NGINX sees (see [nginx -T Live Configuration Dump](https://gixy.io/nginx-config-dump)). NGINX can print that with `nginx -T`.
@@ -129,6 +140,29 @@ gixy -f text
 
 # JSON: Reproducible JSON, best for CI and post-processing.
 gixy -f json
+
+# SARIF 2.1.0: for tooling that consumes SARIF, e.g. GitHub code scanning.
+gixy -f sarif
+```
+
+### SARIF output (GitHub code scanning)
+
+The `sarif` format emits a [SARIF 2.1.0](https://sarifweb.azurewebsites.net/) log, which is a standard format understood by many code-scanning tools, including GitHub's. Write it to a file and upload it with [`github/codeql-action/upload-sarif`](https://github.com/github/codeql-action/tree/main/upload-sarif) to see findings as annotations on your PRs and in the Security tab:
+
+```shell-session
+# Write a SARIF report to a file
+gixy -f sarif -o gixy-results.sarif
+```
+
+```yaml
+# Example GitHub Actions step
+- name: Scan NGINX config with Gixy-Next
+  run: gixy /etc/nginx -f sarif -o gixy-results.sarif
+
+- name: Upload SARIF results
+  uses: github/codeql-action/upload-sarif@v3
+  with:
+    sarif_file: gixy-results.sarif
 ```
 
 ## Write reports to a file
