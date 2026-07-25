@@ -129,6 +129,29 @@ gixy -f text
 
 # JSON: Reproducible JSON, best for CI and post-processing.
 gixy -f json
+
+# SARIF 2.1.0: for tooling that consumes SARIF, e.g. GitHub code scanning.
+gixy -f sarif
+```
+
+### SARIF output (GitHub code scanning)
+
+The `sarif` format emits a [SARIF 2.1.0](https://sarifweb.azurewebsites.net/) log, which is a standard format understood by many code-scanning tools, including GitHub's. Write it to a file and upload it with [`github/codeql-action/upload-sarif`](https://github.com/github/codeql-action/tree/main/upload-sarif) to see findings as annotations on your PRs and in the Security tab:
+
+```shell-session
+# Write a SARIF report to a file
+gixy -f sarif -o gixy-results.sarif
+```
+
+```yaml
+# Example GitHub Actions step
+- name: Scan NGINX config with Gixy-Next
+  run: gixy /etc/nginx/nginx.conf -f sarif -o gixy-results.sarif
+
+- name: Upload SARIF results
+  uses: github/codeql-action/upload-sarif@v3
+  with:
+    sarif_file: gixy-results.sarif
 ```
 
 ## Write reports to a file
