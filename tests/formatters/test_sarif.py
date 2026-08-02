@@ -4,7 +4,7 @@ import json
 import gixy
 from gixy.core.context import purge_context
 from gixy.core.manager import Manager
-from gixy.formatters.sarif import SarifFormatter, _to_uri
+from gixy.formatters.sarif import SarifFormatter, _artifact_location
 
 SPLITTING_CONFIG = r"""
 http {
@@ -44,6 +44,10 @@ def test_sarif_log_structure():
     assert rule_ids == sorted(rule_ids)
     assert "http_splitting" in rule_ids
 
+    srcroot = log["runs"][0]["originalUriBaseIds"]["SRCROOT"]["uri"]
+    assert srcroot.startswith("file://")
+    assert srcroot.endswith("/")
+
 
 def test_sarif_result_fields():
     log = _format("/etc/nginx/nginx.conf", SPLITTING_CONFIG)
@@ -59,7 +63,8 @@ def test_sarif_result_fields():
     assert "add_header X-Action $action" in result["properties"]["config"]
 
     location = result["locations"][0]["physicalLocation"]
-    assert location["artifactLocation"]["uri"] == "/etc/nginx/nginx.conf"
+    # /etc/nginx is outside the working directory, so the URI stays absolute
+    assert location["artifactLocation"]["uri"] == "file:///etc/nginx/nginx.conf"
     assert location["region"]["startLine"] == 5
 
     rule = next(
@@ -130,7 +135,19 @@ def test_no_issues_produces_empty_run():
     assert log["runs"][0]["tool"]["driver"]["rules"] == []
 
 
-def test_to_uri_relativizes_paths_under_cwd(tmp_path, monkeypatch):
-    monkeypatch.chdir(str(tmp_path))
-    assert _to_uri(str(tmp_path / "conf.d" / "site.conf")) == "conf.d/site.conf"
-    assert _to_uri("/somewhere/else/nginx.conf") == "/somewhere/else/nginx.conf"
+def test_artifact_location_anchors_paths_under_base_to_srcroot(tmp_path):
+    base = str(tmp_path)
+
+    assert _artifact_location(str(tmp_path / "conf.d" / "site.conf"), base) == {
+        "uri": "conf.d/site.conf",
+        "uriBaseId": "SRCROOT",
+    }
+    # A file whose name merely starts with ".." is still under the base
+    assert _artifact_location(str(tmp_path / "..weird.conf"), base) == {
+        "uri": "..weird.conf",
+        "uriBaseId": "SRCROOT",
+    }
+    # Paths outside the base get an absolute file:// URI
+    assert _artifact_location("/somewhere/else/nginx.conf", base) == {
+        "uri": "file:///somewhere/else/nginx.conf"
+    }

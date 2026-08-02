@@ -2,6 +2,7 @@ from __future__ import absolute_import
 
 import json
 import os
+from pathlib import Path
 
 import gixy
 from gixy.formatters.base import BaseFormatter
@@ -59,16 +60,23 @@ def _upsert_rule(rules, rule_severities, issue):
         rule_severities[rule_id] = severity
 
 
-def _to_uri(path):
-    """Turn a filesystem path into a SARIF URI, repo-relative when possible."""
+def _artifact_location(path, base):
+    """Build a SARIF artifactLocation for a filesystem path.
+
+    Paths under the base directory become URIs relative to the SRCROOT
+    base declared in the run's originalUriBaseIds; anything else gets an
+    absolute file:// URI, so consumers never resolve a path against the
+    wrong root.
+    """
+    abspath = os.path.abspath(path)
     try:
-        rel = os.path.relpath(path)
+        rel = os.path.relpath(abspath, base)
     except ValueError:
-        # Windows: path on a different drive than the working directory
-        rel = path
-    if not rel.startswith(os.pardir):
-        path = rel
-    return path.replace(os.sep, "/")
+        # Windows: path on a different drive than the base directory
+        rel = None
+    if rel is not None and rel != os.pardir and not rel.startswith(os.pardir + os.sep):
+        return {"uri": rel.replace(os.sep, "/"), "uriBaseId": "SRCROOT"}
+    return {"uri": Path(abspath).as_uri()}
 
 
 class SarifFormatter(BaseFormatter):
@@ -78,6 +86,9 @@ class SarifFormatter(BaseFormatter):
         rules = {}
         rule_severities = {}
         results = []
+        # The scan-time working directory anchors relative URIs; in CI this
+        # is the checked-out workspace, which is what GitHub resolves against.
+        base = os.getcwd()
 
         for path, issues in reports.items():
             for issue in issues:
@@ -107,7 +118,7 @@ class SarifFormatter(BaseFormatter):
 
                 if uri:
                     physical_location = {
-                        "artifactLocation": {"uri": _to_uri(uri)},
+                        "artifactLocation": _artifact_location(uri, base),
                     }
                     if location and location.get("line"):
                         physical_location["region"] = {"startLine": location["line"]}
@@ -127,6 +138,10 @@ class SarifFormatter(BaseFormatter):
                             "version": gixy.version,
                             "rules": sorted(rules.values(), key=lambda r: r["id"]),
                         }
+                    },
+                    # Base URIs must end with a slash per the SARIF spec
+                    "originalUriBaseIds": {
+                        "SRCROOT": {"uri": Path(base).as_uri() + "/"}
                     },
                     "results": results,
                 }
