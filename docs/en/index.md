@@ -185,6 +185,13 @@ $ gixy -f json
 [{"config":"\nserver {\n\n\tlocation ~ /v1/((?<action>[^.]*)\\.json)?$ {\n\t\tadd_header X-Action $action;\n\t}\n}","description":"Using variables that can contain \"\\n\" or \"\\r\" may lead to http injection.","file":"/etc/nginx/nginx.conf","line":4,"path":"/etc/nginx/nginx.conf","plugin":"http_splitting","reason":"At least variable \"$action\" can contain \"\\n\"","reference":"https://gixy.io/plugins/http_splitting/","severity":"HIGH","summary":"Possible HTTP-Splitting vulnerability."}]
 ```
 
+You can also use `-f sarif` to get a [SARIF 2.1.0](https://sarifweb.azurewebsites.net/) log, e.g. for uploading to GitHub code scanning:
+
+```shell-session
+# Write a SARIF report to a file, e.g. for `github/codeql-action/upload-sarif`
+gixy -f sarif -o gixy-results.sarif
+```
+
 More flags for usage can be found by passing `--help` to `gixy`. You can also find more information in the [Usage Guide](https://gixy.io/usage/).
 
 ## Configuration and plugin options

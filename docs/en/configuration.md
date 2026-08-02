@@ -80,6 +80,7 @@ Choose the output format:
 format = console   # default, colored output
 # format = text    # plain text (no ANSI)
 # format = json    # machine-readable JSON
+# format = sarif   # SARIF 2.1.0, e.g. for GitHub code scanning
 ```
 
 ### output

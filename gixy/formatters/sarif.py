@@ -15,15 +15,14 @@ _SEVERITY_TO_LEVEL = {
 
 
 def _to_uri(path):
-    """Turn a filesystem path into a SARIF-friendly (preferably repo-relative) URI."""
+    """Turn a filesystem path into a SARIF URI, repo-relative when possible."""
     try:
         rel = os.path.relpath(path)
     except ValueError:
+        # Windows: path on a different drive than the working directory
         rel = path
-
     if not rel.startswith(os.pardir):
         path = rel
-
     return path.replace(os.sep, "/")
 
 
@@ -40,60 +39,56 @@ class SarifFormatter(BaseFormatter):
                 level = _SEVERITY_TO_LEVEL.get(issue["severity"], "warning")
 
                 if rule_id not in rules:
-                    rules[rule_id] = {
+                    rule = {
                         "id": rule_id,
                         "shortDescription": {"text": issue["summary"] or rule_id},
                         "fullDescription": {
-                            "text": issue["description"]
-                            or issue["summary"]
-                            or rule_id
+                            "text": issue["description"] or issue["summary"] or rule_id
                         },
-                        "helpUri": issue["help_url"] or "",
                         "defaultConfiguration": {"level": level},
                     }
-
-                location = issue.get("location")
-                if location and location.get("file"):
-                    uri = location["file"]
-                elif path and path not in ("<stdin>", "-"):
-                    uri = path
-                else:
-                    uri = None
+                    if issue["help_url"]:
+                        rule["helpUri"] = issue["help_url"]
+                    rules[rule_id] = rule
 
                 result = {
                     "ruleId": rule_id,
                     "level": level,
-                    "message": {"text": issue["summary"] or rule_id},
+                    "message": {
+                        "text": issue["reason"] or issue["summary"] or rule_id
+                    },
                 }
 
-                properties = {}
-                if issue.get("reason"):
-                    properties["reason"] = issue["reason"]
-                if issue.get("config"):
-                    properties["config"] = issue["config"].strip("\n")
-                if properties:
-                    result["properties"] = properties
+                if issue["config"]:
+                    result["properties"] = {"config": issue["config"].strip("\n")}
+
+                location = issue.get("location")
+                if location and location.get("file"):
+                    uri = location["file"]
+                elif path and path != "-":
+                    uri = path
+                else:
+                    uri = None
 
                 if uri:
                     physical_location = {
                         "artifactLocation": {"uri": _to_uri(uri)},
                     }
-                    line = location.get("line") if location else None
-                    if line:
-                        physical_location["region"] = {"startLine": line}
+                    if location and location.get("line"):
+                        physical_location["region"] = {"startLine": location["line"]}
                     result["locations"] = [{"physicalLocation": physical_location}]
 
                 results.append(result)
 
         sarif_log = {
-            "$schema": "https://raw.githubusercontent.com/oasis-tcs/sarif-spec/master/Schemata/sarif-schema-2.1.0.json",
+            "$schema": "https://docs.oasis-open.org/sarif/sarif/v2.1.0/errata01/os/schemas/sarif-schema-2.1.0.json",
             "version": "2.1.0",
             "runs": [
                 {
                     "tool": {
                         "driver": {
                             "name": "Gixy-Next",
-                            "informationUri": "https://github.com/dvershinin/gixy",
+                            "informationUri": "https://gixy.io/",
                             "version": gixy.version,
                             "rules": sorted(rules.values(), key=lambda r: r["id"]),
                         }
@@ -103,4 +98,4 @@ class SarifFormatter(BaseFormatter):
             ],
         }
 
-        return json.dumps(sarif_log, indent=2, sort_keys=False)
+        return json.dumps(sarif_log, indent=2)
