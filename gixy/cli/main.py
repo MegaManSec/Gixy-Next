@@ -211,12 +211,12 @@ def main():
     nginx_files = []
 
     for input_path in args.nginx_files:
-        if input_path == "-":
+        if input_path == gixy.STDIN_ARG:
             if len(args.nginx_files) > 1:
                 sys.stderr.write("Expected either file paths or stdin, got both.\n")
                 sys.exit(1)
 
-            nginx_files.append("-")
+            nginx_files.append(gixy.STDIN_ARG)
         else:
             path = os.path.abspath(os.path.expanduser(input_path))
 
@@ -299,9 +299,9 @@ def main():
     for path in nginx_files:
         with Gixy(config=config) as yoda:
             try:
-                if path == "-":
+                if path == gixy.STDIN_ARG:
                     with os.fdopen(sys.stdin.fileno(), "rb") as fdata:
-                        yoda.audit("<stdin>", fdata, is_stdin=True)
+                        yoda.audit(gixy.STDIN_NAME, fdata, is_stdin=True)
                 else:
                     with open(path, mode="rb") as fdata:
                         yoda.audit(path, fdata, is_stdin=False)
