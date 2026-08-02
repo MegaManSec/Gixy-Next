@@ -70,28 +70,41 @@ def _select_entry_points(discovered, allow_includes):
 
     Parses each discovered file once to build the include graph: a file that
     another discovered config includes is analyzed in its includer's context
-    instead of standalone, so findings aren't reported twice.
+    instead of standalone, so findings aren't reported twice. A file that
+    doesn't parse as nginx configuration (a foreign *.conf swept up by the
+    walk) is dropped with a warning instead of failing the run.
     """
     if not allow_includes:
         return set(discovered)
 
     included = set()
+    broken = set()
     for path in sorted(discovered):
         try:
             included.update(_included_files(path))
         except InvalidConfiguration:
-            pass
+            broken.add(path)
+            LOG.warning('Skipping "%s": not a valid nginx configuration', path)
 
+    candidates = discovered - broken
     entry_points = {
-        path for path in discovered if os.path.realpath(path) not in included
+        path for path in candidates if os.path.realpath(path) not in included
     }
-    for path in sorted(discovered - entry_points):
+    for path in sorted(candidates - entry_points):
         LOG.debug(
             'Skipping "%s": another scanned configuration includes it', path
         )
     # A pathological include cycle can claim every file; better to audit them
     # all than none.
-    return entry_points or set(discovered)
+    return entry_points or candidates
+
+
+def _plan_scanned_audits(nginx_files, allow_includes):
+    """Entry points for the directory-scan subset of the expanded paths."""
+    discovered = {path for path, from_scan in nginx_files.items() if from_scan}
+    if not discovered:
+        return set()
+    return _select_entry_points(discovered, allow_includes)
 
 
 def _expand_input_paths(input_paths):
@@ -101,7 +114,9 @@ def _expand_input_paths(input_paths):
     scan. Scan discoveries may later be skipped when another scanned config
     includes them; explicitly listed files and stdin are always audited, and
     an explicit file wins over a scan discovery of the same path.
-    Overlapping directory arguments are deduplicated by real path.
+    Overlapping directory arguments are deduplicated by real path. A
+    directory without any *.conf files only warns; the run aborts only when
+    no argument yields anything to audit.
     """
     nginx_files = {}
     seen_files = set()
@@ -133,7 +148,7 @@ def _expand_input_paths(input_paths):
                         path=path
                     )
                 )
-                sys.exit(1)
+                continue
             for file_path in found:
                 real_path = os.path.realpath(file_path)
                 if real_path in seen_files:
@@ -143,6 +158,10 @@ def _expand_input_paths(input_paths):
         else:
             seen_files.add(os.path.realpath(path))
             nginx_files[path] = False
+
+    if not nginx_files:
+        sys.stderr.write("Nothing to audit: the given paths contain no configuration files.\n")
+        sys.exit(1)
 
     return nginx_files
 
@@ -404,12 +423,7 @@ def main():
             options[opt_key] = val
         config.set_for(name, options)
 
-    discovered = {path for path, from_scan in nginx_files.items() if from_scan}
-    entry_points = (
-        _select_entry_points(discovered, config.allow_includes)
-        if discovered
-        else set()
-    )
+    entry_points = _plan_scanned_audits(nginx_files, config.allow_includes)
 
     formatter = formatters()[config.output_format]()
     failed = False
@@ -425,6 +439,13 @@ def main():
                     with open(path, mode="rb") as fdata:
                         yoda.audit(path, fdata, is_stdin=False)
             except InvalidConfiguration:
+                if from_scan:
+                    # Reachable with --disable-includes, where no include
+                    # graph was built up front
+                    LOG.warning(
+                        'Skipping "%s": not a valid nginx configuration', path
+                    )
+                    continue
                 failed = True
             formatter.feed(path, yoda)
             failed = failed or sum(yoda.stats.values()) > 0

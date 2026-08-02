@@ -40,6 +40,8 @@ gixy /etc/nginx
 
 A discovered file that another discovered config `include`s is not audited on its own. A typical layout where `nginx.conf` includes `conf.d/*.conf` therefore produces a single report per finding, with each fragment analyzed in the context of the config that includes it. Files listed explicitly on the command line are always audited, even when a scanned directory covers them too.
 
+A discovered file that isn't valid NGINX configuration — say a stray logrotate or supervisord `.conf` swept up by the walk — is skipped with a warning rather than failing the scan, and a directory argument containing no `*.conf` files only produces a warning as long as another argument yields something to audit.
+
 ## Scan a rendered config dump
 
 One of the easiest ways to get consistent results from `gixy` is to scan the fully rendered live configuration that NGINX sees (see [nginx -T Live Configuration Dump](https://gixy.io/nginx-config-dump)). NGINX can print that with `nginx -T`.

@@ -205,6 +205,52 @@ def test_overlapping_directory_arguments_audit_files_once(tmp_path):
     assert len(issues) == 1
 
 
+def test_foreign_conf_files_do_not_fail_the_scan(tmp_path):
+    root = str(tmp_path)
+    _write(os.path.join(root, "nginx.conf"), "worker_processes auto;\n")
+    _write(os.path.join(root, "supervisord.conf"), "[program:x]\ncommand=/bin/true\n")
+
+    proc = _run_gixy(root)
+
+    assert proc.returncode == 0
+    assert json.loads(proc.stdout.decode("utf-8")) == []
+    assert "supervisord.conf" in proc.stderr.decode("utf-8")
+
+
+def test_foreign_conf_files_are_skipped_with_disabled_includes(tmp_path):
+    root = str(tmp_path)
+    _write(os.path.join(root, "nginx.conf"), "worker_processes auto;\n")
+    _write(os.path.join(root, "supervisord.conf"), "[program:x]\ncommand=/bin/true\n")
+
+    proc = _run_gixy(root, "--disable-includes")
+
+    assert proc.returncode == 0
+    assert json.loads(proc.stdout.decode("utf-8")) == []
+
+
+def test_empty_directory_argument_does_not_abort_the_run(tmp_path):
+    root = str(tmp_path)
+    empty = os.path.join(root, "empty")
+    os.makedirs(empty)
+    scanned = os.path.join(root, "scanned")
+    _write(os.path.join(scanned, "vuln.conf"), VULN_SERVER)
+
+    proc = _run_gixy(empty, scanned)
+
+    assert len(_splitting_issues(proc)) == 1
+    assert "empty" in proc.stderr.decode("utf-8")
+
+
+def test_only_empty_directories_exit_nonzero(tmp_path):
+    empty = os.path.join(str(tmp_path), "empty")
+    os.makedirs(empty)
+
+    proc = _run_gixy(empty)
+
+    assert proc.returncode == 1
+    assert "Nothing to audit" in proc.stderr.decode("utf-8")
+
+
 def test_select_entry_points_drops_included_configs(tmp_path):
     root = str(tmp_path)
     fragment = os.path.join(root, "aaa.conf")
