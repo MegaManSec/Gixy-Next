@@ -30,6 +30,13 @@ gixy
 gixy /opt/nginx.conf
 ```
 
+Instead of a single file, you can point `gixy` at a directory. It will recursively scan it for `*.conf` files (skipping VCS/dependency directories like `.git` and `node_modules`) and analyze each one found:
+
+```shell-session
+# Recursively find and scan every *.conf file under /etc/nginx
+gixy /etc/nginx
+```
+
 You can also export your NGINX configuration to a single dump file (see [nginx -T Live Configuration Dump](https://gixy.io/nginx-config-dump)):
 
 ```shell-session

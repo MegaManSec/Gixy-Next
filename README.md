@@ -30,7 +30,7 @@ gixy /opt/nginx.conf
 
 ### Scan a directory
 
-Instead of a single file, you can point `gixy` at a directory. It will recursively scan it for `nginx.conf` and any other `*.conf` files (skipping VCS/dependency directories like `.git` and `node_modules`) and analyze each one found:
+Instead of a single file, you can point `gixy` at a directory. It will recursively scan it for `*.conf` files (skipping VCS/dependency directories like `.git` and `node_modules`) and analyze each one found:
 
 ```shell-session
 # Recursively find and scan every *.conf file under /etc/nginx

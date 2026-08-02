@@ -4,7 +4,6 @@ import argparse
 import copy
 import logging
 import os
-import re
 import sys
 
 import gixy
@@ -19,23 +18,17 @@ LOG = logging.getLogger()
 
 # Directories that are never worth descending into when scanning a repo for configs.
 _IGNORED_DIR_NAMES = {".git", ".hg", ".svn", "node_modules", "__pycache__"}
-_CONFIG_FILENAME_RE = re.compile(r".*\.conf$", re.IGNORECASE)
-
-
-def _is_nginx_config_candidate(filename):
-    """Heuristic check for whether a file looks like an nginx config file."""
-    return filename.lower() == "nginx.conf" or bool(_CONFIG_FILENAME_RE.match(filename))
 
 
 def _collect_nginx_configs(directory):
-    """Recursively find likely nginx configuration files under a directory."""
+    """Recursively find *.conf files under a directory."""
     found = []
     for root, dirs, files in os.walk(directory):
         dirs[:] = [
             d for d in dirs if d not in _IGNORED_DIR_NAMES and not d.startswith(".")
         ]
         for filename in files:
-            if _is_nginx_config_candidate(filename):
+            if filename.lower().endswith(".conf"):
                 found.append(os.path.join(root, filename))
     return sorted(found)
 

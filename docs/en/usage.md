@@ -31,7 +31,7 @@ cat /opt/nginx/nginx.conf | gixy -
 
 ## Scan a directory of configs
 
-You can also point `gixy` at a directory instead of a single file. It will recursively walk it looking for `nginx.conf` and any other `*.conf` files, skipping directories like `.git`, `.hg`, `.svn`, `node_modules`, `__pycache__`, and other dotdirs, and then scan every config file it finds:
+You can also point `gixy` at a directory instead of a single file. It will recursively walk it looking for `*.conf` files, skipping VCS/dependency directories (`.git`, `.hg`, `.svn`, `node_modules`, `__pycache__`, and hidden directories), and scan every config file it finds:
 
 ```shell-session
 # Recursively scan every *.conf file under /etc/nginx
