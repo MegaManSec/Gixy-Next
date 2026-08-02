@@ -21,6 +21,43 @@ _SEVERITY_TO_SCORE = {
     gixy.severity.LOW: "2.0",
 }
 
+_SEVERITY_RANK = {severity: rank for rank, severity in enumerate(gixy.severity.ALL)}
+
+
+def _upsert_rule(rules, rule_severities, issue):
+    """Register the issue's rule, keeping its metadata at the highest severity.
+
+    Plugins can emit issues at different severities under one rule id, and
+    consumers like GitHub bucket every alert of a rule by its rule-level
+    "security-severity".
+    """
+    rule_id = issue["plugin"]
+    severity = issue["severity"]
+
+    if rule_id not in rules:
+        rule = {
+            "id": rule_id,
+            "shortDescription": {"text": issue["summary"] or rule_id},
+            "fullDescription": {
+                "text": issue["description"] or issue["summary"] or rule_id
+            },
+        }
+        if issue["help_url"]:
+            rule["helpUri"] = issue["help_url"]
+        rules[rule_id] = rule
+
+    if _SEVERITY_RANK.get(severity, 0) > _SEVERITY_RANK.get(
+        rule_severities.get(rule_id), -1
+    ):
+        rule = rules[rule_id]
+        rule["defaultConfiguration"] = {
+            "level": _SEVERITY_TO_LEVEL.get(severity, "warning")
+        }
+        score = _SEVERITY_TO_SCORE.get(severity)
+        if score:
+            rule["properties"] = {"security-severity": score}
+        rule_severities[rule_id] = severity
+
 
 def _to_uri(path):
     """Turn a filesystem path into a SARIF URI, repo-relative when possible."""
@@ -39,28 +76,14 @@ class SarifFormatter(BaseFormatter):
 
     def format_reports(self, reports, stats):
         rules = {}
+        rule_severities = {}
         results = []
 
         for path, issues in reports.items():
             for issue in issues:
                 rule_id = issue["plugin"]
                 level = _SEVERITY_TO_LEVEL.get(issue["severity"], "warning")
-
-                if rule_id not in rules:
-                    rule = {
-                        "id": rule_id,
-                        "shortDescription": {"text": issue["summary"] or rule_id},
-                        "fullDescription": {
-                            "text": issue["description"] or issue["summary"] or rule_id
-                        },
-                        "defaultConfiguration": {"level": level},
-                    }
-                    if issue["help_url"]:
-                        rule["helpUri"] = issue["help_url"]
-                    score = _SEVERITY_TO_SCORE.get(issue["severity"])
-                    if score:
-                        rule["properties"] = {"security-severity": score}
-                    rules[rule_id] = rule
+                _upsert_rule(rules, rule_severities, issue)
 
                 result = {
                     "ruleId": rule_id,

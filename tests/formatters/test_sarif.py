@@ -1,6 +1,7 @@
 import io
 import json
 
+import gixy
 from gixy.core.context import purge_context
 from gixy.core.manager import Manager
 from gixy.formatters.sarif import SarifFormatter, _to_uri
@@ -68,6 +69,42 @@ def test_sarif_result_fields():
     assert rule["defaultConfiguration"]["level"] == "error"
     assert rule["helpUri"] == "https://gixy.io/plugins/http_splitting/"
     assert rule["properties"]["security-severity"] == "8.0"
+
+
+def test_rule_metadata_uses_highest_issue_severity():
+    # Plugins like alias_traversal emit per-issue severities; the rule's
+    # defaultConfiguration/security-severity must reflect the highest one,
+    # not whichever issue happened to be walked first
+    def issue(severity):
+        return {
+            "plugin": "alias_traversal",
+            "summary": "Path traversal via misconfigured alias.",
+            "severity": severity,
+            "description": "",
+            "help_url": "https://gixy.io/plugins/alias_traversal/",
+            "reason": "",
+            "config": "",
+            "location": None,
+        }
+
+    formatter = SarifFormatter()
+    log = json.loads(
+        formatter.format_reports(
+            {
+                "/etc/nginx/nginx.conf": [
+                    issue(gixy.severity.MEDIUM),
+                    issue(gixy.severity.HIGH),
+                ]
+            },
+            {},
+        )
+    )
+
+    rule = log["runs"][0]["tool"]["driver"]["rules"][0]
+    assert rule["defaultConfiguration"]["level"] == "error"
+    assert rule["properties"]["security-severity"] == "8.0"
+    # Result levels still follow each issue's own severity
+    assert [r["level"] for r in log["runs"][0]["results"]] == ["warning", "error"]
 
 
 def test_stdin_results_have_no_location():
