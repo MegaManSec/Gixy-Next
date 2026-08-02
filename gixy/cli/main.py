@@ -21,15 +21,34 @@ _IGNORED_DIR_NAMES = {".git", ".hg", ".svn", "node_modules", "__pycache__"}
 
 
 def _collect_nginx_configs(directory):
-    """Recursively find *.conf files under a directory."""
+    """Recursively find *.conf files under a directory, following symlinks.
+
+    Directories and files are deduplicated by their real path, so a symlink
+    cycle cannot hang the walk and layouts like sites-enabled/x.conf ->
+    sites-available/x.conf yield the file only once.
+    """
     found = []
-    for root, dirs, files in os.walk(directory):
-        dirs[:] = [
+    seen_dirs = set()
+    seen_files = set()
+    for root, dirs, files in os.walk(directory, followlinks=True):
+        real_root = os.path.realpath(root)
+        if real_root in seen_dirs:
+            dirs[:] = []
+            continue
+        seen_dirs.add(real_root)
+        # Sorted so that dedup by real path is deterministic
+        dirs[:] = sorted(
             d for d in dirs if d not in _IGNORED_DIR_NAMES and not d.startswith(".")
-        ]
+        )
         for filename in files:
-            if filename.lower().endswith(".conf"):
-                found.append(os.path.join(root, filename))
+            if not filename.lower().endswith(".conf"):
+                continue
+            path = os.path.join(root, filename)
+            real_path = os.path.realpath(path)
+            if real_path in seen_files:
+                continue
+            seen_files.add(real_path)
+            found.append(path)
     return sorted(found)
 
 
