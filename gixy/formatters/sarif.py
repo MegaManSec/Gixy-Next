@@ -13,6 +13,14 @@ _SEVERITY_TO_LEVEL = {
     gixy.severity.INFORMATION: "note",
 }
 
+# GitHub code scanning buckets "security-severity" scores as:
+# >= 9.0 critical, 7.0-8.9 high, 4.0-6.9 medium, < 4.0 low.
+_SEVERITY_TO_SCORE = {
+    gixy.severity.HIGH: "8.0",
+    gixy.severity.MEDIUM: "5.0",
+    gixy.severity.LOW: "2.0",
+}
+
 
 def _to_uri(path):
     """Turn a filesystem path into a SARIF URI, repo-relative when possible."""
@@ -49,6 +57,9 @@ class SarifFormatter(BaseFormatter):
                     }
                     if issue["help_url"]:
                         rule["helpUri"] = issue["help_url"]
+                    score = _SEVERITY_TO_SCORE.get(issue["severity"])
+                    if score:
+                        rule["properties"] = {"security-severity": score}
                     rules[rule_id] = rule
 
                 result = {

@@ -67,6 +67,7 @@ def test_sarif_result_fields():
     )
     assert rule["defaultConfiguration"]["level"] == "error"
     assert rule["helpUri"] == "https://gixy.io/plugins/http_splitting/"
+    assert rule["properties"]["security-severity"] == "8.0"
 
 
 def test_stdin_results_have_no_location():
