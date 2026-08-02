@@ -112,8 +112,7 @@ class SarifFormatter(BaseFormatter):
                     uri = location["file"]
                 else:
                     uri = path
-                if uri in ("-", "<stdin>"):
-                    # stdin has no artifact to point at, and "<stdin>" is not a valid URI
+                if uri in (gixy.STDIN_ARG, gixy.STDIN_NAME):
                     uri = None
 
                 if uri:
