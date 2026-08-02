@@ -38,7 +38,7 @@ You can also point `gixy` at a directory instead of a single file. It will recur
 gixy /etc/nginx
 ```
 
-Configs are audited shallowest-first, and a discovered file that has already been covered by an earlier config's `include` is not audited again on its own. A typical layout where `nginx.conf` includes `conf.d/*.conf` therefore produces a single report per finding, with each fragment analyzed in the context of the config that includes it.
+A discovered file that another discovered config `include`s is not audited on its own. A typical layout where `nginx.conf` includes `conf.d/*.conf` therefore produces a single report per finding, with each fragment analyzed in the context of the config that includes it. Files listed explicitly on the command line are always audited, even when a scanned directory covers them too.
 
 ## Scan a rendered config dump
 

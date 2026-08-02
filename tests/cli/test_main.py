@@ -3,7 +3,15 @@ import os
 import subprocess
 import sys
 
-from gixy.cli.main import _collect_nginx_configs
+from gixy.cli.main import _collect_nginx_configs, _select_entry_points
+
+VULN_SERVER = (
+    "server {\n"
+    "    location ~ /v1/((?<action>[^.]*)\\.json)?$ {\n"
+    "        add_header X-Action $action;\n"
+    "    }\n"
+    "}\n"
+)
 
 
 def _write(path, content):
@@ -16,6 +24,22 @@ def _touch(path):
     _write(path, "# test\n")
 
 
+def _run_gixy(*args):
+    return subprocess.run(
+        [sys.executable, "-m", "gixy", *args, "-f", "json"],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+
+
+def _splitting_issues(proc):
+    return [
+        i
+        for i in json.loads(proc.stdout.decode("utf-8"))
+        if i["plugin"] == "http_splitting"
+    ]
+
+
 def test_collects_conf_files_recursively_shallowest_first(tmp_path):
     root = str(tmp_path)
     _touch(os.path.join(root, "nginx.conf"))
@@ -24,8 +48,8 @@ def test_collects_conf_files_recursively_shallowest_first(tmp_path):
 
     found = _collect_nginx_configs(root)
 
-    # Shallower configs come first so entry points are audited before
-    # the fragments they include
+    # Shallower configs come first so entry points like nginx.conf lead
+    # the report
     assert found == [
         os.path.join(root, "nginx.conf"),
         os.path.join(root, "conf.d", "site.conf"),
@@ -93,28 +117,111 @@ def test_skips_vcs_dependency_and_hidden_directories(tmp_path):
 def test_directory_scan_reports_included_files_only_once(tmp_path):
     root = str(tmp_path)
     _write(os.path.join(root, "nginx.conf"), "http {\n    include conf.d/*.conf;\n}\n")
-    _write(
-        os.path.join(root, "conf.d", "vuln.conf"),
-        "server {\n"
-        "    location ~ /v1/((?<action>[^.]*)\\.json)?$ {\n"
-        "        add_header X-Action $action;\n"
-        "    }\n"
-        "}\n",
-    )
+    _write(os.path.join(root, "conf.d", "vuln.conf"), VULN_SERVER)
 
-    proc = subprocess.run(
-        [sys.executable, "-m", "gixy", root, "-f", "json"],
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-    )
-    issues = [
-        i
-        for i in json.loads(proc.stdout.decode("utf-8"))
-        if i["plugin"] == "http_splitting"
-    ]
+    issues = _splitting_issues(_run_gixy(root))
 
     # vuln.conf is covered by nginx.conf's include, so it must not
     # additionally be audited standalone
     assert len(issues) == 1
     assert issues[0]["path"].endswith("nginx.conf")
     assert issues[0]["file"].endswith("vuln.conf")
+
+
+def test_includer_sorted_after_its_fragment_still_covers_it(tmp_path):
+    # zzz.conf includes aaa.conf: even though the fragment sorts first,
+    # it must only be reported through its includer
+    root = str(tmp_path)
+    _write(os.path.join(root, "aaa.conf"), VULN_SERVER)
+    _write(os.path.join(root, "zzz.conf"), "http {\n    include aaa.conf;\n}\n")
+
+    issues = _splitting_issues(_run_gixy(root))
+
+    assert len(issues) == 1
+    assert issues[0]["path"].endswith("zzz.conf")
+
+
+def test_include_only_wrapper_is_not_audited_standalone(tmp_path):
+    # wrapper.conf contributes no directives of its own, only an include;
+    # it still must not be re-audited standalone
+    root = str(tmp_path)
+    _write(os.path.join(root, "nginx.conf"), "http {\n    include wrapper.conf;\n}\n")
+    _write(os.path.join(root, "wrapper.conf"), "include conf.d/real.conf;\n")
+    _write(os.path.join(root, "conf.d", "real.conf"), VULN_SERVER)
+
+    issues = _splitting_issues(_run_gixy(root))
+
+    assert len(issues) == 1
+    assert issues[0]["path"].endswith("nginx.conf")
+
+
+def test_config_dump_does_not_suppress_live_configs(tmp_path):
+    # An nginx -T dump resolves includes against its own records, so it must
+    # not claim the live files its records happen to be named after
+    root = str(tmp_path)
+    live = os.path.join(root, "conf.d", "site.conf")
+    _write(live, VULN_SERVER)
+    _write(
+        os.path.join(root, "dump.conf"),
+        "# configuration file {root}/live-nginx.conf:\n"
+        "http {{\n"
+        "    include {root}/conf.d/*.conf;\n"
+        "}}\n"
+        "# configuration file {live}:\n"
+        "{vuln}".format(root=root, live=live, vuln=VULN_SERVER),
+    )
+
+    issues = _splitting_issues(_run_gixy(root))
+
+    # One finding through the dump, and one from the live file itself
+    assert sorted(i["path"] for i in issues) == [
+        live,
+        os.path.join(root, "dump.conf"),
+    ]
+
+
+def test_explicit_file_is_audited_even_when_a_scanned_directory_covers_it(tmp_path):
+    root = str(tmp_path)
+    site = os.path.join(root, "conf.d", "site.conf")
+    _write(os.path.join(root, "nginx.conf"), "http {\n    include conf.d/*.conf;\n}\n")
+    _write(site, VULN_SERVER)
+
+    issues = _splitting_issues(_run_gixy(root, site))
+
+    # Once in nginx.conf's context, once standalone as explicitly requested
+    assert sorted(i["path"] for i in issues) == [
+        site,
+        os.path.join(root, "nginx.conf"),
+    ]
+
+
+def test_overlapping_directory_arguments_audit_files_once(tmp_path):
+    root = str(tmp_path)
+    sub = os.path.join(root, "sub")
+    _write(os.path.join(sub, "vuln.conf"), VULN_SERVER)
+
+    issues = _splitting_issues(_run_gixy(root, sub))
+
+    assert len(issues) == 1
+
+
+def test_select_entry_points_drops_included_configs(tmp_path):
+    root = str(tmp_path)
+    fragment = os.path.join(root, "aaa.conf")
+    includer = os.path.join(root, "zzz.conf")
+    _write(fragment, VULN_SERVER)
+    _write(includer, "http {\n    include aaa.conf;\n}\n")
+
+    assert _select_entry_points({fragment, includer}, True) == {includer}
+    # Without include processing every file stands alone
+    assert _select_entry_points({fragment, includer}, False) == {fragment, includer}
+
+
+def test_select_entry_points_keeps_include_cycles_auditable(tmp_path):
+    root = str(tmp_path)
+    a = os.path.join(root, "a.conf")
+    b = os.path.join(root, "b.conf")
+    _write(a, "include b.conf;\n")
+    _write(b, "include a.conf;\n")
+
+    assert _select_entry_points({a, b}, True) == {a, b}

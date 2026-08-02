@@ -13,6 +13,7 @@ from gixy.core.exceptions import InvalidConfiguration
 from gixy.core.manager import Manager as Gixy
 from gixy.core.plugins_manager import PluginsManager
 from gixy.formatters import get_all as formatters
+from gixy.parser.nginx_parser import NginxParser
 
 LOG = logging.getLogger()
 
@@ -49,28 +50,61 @@ def _collect_nginx_configs(directory):
                 continue
             seen_files.add(real_path)
             found.append(path)
-    # Shallower configs first, so entry points like nginx.conf are audited
-    # before the fragments they include.
+    # Shallower configs first, so entry points like nginx.conf lead the report
     return sorted(found, key=lambda path: (path.count(os.sep), path))
 
 
-def _files_in_config(block):
-    """Yield the real path of every file referenced by a parsed config tree."""
-    for child in block.children:
-        if child.file:
-            yield os.path.realpath(child.file)
-        if child.is_block:
-            yield from _files_in_config(child)
+def _included_files(path):
+    """Real paths of the other files read from disk while parsing this config.
+
+    An nginx -T dump resolves includes against its own embedded records, not
+    the filesystem, so a dump never claims the files discovered next to it.
+    """
+    parser = NginxParser(cwd=os.path.dirname(path), allow_includes=True)
+    parser.parse_file(path)
+    return parser.parsed_files - {os.path.realpath(path)}
+
+
+def _select_entry_points(discovered, allow_includes):
+    """Pick the discovered configs to audit standalone.
+
+    Parses each discovered file once to build the include graph: a file that
+    another discovered config includes is analyzed in its includer's context
+    instead of standalone, so findings aren't reported twice.
+    """
+    if not allow_includes:
+        return set(discovered)
+
+    included = set()
+    for path in sorted(discovered):
+        try:
+            included.update(_included_files(path))
+        except InvalidConfiguration:
+            pass
+
+    entry_points = {
+        path for path in discovered if os.path.realpath(path) not in included
+    }
+    for path in sorted(discovered - entry_points):
+        LOG.debug(
+            'Skipping "%s": another scanned configuration includes it', path
+        )
+    # A pathological include cycle can claim every file; better to audit them
+    # all than none.
+    return entry_points or set(discovered)
 
 
 def _expand_input_paths(input_paths):
     """Expand CLI path arguments into the configs to audit.
 
-    Returns the list of paths plus the subset that came from directory scans,
-    which may be skipped later if an earlier config covers them via include.
+    Returns an ordered mapping of path -> whether it came from a directory
+    scan. Scan discoveries may later be skipped when another scanned config
+    includes them; explicitly listed files and stdin are always audited, and
+    an explicit file wins over a scan discovery of the same path.
+    Overlapping directory arguments are deduplicated by real path.
     """
-    nginx_files = []
-    discovered = set()
+    nginx_files = {}
+    seen_files = set()
 
     for input_path in input_paths:
         if input_path == gixy.STDIN_ARG:
@@ -78,7 +112,7 @@ def _expand_input_paths(input_paths):
                 sys.stderr.write("Expected either file paths or stdin, got both.\n")
                 sys.exit(1)
 
-            nginx_files.append(gixy.STDIN_ARG)
+            nginx_files[gixy.STDIN_ARG] = False
             continue
 
         path = os.path.abspath(os.path.expanduser(input_path))
@@ -100,12 +134,17 @@ def _expand_input_paths(input_paths):
                     )
                 )
                 sys.exit(1)
-            discovered.update(found)
-            nginx_files.extend(found)
+            for file_path in found:
+                real_path = os.path.realpath(file_path)
+                if real_path in seen_files:
+                    continue
+                seen_files.add(real_path)
+                nginx_files.setdefault(file_path, True)
         else:
-            nginx_files.append(path)
+            seen_files.add(os.path.realpath(path))
+            nginx_files[path] = False
 
-    return nginx_files, discovered
+    return nginx_files
 
 
 def _init_logger(debug=False):
@@ -299,7 +338,7 @@ def main():
     args = parser.parse_args()
     _init_logger(args.debug)
 
-    nginx_files, discovered = _expand_input_paths(args.nginx_files)
+    nginx_files = _expand_input_paths(args.nginx_files)
 
     try:
         severity = gixy.severity.ALL[args.level]
@@ -365,15 +404,17 @@ def main():
             options[opt_key] = val
         config.set_for(name, options)
 
+    discovered = {path for path, from_scan in nginx_files.items() if from_scan}
+    entry_points = (
+        _select_entry_points(discovered, config.allow_includes)
+        if discovered
+        else set()
+    )
+
     formatter = formatters()[config.output_format]()
     failed = False
-    audited = set()
-    for path in nginx_files:
-        if path in discovered and os.path.realpath(path) in audited:
-            LOG.debug(
-                'Skipping "%s": already analyzed as part of another configuration',
-                path,
-            )
+    for path, from_scan in nginx_files.items():
+        if from_scan and path not in entry_points:
             continue
         with Gixy(config=config) as yoda:
             try:
@@ -386,8 +427,6 @@ def main():
             except InvalidConfiguration:
                 failed = True
             formatter.feed(path, yoda)
-            if discovered and yoda.root is not None:
-                audited.update(_files_in_config(yoda.root))
             failed = failed or sum(yoda.stats.values()) > 0
 
     if args.output_file:

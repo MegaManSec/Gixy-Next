@@ -24,6 +24,10 @@ class NginxParser(object):
         self._init_directives()
         self._path_stack = None
         self._active_includes = set()
+        # Real paths of every file read from disk, includes and all. Unlike
+        # node attribution this also covers files that contribute no
+        # directives of their own (e.g. a file holding a single include).
+        self.parsed_files = set()
 
     def parse_file(self, path, root=None, display_path=None):
         """Parse an nginx configuration file from disk.
@@ -42,6 +46,7 @@ class NginxParser(object):
         real_path = display_path if display_path else path
         LOG.debug("Parse file: {0}".format(real_path))
         root = self._ensure_root(root)
+        self.parsed_files.add(os.path.realpath(path))
         try:
             parsed = self.parser.parse_path(path)
         except ParseException as e:
