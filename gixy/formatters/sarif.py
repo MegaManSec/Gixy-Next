@@ -65,9 +65,10 @@ class SarifFormatter(BaseFormatter):
                 location = issue.get("location")
                 if location and location.get("file"):
                     uri = location["file"]
-                elif path and path != "-":
-                    uri = path
                 else:
+                    uri = path
+                if uri in ("-", "<stdin>"):
+                    # stdin has no artifact to point at, and "<stdin>" is not a valid URI
                     uri = None
 
                 if uri:

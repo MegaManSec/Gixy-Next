@@ -69,6 +69,22 @@ def test_sarif_result_fields():
     assert rule["helpUri"] == "https://gixy.io/plugins/http_splitting/"
 
 
+def test_stdin_results_have_no_location():
+    # main.py audits stdin as "<stdin>" and feeds the formatter with "-";
+    # neither is a valid SARIF artifact URI, so no location should be emitted
+    manager = Manager()
+    manager.audit("<stdin>", io.StringIO(SPLITTING_CONFIG), is_stdin=True)
+    formatter = SarifFormatter()
+    formatter.feed("-", manager)
+    log = json.loads(formatter.flush())
+
+    results = [
+        r for r in log["runs"][0]["results"] if r["ruleId"] == "http_splitting"
+    ]
+    assert len(results) == 1
+    assert "locations" not in results[0]
+
+
 def test_no_issues_produces_empty_run():
     log = _format("/etc/nginx/nginx.conf", "worker_processes auto;\n")
 
