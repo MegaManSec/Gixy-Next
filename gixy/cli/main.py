@@ -40,7 +40,7 @@ def _collect_nginx_configs(directory):
         dirs[:] = sorted(
             d for d in dirs if d not in _IGNORED_DIR_NAMES and not d.startswith(".")
         )
-        for filename in files:
+        for filename in sorted(files):
             if not filename.lower().endswith(".conf"):
                 continue
             path = os.path.join(root, filename)
