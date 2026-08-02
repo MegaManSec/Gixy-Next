@@ -49,7 +49,63 @@ def _collect_nginx_configs(directory):
                 continue
             seen_files.add(real_path)
             found.append(path)
-    return sorted(found)
+    # Shallower configs first, so entry points like nginx.conf are audited
+    # before the fragments they include.
+    return sorted(found, key=lambda path: (path.count(os.sep), path))
+
+
+def _files_in_config(block):
+    """Yield the real path of every file referenced by a parsed config tree."""
+    for child in block.children:
+        if child.file:
+            yield os.path.realpath(child.file)
+        if child.is_block:
+            yield from _files_in_config(child)
+
+
+def _expand_input_paths(input_paths):
+    """Expand CLI path arguments into the configs to audit.
+
+    Returns the list of paths plus the subset that came from directory scans,
+    which may be skipped later if an earlier config covers them via include.
+    """
+    nginx_files = []
+    discovered = set()
+
+    for input_path in input_paths:
+        if input_path == gixy.STDIN_ARG:
+            if len(input_paths) > 1:
+                sys.stderr.write("Expected either file paths or stdin, got both.\n")
+                sys.exit(1)
+
+            nginx_files.append(gixy.STDIN_ARG)
+            continue
+
+        path = os.path.abspath(os.path.expanduser(input_path))
+
+        if not os.path.exists(path):
+            sys.stderr.write(
+                "File {path!r} was not found.\nPlease specify correct path to configuration.\n".format(
+                    path=path
+                )
+            )
+            sys.exit(1)
+
+        if os.path.isdir(path):
+            found = _collect_nginx_configs(path)
+            if not found:
+                sys.stderr.write(
+                    "No nginx configuration files (*.conf) were found under directory {path!r}.\n".format(
+                        path=path
+                    )
+                )
+                sys.exit(1)
+            discovered.update(found)
+            nginx_files.extend(found)
+        else:
+            nginx_files.append(path)
+
+    return nginx_files, discovered
 
 
 def _init_logger(debug=False):
@@ -243,39 +299,7 @@ def main():
     args = parser.parse_args()
     _init_logger(args.debug)
 
-    # generate a list of user-expanded absolute paths from the nginx_files input arguments
-    nginx_files = []
-
-    for input_path in args.nginx_files:
-        if input_path == gixy.STDIN_ARG:
-            if len(args.nginx_files) > 1:
-                sys.stderr.write("Expected either file paths or stdin, got both.\n")
-                sys.exit(1)
-
-            nginx_files.append(gixy.STDIN_ARG)
-        else:
-            path = os.path.abspath(os.path.expanduser(input_path))
-
-            if not os.path.exists(path):
-                sys.stderr.write(
-                    "File {path!r} was not found.\nPlease specify correct path to configuration.\n".format(
-                        path=path
-                    )
-                )
-                sys.exit(1)
-
-            if os.path.isdir(path):
-                found = _collect_nginx_configs(path)
-                if not found:
-                    sys.stderr.write(
-                        "No nginx configuration files (*.conf) were found under directory {path!r}.\n".format(
-                            path=path
-                        )
-                    )
-                    sys.exit(1)
-                nginx_files.extend(found)
-            else:
-                nginx_files.append(path)
+    nginx_files, discovered = _expand_input_paths(args.nginx_files)
 
     try:
         severity = gixy.severity.ALL[args.level]
@@ -343,7 +367,14 @@ def main():
 
     formatter = formatters()[config.output_format]()
     failed = False
+    audited = set()
     for path in nginx_files:
+        if path in discovered and os.path.realpath(path) in audited:
+            LOG.debug(
+                'Skipping "%s": already analyzed as part of another configuration',
+                path,
+            )
+            continue
         with Gixy(config=config) as yoda:
             try:
                 if path == gixy.STDIN_ARG:
@@ -355,6 +386,8 @@ def main():
             except InvalidConfiguration:
                 failed = True
             formatter.feed(path, yoda)
+            if discovered and yoda.root is not None:
+                audited.update(_files_in_config(yoda.root))
             failed = failed or sum(yoda.stats.values()) > 0
 
     if args.output_file:

@@ -1,15 +1,22 @@
+import json
 import os
+import subprocess
+import sys
 
 from gixy.cli.main import _collect_nginx_configs
 
 
-def _touch(path):
+def _write(path, content):
     os.makedirs(os.path.dirname(path), exist_ok=True)
     with open(path, "w") as f:
-        f.write("# test\n")
+        f.write(content)
 
 
-def test_collects_conf_files_recursively(tmp_path):
+def _touch(path):
+    _write(path, "# test\n")
+
+
+def test_collects_conf_files_recursively_shallowest_first(tmp_path):
     root = str(tmp_path)
     _touch(os.path.join(root, "nginx.conf"))
     _touch(os.path.join(root, "conf.d", "site.conf"))
@@ -17,9 +24,11 @@ def test_collects_conf_files_recursively(tmp_path):
 
     found = _collect_nginx_configs(root)
 
+    # Shallower configs come first so entry points are audited before
+    # the fragments they include
     assert found == [
-        os.path.join(root, "conf.d", "site.conf"),
         os.path.join(root, "nginx.conf"),
+        os.path.join(root, "conf.d", "site.conf"),
         os.path.join(root, "sites-available", "example.conf"),
     ]
 
@@ -79,3 +88,33 @@ def test_skips_vcs_dependency_and_hidden_directories(tmp_path):
         _touch(os.path.join(root, skipped, "ignored.conf"))
 
     assert _collect_nginx_configs(root) == [os.path.join(root, "nginx.conf")]
+
+
+def test_directory_scan_reports_included_files_only_once(tmp_path):
+    root = str(tmp_path)
+    _write(os.path.join(root, "nginx.conf"), "http {\n    include conf.d/*.conf;\n}\n")
+    _write(
+        os.path.join(root, "conf.d", "vuln.conf"),
+        "server {\n"
+        "    location ~ /v1/((?<action>[^.]*)\\.json)?$ {\n"
+        "        add_header X-Action $action;\n"
+        "    }\n"
+        "}\n",
+    )
+
+    proc = subprocess.run(
+        [sys.executable, "-m", "gixy", root, "-f", "json"],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+    issues = [
+        i
+        for i in json.loads(proc.stdout.decode("utf-8"))
+        if i["plugin"] == "http_splitting"
+    ]
+
+    # vuln.conf is covered by nginx.conf's include, so it must not
+    # additionally be audited standalone
+    assert len(issues) == 1
+    assert issues[0]["path"].endswith("nginx.conf")
+    assert issues[0]["file"].endswith("vuln.conf")

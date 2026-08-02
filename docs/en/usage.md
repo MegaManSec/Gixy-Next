@@ -38,7 +38,7 @@ You can also point `gixy` at a directory instead of a single file. It will recur
 gixy /etc/nginx
 ```
 
-Each discovered file is analyzed independently and reported under its own path, so this works well for scanning `sites-available`/`conf.d`-style layouts in one go instead of listing every file by hand.
+Configs are audited shallowest-first, and a discovered file that has already been covered by an earlier config's `include` is not audited again on its own. A typical layout where `nginx.conf` includes `conf.d/*.conf` therefore produces a single report per finding, with each fragment analyzed in the context of the config that includes it.
 
 ## Scan a rendered config dump
 
