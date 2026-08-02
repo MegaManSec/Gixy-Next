@@ -1,0 +1,2167 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="Detects add_header usage that unintentionally drops headers due to inheritance rules. Adding a header in a nested block replaces inherited add_header values unless add_header_inherit merge is enabled (nginx 1.29.3+).">
+      
+      
+        <meta name="author" content="Joshua Rogers">
+      
+      
+        <link rel="canonical" href="https://gixy.io/plugins/add_header_redefinition/">
+      
+      
+        <link rel="prev" href="../add_header_multiline/">
+      
+      
+        <link rel="next" href="../alias_traversal/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="https://gixy.io/favicon.ico">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.7">
+    
+    
+  
+    
+      <title>Header Inheritance Issues | Gixy-Next: NGINX Security Scanner & Configuration Hardening</title>
+    
+  
+
+    
+      <link rel="stylesheet" href="../../assets/stylesheets/main.ec1eaa64.min.css">
+      
+        
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        
+        <link rel="stylesheet" href="../../assets/external/fonts.googleapis.com/css.49ea35f2.css">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+      <link rel="stylesheet" href="../../extra.css">
+    
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  
+
+  
+  <script type="application/ld+json">
+  
+  {
+    "@context": "https://schema.org",
+    "@type": "TechArticle",
+    "headline": "Header Inheritance Issues | Gixy Documentation",
+    "description": "Detects add_header usage that unintentionally drops headers due to inheritance rules. Adding a header in a nested block replaces inherited add_header values unless add_header_inherit merge is enabled (nginx 1.29.3+).",
+    "articleSection": "Documentation",
+    "url": "https://gixy.io/plugins/add_header_redefinition/",
+    "author": {
+      "@type": "Person",
+      "name": "Joshua Rogers",
+      "url": "https://joshua.hu/"
+    },
+    "isPartOf": {
+      "@type": "WebSite",
+      "@id": "https://gixy.io/#website",
+      "name": "Gixy-Next",
+      "url": "https://gixy.io/"
+    }
+  }
+  
+  </script>
+  
+
+  <meta property="og:site_name" content="Gixy-Next">
+  <meta property="og:type" content="website">
+  <meta property="og:image" content="https://gixy.io/imgs/gixy-social.jpg" />
+  <meta property="og:image:width" content="1200" />
+  <meta property="og:image:height" content="630" />
+  <meta property="og:image:type" content="image/jpeg" />
+  <meta property="og:image:alt" content="Gixy-Next: NGINX Security Scanner & Configuration Hardening" />
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:image" content="https://gixy.io/imgs/gixy-social.jpg">
+
+
+
+  
+    
+      <meta property="og:title" content="Header Inheritance Issues | Gixy-Next: NGINX Security Scanner & Configuration Hardening">
+    
+
+    
+      <meta property="og:url" content="https://gixy.io/plugins/add_header_redefinition/">
+    
+
+    
+      <meta property="og:description" content="Detects add_header usage that unintentionally drops headers due to inheritance rules. Adding a header in a nested block replaces inherited add_header values unless add_header_inherit merge is enabled (nginx 1.29.3+).">
+    
+
+  
+
+  <meta name="robots" content="index, follow">
+  <meta name="apple-mobile-web-app-title" content="Gixy-Next" />
+
+  <link rel="icon" href="https://gixy.io/favicon.ico" sizes="any">
+  <link rel="icon" type="image/png" href="https://gixy.io/favicon-32x32.png" sizes="32x32">
+  <link rel="icon" type="image/png" href="https://gixy.io/favicon-16x16.png" sizes="16x16">
+  <link rel="icon" type="image/png" href="https://gixy.io/favicon-96x96.png" sizes="96x96">
+  <link rel="icon" type="image/svg+xml" href="https://gixy.io/favicon.svg">
+  <link rel="apple-touch-icon" sizes="180x180" href="https://gixy.io/apple-touch-icon.png">
+  <link rel="manifest" href="https://gixy.io/site.webmanifest">
+  <link rel="icon" type="image/png" sizes="192x192" href="https://gixy.io/web-app-manifest-192x192.png">
+  <link rel="icon" type="image/png" sizes="512x512" href="https://gixy.io/web-app-manifest-512x512.png">
+
+
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#add_header_redefinition-redefining-response-headers-with-add_header" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../.." title="Gixy-Next: NGINX Security Scanner &amp; Configuration Hardening" class="md-header__button md-logo" aria-label="Gixy-Next: NGINX Security Scanner & Configuration Hardening" data-md-component="logo">
+      
+  <img src="/favicon.svg" alt="logo">
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            Gixy-Next: NGINX Security Scanner & Configuration Hardening
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Header Inheritance Issues
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme)" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3.9 12c0-1.71 1.39-3.1 3.1-3.1h4V7H7a5 5 0 0 0-5 5 5 5 0 0 0 5 5h4v-1.9H7c-1.71 0-3.1-1.39-3.1-3.1M8 13h8v-2H8zm9-6h-4v1.9h4c1.71 0 3.1 1.39 3.1 3.1s-1.39 3.1-3.1 3.1h-4V17h4a5 5 0 0 0 5-5 5 5 0 0 0-5-5"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_2" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M17 7H7a5 5 0 0 0-5 5 5 5 0 0 0 5 5h10a5 5 0 0 0 5-5 5 5 0 0 0-5-5m0 8a3 3 0 0 1-3-3 3 3 0 0 1 3-3 3 3 0 0 1 3 3 3 3 0 0 1-3 3"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="black" data-md-color-accent="indigo"  aria-label="Switch to system preference"  type="radio" name="__palette" id="__palette_2">
+    
+      <label class="md-header__button md-icon" title="Switch to system preference" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M17 7H7a5 5 0 0 0-5 5 5 5 0 0 0 5 5h10a5 5 0 0 0 5-5 5 5 0 0 0-5-5M7 15a3 3 0 0 1-3-3 3 3 0 0 1 3-3 3 3 0 0 1 3 3 3 3 0 0 1-3 3"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/MegaManSec/Gixy-Next" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    MegaManSec/Gixy-Next
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../.." title="Gixy-Next: NGINX Security Scanner &amp; Configuration Hardening" class="md-nav__button md-logo" aria-label="Gixy-Next: NGINX Security Scanner & Configuration Hardening" data-md-component="logo">
+      
+  <img src="/favicon.svg" alt="logo">
+
+    </a>
+    Gixy-Next: NGINX Security Scanner & Configuration Hardening
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/MegaManSec/Gixy-Next" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    MegaManSec/Gixy-Next
+  </div>
+</a>
+    </div>
+  
+  <label class="md-nav__title website-index-title" for="__nav_list" aria-label="Website index">
+    <span class="md-nav__icon md-icon"></span>
+    Gixy-Next Handbook
+  </label>
+
+  <ul id="__nav_list" class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Gixy-Next Overview
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../usage/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Usage Guide
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../scanner/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    In-Browser Scanner
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../nginx-config-dump/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Live Config Dump: nginx -T
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_5" id="__nav_5_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Plugins
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Plugins
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../add_header_content_type/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Duplicate Content-Type
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../add_header_multiline/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Multiline Response Headers
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Header Inheritance Issues
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Header Inheritance Issues
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#what-this-check-looks-for" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What this check looks for
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#why-this-is-a-problem" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Why this is a problem
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#bad-configuration" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Bad configuration
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#better-configuration" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Better configuration
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#configuration" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Configuration
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Configuration">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#headers" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        headers
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="headers">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#cli" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        CLI
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#config" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Config
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#merge_reported_headers" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        merge_reported_headers
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="merge_reported_headers">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#cli_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        CLI
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#config_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Config
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#additional-notes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Additional notes
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Additional notes">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#add_header_inherit" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        add_header_inherit
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#what-dropped-means-in-reports" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What "dropped" means in reports
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#how-severity-is-determined" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        How severity is determined
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../alias_traversal/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Alias Path Traversal
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../allow_without_deny/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Allow Without Deny
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../default_server_flag/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Missing default_server Flag
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../error_log_off/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    error_log Set To Off
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../hash_without_default/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Map Default Value Missing
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../host_spoofing/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Host Header Spoofing
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../http2_misdirected_request/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    HTTP/2 Misdirected Request
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../http_splitting/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    HTTP Response Splitting
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../if_is_evil/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    If Is Evil (in Location)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../invalid_regex/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Invalid Regex Captures
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../low_keepalive_requests/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Low Keepalive Requests
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../missing_worker_processes/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Missing Worker Processes
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../mixed_case_variable/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Mixed-case variable references
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../origins/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Weak Referer/Origin Validation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../overlapping_captures/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Rewrite with overlapping captures in redirect/args context (CVE-2026-9256)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../proxy_buffering_off/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Proxy Buffering Disabled
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../proxy_pass_normalized/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    proxy_pass Path Normalization
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../quic_bpf_reuseport/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    QUIC BPF Reuseport
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../regex_redos/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Regex Denial of Service
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../resolver_external/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    External DNS Resolvers
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../return_bypasses_allow_deny/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Return Bypasses Allow/Deny
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../ssl_stapling_without_resolver/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    OCSP Stapling Without Resolver
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../ssrf/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Server Side Request Forgery
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../stale_dns_cache/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Outdated/stale cached DNS records used in proxy_pass
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../status_page_exposed/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Status Page Exposed
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../try_files_is_evil_too/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Uncached try_files
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../unanchored_regex/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Unanchored Regex Pattern
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../unnamed_groups/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Rewrite args-flag leak before set or if (CVE-2026-42945)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../valid_referers/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Referer Check Bypass
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../version_disclosure/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    NGINX Version Disclosure
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../worker_rlimit_nofile_vs_connections/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Low worker_rlimit_nofile
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../configuration/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Configuration Guide
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../variables-dropins/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Custom Variables & Drop-ins
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../contributing/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Contributing to Gixy-Next
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#what-this-check-looks-for" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What this check looks for
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#why-this-is-a-problem" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Why this is a problem
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#bad-configuration" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Bad configuration
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#better-configuration" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Better configuration
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#configuration" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Configuration
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Configuration">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#headers" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        headers
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="headers">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#cli" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        CLI
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#config" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Config
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#merge_reported_headers" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        merge_reported_headers
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="merge_reported_headers">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#cli_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        CLI
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#config_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Config
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#additional-notes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Additional notes
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Additional notes">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#add_header_inherit" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        add_header_inherit
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#what-dropped-means-in-reports" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What "dropped" means in reports
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#how-severity-is-determined" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        How severity is determined
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="add_header_redefinition-redefining-response-headers-with-add_header">[add_header_redefinition] Redefining response headers with <code>add_header</code></h1>
+<h2 id="what-this-check-looks-for">What this check looks for</h2>
+<p>This plugin looks for nested contexts where <code>add_header</code> is used at a lower level and headers declared at higher levels are not effective at that lower level.</p>
+<h2 id="why-this-is-a-problem">Why this is a problem</h2>
+<p><code>add_header</code> follows an all-or-nothing inheritance rule: headers from the previous level are inherited only if there are no <code>add_header</code> directives at the current level. As soon as you add any header in a nested block, you stop inheriting every header defined above it.</p>
+<p>That is how teams end up with security headers on most pages, but missing on "just one location".</p>
+<h2 id="bad-configuration">Bad configuration</h2>
+<div class="highlight"><pre><span></span><code><span class="k">server</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="kn">add_header</span><span class="w"> </span><span class="s">X-Frame-Options</span><span class="w"> </span><span class="s">&quot;DENY&quot;</span><span class="p">;</span>
+<span class="w">    </span><span class="kn">add_header</span><span class="w"> </span><span class="s">X-Content-Type-Options</span><span class="w"> </span><span class="s">&quot;nosniff&quot;</span><span class="p">;</span>
+
+<span class="w">    </span><span class="kn">location</span><span class="w"> </span><span class="s">/static/</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="c1"># Looks harmless, but it drops the two headers above for /static/</span>
+<span class="w">        </span><span class="kn">add_header</span><span class="w"> </span><span class="s">Cache-Control</span><span class="w"> </span><span class="s">&quot;public,</span><span class="w"> </span><span class="s">max-age=86400&quot;</span><span class="p">;</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="p">}</span>
+</code></pre></div>
+<p>Requests under <code>/static/</code> will only get <code>Cache-Control</code>, and the security headers vanish.</p>
+<h2 id="better-configuration">Better configuration</h2>
+<p>Option 1: keep all headers at one level (often <code>server</code>), and avoid redefining them in child blocks.</p>
+<div class="highlight"><pre><span></span><code><span class="k">server</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="kn">add_header</span><span class="w"> </span><span class="s">X-Frame-Options</span><span class="w"> </span><span class="s">&quot;DENY&quot;</span><span class="p">;</span>
+<span class="w">    </span><span class="kn">add_header</span><span class="w"> </span><span class="s">X-Content-Type-Options</span><span class="w"> </span><span class="s">&quot;nosniff&quot;</span><span class="p">;</span>
+<span class="w">    </span><span class="kn">add_header</span><span class="w"> </span><span class="s">Cache-Control</span><span class="w"> </span><span class="s">&quot;public,</span><span class="w"> </span><span class="s">max-age=86400&quot;</span><span class="p">;</span>
+<span class="p">}</span>
+</code></pre></div>
+<p>Option 2: if you really need headers that vary by location, repeat the important ones in the nested block:</p>
+<div class="highlight"><pre><span></span><code><span class="k">server</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="kn">add_header</span><span class="w"> </span><span class="s">X-Frame-Options</span><span class="w"> </span><span class="s">&quot;DENY&quot;</span><span class="p">;</span>
+<span class="w">    </span><span class="kn">add_header</span><span class="w"> </span><span class="s">X-Content-Type-Options</span><span class="w"> </span><span class="s">&quot;nosniff&quot;</span><span class="p">;</span>
+
+<span class="w">    </span><span class="kn">location</span><span class="w"> </span><span class="s">/static/</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="kn">add_header</span><span class="w"> </span><span class="s">X-Frame-Options</span><span class="w"> </span><span class="s">&quot;DENY&quot;</span><span class="p">;</span>
+<span class="w">        </span><span class="kn">add_header</span><span class="w"> </span><span class="s">X-Content-Type-Options</span><span class="w"> </span><span class="s">&quot;nosniff&quot;</span><span class="p">;</span>
+<span class="w">        </span><span class="kn">add_header</span><span class="w"> </span><span class="s">Cache-Control</span><span class="w"> </span><span class="s">&quot;public,</span><span class="w"> </span><span class="s">max-age=86400&quot;</span><span class="p">;</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="p">}</span>
+</code></pre></div>
+<h2 id="configuration">Configuration</h2>
+<p>You can tune this plugin to only report on specific headers. This is useful if you only care about specific headers and want to ignore noise like caching tweaks.</p>
+<h3 id="headers">headers</h3>
+<p>You can use the <code>headers</code> option to only report dropped headers that match the specified list. By default, this value is empty (reports all dropped headers).</p>
+<p>The value should be a comma-separated list of header names.</p>
+<h4 id="cli">CLI</h4>
+<div class="highlight"><pre><span></span><code><span class="c1"># The add_header_redefinition plugin will only report about dropped x-frame-options and content-security-policy headers</span>
+gixy<span class="w"> </span>--add-header-redefinition-headers<span class="w"> </span><span class="s2">&quot;x-frame-options,content-security-policy&quot;</span>
+</code></pre></div>
+<h4 id="config">Config</h4>
+<div class="highlight"><pre><span></span><code><span class="k">[add_header_redefinition]</span>
+<span class="c1">; only report about dropped x-frame-options and content-security-policy headers</span>
+<span class="na">headers</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">x-frame-options,content-security-policy</span>
+</code></pre></div>
+<h3 id="merge_reported_headers">merge_reported_headers</h3>
+<p>By default, the plugin reports headers declared in higher scopes that are not effective at the flagged block. This can include headers that were dropped at an intermediate scope (and remain missing further down).</p>
+<p>If you prefer stricter "dropped at this level" reporting, you can disable this behavior so the plugin only compares against the immediate parent's effective headers.</p>
+<h4 id="cli_1">CLI</h4>
+<div class="highlight"><pre><span></span><code><span class="c1"># Only compare against the immediate parent&#39;s effective headers</span>
+gixy<span class="w"> </span>--add-header-redefinition-merge-reported-headers<span class="w"> </span><span class="nb">false</span>
+</code></pre></div>
+<h4 id="config_1">Config</h4>
+<div class="highlight"><pre><span></span><code><span class="k">[add_header_redefinition]</span>
+<span class="c1">; only compare against the immediate parent&#39;s effective headers</span>
+<span class="na">merge_reported_headers</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">false</span>
+</code></pre></div>
+<h2 id="additional-notes">Additional notes</h2>
+<h3 id="add_header_inherit">add_header_inherit</h3>
+<p>Recent NGINX versions added <code>add_header_inherit</code> to adjust how <code>add_header</code> inherits across levels. If you have it available (nginx 1.29.3+), using <code>add_header_inherit merge;</code> prevents nested <code>add_header</code> blocks from wiping out headers defined at higher levels by merging inherited headers with headers defined at the current level. See the <a href="https://nginx.org/en/docs/http/ngx_http_headers_module.html#add_header_inherit">documentation</a>.</p>
+<h3 id="what-dropped-means-in-reports">What "dropped" means in reports</h3>
+<p>By default, this plugin reports headers that were declared in higher scopes but are not effective at the flagged block.</p>
+<p>In practice, that usually means the headers were dropped by the <code>add_header</code> directives inside the flagged block. However, in some configurations a header can be dropped earlier (at an intermediate scope) and remain missing further down.</p>
+<p>If you see a report where the flagged block never inherited a header in the first place, that is expected with the default behavior: the plugin is telling you "this header is declared somewhere above, but it is not in effect here".</p>
+<h3 id="how-severity-is-determined">How severity is determined</h3>
+<p>This plugin treats some headers as "secure headers" and escalates severity when they are dropped. Concretely:</p>
+<ul>
+<li>If a nested block drops only non-security headers, the issue is reported as LOW.</li>
+<li>If a nested block drops any header from the secure list below, the issue is reported as MEDIUM.</li>
+</ul>
+<p>The following headers are considered security-sensitive:</p>
+<ul>
+<li><code>strict-transport-security</code></li>
+<li><code>content-security-policy</code></li>
+<li><code>content-security-policy-report-only</code></li>
+<li><code>x-frame-options</code></li>
+<li><code>x-content-type-options</code></li>
+<li><code>permissions-policy</code></li>
+<li><code>referrer-policy</code></li>
+<li><code>cross-origin-embedder-policy</code></li>
+<li><code>cross-origin-opener-policy</code></li>
+<li><code>cross-origin-resource-policy</code></li>
+<li><code>x-xss-protection</code></li>
+<li><code>x-permitted-cross-domain-policies</code></li>
+<li><code>expect-ct</code></li>
+<li><code>cache-control</code></li>
+<li><code>pragma</code></li>
+<li><code>expires</code></li>
+<li><code>content-disposition</code></li>
+</ul>
+
+
+
+
+
+
+
+  
+  
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["content.code.copy"], "search": "../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../../assets/javascripts/bundle.d7400e89.min.js"></script>
+      
+        <script src="../../extra/gixy-scan.js"></script>
+      
+        <script src="../../extra/redirect-en.js"></script>
+      
+    
+  </body>
+</html>

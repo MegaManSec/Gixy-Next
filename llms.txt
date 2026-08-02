@@ -1,0 +1,70 @@
+# Gixy-Next: NGINX Security Scanner & Configuration Hardening
+
+> Gixy-Next is an open source static analyzer for NGINX configurations. It detects security vulnerabilities, unsafe directives, compliance issues, and performance misconfigurations in nginx.conf before deployment.
+
+The Gixy-Next security scanner and configuration checker statically analyzes NGINX configurations to find security issues, performance issues, and hardening opportunities before they reach production.
+
+Official project resources:
+
+- Source code: https://github.com/MegaManSec/Gixy-Next
+- PyPI package: https://pypi.org/project/Gixy-Next/
+- Releases and changelog: https://github.com/MegaManSec/Gixy-Next/releases
+- Issue tracker: https://github.com/MegaManSec/Gixy-Next/issues
+- License: MPL-2.0 (https://www.mozilla.org/en-US/MPL/2.0/)
+
+Quickstart:
+
+```
+pip3 install gixy-next
+gixy /etc/nginx/nginx.conf
+nginx -T | gixy -
+```
+
+Output semantics: findings are reported by plugin with a severity of INFORMATION, LOW, MEDIUM, or HIGH. The CLI exits with code 1 if any issues are found (or on fatal errors) and 0 otherwise. `include` directives are resolved automatically, and `nginx -T` dump files are auto-detected.
+
+## Overview and usage
+
+- [Gixy-Next Overview](https://gixy.io/index.md): Overview and quickstart
+- [Usage Guide](https://gixy.io/usage/index.md): Usage Guide
+- [Configuration Guide](https://gixy.io/configuration/index.md): Configuration and CLI usage
+- [Custom Variables & Drop-ins](https://gixy.io/variables-dropins/index.md): Variables and drop-in files
+- [Contributing to Gixy-Next](https://gixy.io/contributing/index.md): Contributing Guide
+- [gixy-next vs nginx -t: The Difference](https://gixy.io/nginx-configuration-checker/index.md): NGINX Config Checker: gixy-next vs nginx -t
+
+## Built-in plugins
+
+- [Duplicate Content-Type](https://gixy.io/plugins/add_header_content_type/index.md): Scanning plugin
+- [Multiline Response Headers](https://gixy.io/plugins/add_header_multiline/index.md): Scanning plugin
+- [Header Inheritance Issues](https://gixy.io/plugins/add_header_redefinition/index.md): Scanning plugin
+- [Alias Path Traversal](https://gixy.io/plugins/alias_traversal/index.md): Scanning plugin
+- [Allow Without Deny](https://gixy.io/plugins/allow_without_deny/index.md): Scanning plugin
+- [Missing default_server Flag](https://gixy.io/plugins/default_server_flag/index.md): Scanning plugin
+- [error_log Set To Off](https://gixy.io/plugins/error_log_off/index.md): Scanning plugin
+- [Map Default Value Missing](https://gixy.io/plugins/hash_without_default/index.md): Scanning plugin
+- [Host Header Spoofing](https://gixy.io/plugins/host_spoofing/index.md): Scanning plugin
+- [HTTP/2 Misdirected Request](https://gixy.io/plugins/http2_misdirected_request/index.md): Scanning plugin
+- [HTTP Response Splitting](https://gixy.io/plugins/http_splitting/index.md): Scanning plugin
+- [If Is Evil (in Location)](https://gixy.io/plugins/if_is_evil/index.md): Scanning plugin
+- [Invalid Regex Captures](https://gixy.io/plugins/invalid_regex/index.md): Scanning plugin
+- [Low Keepalive Requests](https://gixy.io/plugins/low_keepalive_requests/index.md): Scanning plugin
+- [Missing Worker Processes](https://gixy.io/plugins/missing_worker_processes/index.md): Scanning plugin
+- [Mixed-case variable references](https://gixy.io/plugins/mixed_case_variable/index.md): Scanning plugin
+- [Weak Referer/Origin Validation](https://gixy.io/plugins/origins/index.md): Scanning plugin
+- [Rewrite with overlapping captures in redirect/args context (CVE-2026-9256)](https://gixy.io/plugins/overlapping_captures/index.md): Scanning plugin
+- [Proxy Buffering Disabled](https://gixy.io/plugins/proxy_buffering_off/index.md): Scanning plugin
+- [proxy_pass Path Normalization](https://gixy.io/plugins/proxy_pass_normalized/index.md): Scanning plugin
+- [QUIC BPF Reuseport](https://gixy.io/plugins/quic_bpf_reuseport/index.md): Scanning plugin
+- [Regex Denial of Service](https://gixy.io/plugins/regex_redos/index.md): Scanning plugin
+- [External DNS Resolvers](https://gixy.io/plugins/resolver_external/index.md): Scanning plugin
+- [Return Bypasses Allow/Deny](https://gixy.io/plugins/return_bypasses_allow_deny/index.md): Scanning plugin
+- [OCSP Stapling Without Resolver](https://gixy.io/plugins/ssl_stapling_without_resolver/index.md): Scanning plugin
+- [Server Side Request Forgery](https://gixy.io/plugins/ssrf/index.md): Scanning plugin
+- [Outdated/stale cached DNS records used in proxy_pass](https://gixy.io/plugins/stale_dns_cache/index.md): Scanning plugin
+- [Status Page Exposed](https://gixy.io/plugins/status_page_exposed/index.md): Scanning plugin
+- [Uncached try_files](https://gixy.io/plugins/try_files_is_evil_too/index.md): Scanning plugin
+- [Unanchored Regex Pattern](https://gixy.io/plugins/unanchored_regex/index.md): Scanning plugin
+- [Rewrite args-flag leak before set or if (CVE-2026-42945)](https://gixy.io/plugins/unnamed_groups/index.md): Scanning plugin
+- [Referer Check Bypass](https://gixy.io/plugins/valid_referers/index.md): Scanning plugin
+- [NGINX Version Disclosure](https://gixy.io/plugins/version_disclosure/index.md): Scanning plugin
+- [Low worker_rlimit_nofile](https://gixy.io/plugins/worker_rlimit_nofile_vs_connections/index.md): Scanning plugin
+

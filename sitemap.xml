@@ -1,0 +1,255 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:xhtml="http://www.w3.org/1999/xhtml">
+    <url>
+        <loc>https://gixy.io/</loc>
+        <lastmod>2026-08-02</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://gixy.io/"/>
+    </url>
+    <url>
+        <loc>https://gixy.io/configuration/</loc>
+        <lastmod>2026-08-02</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://gixy.io/configuration/"/>
+    </url>
+    <url>
+        <loc>https://gixy.io/contributing/</loc>
+        <lastmod>2026-08-02</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://gixy.io/contributing/"/>
+    </url>
+    <url>
+        <loc>https://gixy.io/nginx-config-dump/</loc>
+        <lastmod>2026-08-02</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://gixy.io/nginx-config-dump/"/>
+    </url>
+    <url>
+        <loc>https://gixy.io/nginx-configuration-checker/</loc>
+        <lastmod>2026-08-02</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://gixy.io/nginx-configuration-checker/"/>
+    </url>
+    <url>
+        <loc>https://gixy.io/scanner/</loc>
+        <lastmod>2026-08-02</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://gixy.io/scanner/"/>
+    </url>
+    <url>
+        <loc>https://gixy.io/usage/</loc>
+        <lastmod>2026-08-02</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://gixy.io/usage/"/>
+    </url>
+    <url>
+        <loc>https://gixy.io/variables-dropins/</loc>
+        <lastmod>2026-08-02</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://gixy.io/variables-dropins/"/>
+    </url>
+    <url>
+        <loc>https://gixy.io/plugins/add_header_content_type/</loc>
+        <lastmod>2026-08-02</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://gixy.io/plugins/add_header_content_type/"/>
+    </url>
+    <url>
+        <loc>https://gixy.io/plugins/add_header_multiline/</loc>
+        <lastmod>2026-08-02</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://gixy.io/plugins/add_header_multiline/"/>
+    </url>
+    <url>
+        <loc>https://gixy.io/plugins/add_header_redefinition/</loc>
+        <lastmod>2026-08-02</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://gixy.io/plugins/add_header_redefinition/"/>
+    </url>
+    <url>
+        <loc>https://gixy.io/plugins/alias_traversal/</loc>
+        <lastmod>2026-08-02</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://gixy.io/plugins/alias_traversal/"/>
+    </url>
+    <url>
+        <loc>https://gixy.io/plugins/allow_without_deny/</loc>
+        <lastmod>2026-08-02</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://gixy.io/plugins/allow_without_deny/"/>
+    </url>
+    <url>
+        <loc>https://gixy.io/plugins/default_server_flag/</loc>
+        <lastmod>2026-08-02</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://gixy.io/plugins/default_server_flag/"/>
+    </url>
+    <url>
+        <loc>https://gixy.io/plugins/error_log_off/</loc>
+        <lastmod>2026-08-02</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://gixy.io/plugins/error_log_off/"/>
+    </url>
+    <url>
+        <loc>https://gixy.io/plugins/hash_without_default/</loc>
+        <lastmod>2026-08-02</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://gixy.io/plugins/hash_without_default/"/>
+    </url>
+    <url>
+        <loc>https://gixy.io/plugins/host_spoofing/</loc>
+        <lastmod>2026-08-02</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://gixy.io/plugins/host_spoofing/"/>
+    </url>
+    <url>
+        <loc>https://gixy.io/plugins/http2_misdirected_request/</loc>
+        <lastmod>2026-08-02</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://gixy.io/plugins/http2_misdirected_request/"/>
+    </url>
+    <url>
+        <loc>https://gixy.io/plugins/http_splitting/</loc>
+        <lastmod>2026-08-02</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://gixy.io/plugins/http_splitting/"/>
+    </url>
+    <url>
+        <loc>https://gixy.io/plugins/if_is_evil/</loc>
+        <lastmod>2026-08-02</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://gixy.io/plugins/if_is_evil/"/>
+    </url>
+    <url>
+        <loc>https://gixy.io/plugins/invalid_regex/</loc>
+        <lastmod>2026-08-02</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://gixy.io/plugins/invalid_regex/"/>
+    </url>
+    <url>
+        <loc>https://gixy.io/plugins/low_keepalive_requests/</loc>
+        <lastmod>2026-08-02</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://gixy.io/plugins/low_keepalive_requests/"/>
+    </url>
+    <url>
+        <loc>https://gixy.io/plugins/missing_worker_processes/</loc>
+        <lastmod>2026-08-02</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://gixy.io/plugins/missing_worker_processes/"/>
+    </url>
+    <url>
+        <loc>https://gixy.io/plugins/mixed_case_variable/</loc>
+        <lastmod>2026-08-02</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://gixy.io/plugins/mixed_case_variable/"/>
+    </url>
+    <url>
+        <loc>https://gixy.io/plugins/origins/</loc>
+        <lastmod>2026-08-02</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://gixy.io/plugins/origins/"/>
+    </url>
+    <url>
+        <loc>https://gixy.io/plugins/overlapping_captures/</loc>
+        <lastmod>2026-08-02</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://gixy.io/plugins/overlapping_captures/"/>
+    </url>
+    <url>
+        <loc>https://gixy.io/plugins/proxy_buffering_off/</loc>
+        <lastmod>2026-08-02</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://gixy.io/plugins/proxy_buffering_off/"/>
+    </url>
+    <url>
+        <loc>https://gixy.io/plugins/proxy_pass_normalized/</loc>
+        <lastmod>2026-08-02</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://gixy.io/plugins/proxy_pass_normalized/"/>
+    </url>
+    <url>
+        <loc>https://gixy.io/plugins/quic_bpf_reuseport/</loc>
+        <lastmod>2026-08-02</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://gixy.io/plugins/quic_bpf_reuseport/"/>
+    </url>
+    <url>
+        <loc>https://gixy.io/plugins/regex_redos/</loc>
+        <lastmod>2026-08-02</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://gixy.io/plugins/regex_redos/"/>
+    </url>
+    <url>
+        <loc>https://gixy.io/plugins/resolver_external/</loc>
+        <lastmod>2026-08-02</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://gixy.io/plugins/resolver_external/"/>
+    </url>
+    <url>
+        <loc>https://gixy.io/plugins/return_bypasses_allow_deny/</loc>
+        <lastmod>2026-08-02</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://gixy.io/plugins/return_bypasses_allow_deny/"/>
+    </url>
+    <url>
+        <loc>https://gixy.io/plugins/ssl_stapling_without_resolver/</loc>
+        <lastmod>2026-08-02</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://gixy.io/plugins/ssl_stapling_without_resolver/"/>
+    </url>
+    <url>
+        <loc>https://gixy.io/plugins/ssrf/</loc>
+        <lastmod>2026-08-02</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://gixy.io/plugins/ssrf/"/>
+    </url>
+    <url>
+        <loc>https://gixy.io/plugins/stale_dns_cache/</loc>
+        <lastmod>2026-08-02</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://gixy.io/plugins/stale_dns_cache/"/>
+    </url>
+    <url>
+        <loc>https://gixy.io/plugins/status_page_exposed/</loc>
+        <lastmod>2026-08-02</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://gixy.io/plugins/status_page_exposed/"/>
+    </url>
+    <url>
+        <loc>https://gixy.io/plugins/try_files_is_evil_too/</loc>
+        <lastmod>2026-08-02</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://gixy.io/plugins/try_files_is_evil_too/"/>
+    </url>
+    <url>
+        <loc>https://gixy.io/plugins/unanchored_regex/</loc>
+        <lastmod>2026-08-02</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://gixy.io/plugins/unanchored_regex/"/>
+    </url>
+    <url>
+        <loc>https://gixy.io/plugins/unnamed_groups/</loc>
+        <lastmod>2026-08-02</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://gixy.io/plugins/unnamed_groups/"/>
+    </url>
+    <url>
+        <loc>https://gixy.io/plugins/valid_referers/</loc>
+        <lastmod>2026-08-02</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://gixy.io/plugins/valid_referers/"/>
+    </url>
+    <url>
+        <loc>https://gixy.io/plugins/version_disclosure/</loc>
+        <lastmod>2026-08-02</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://gixy.io/plugins/version_disclosure/"/>
+    </url>
+    <url>
+        <loc>https://gixy.io/plugins/worker_rlimit_nofile_vs_connections/</loc>
+        <lastmod>2026-08-02</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://gixy.io/plugins/worker_rlimit_nofile_vs_connections/"/>
+    </url>
+</urlset>
