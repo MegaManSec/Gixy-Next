@@ -19,5 +19,5 @@ def load_template(name):
 def to_text_filter(text):
     try:
         return text.encode("latin1").decode("utf-8")
-    except UnicodeEncodeError:
+    except UnicodeError:
         return to_text(text)
