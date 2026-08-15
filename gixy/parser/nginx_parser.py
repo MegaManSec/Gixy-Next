@@ -335,6 +335,9 @@ class NginxParser(object):
             if not fnmatch.fnmatch(file_path, path):
                 continue
             found = True
+            if file_path in self._active_includes:
+                LOG.warning("Skipping circular include: %s", file_path)
+                continue
 
             # Flatten includes by parsing into the current parent context.
             # We only switch the path stack for correct file attribution but keep
@@ -346,7 +349,11 @@ class NginxParser(object):
             old_stack = self._path_stack
             self._path_stack = file_path
 
-            self.parse_block(parsed, parent)
+            self._active_includes.add(file_path)
+            try:
+                self.parse_block(parsed, parent)
+            finally:
+                self._active_includes.discard(file_path)
 
             self._path_stack = old_stack
 
