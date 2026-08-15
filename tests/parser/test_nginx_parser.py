@@ -253,6 +253,42 @@ def test_include_transitive_cycle_is_broken(tmp_path):
     assert len(root.children) < 10
 
 
+def test_dump_include_self_cycle_is_broken():
+    """A dump file that includes itself must not recurse forever."""
+    config = '''
+# configuration file /etc/nginx/nginx.conf:
+worker_processes 1;
+include /etc/nginx/nginx.conf;
+    '''
+
+    tree = _parse(config)
+    assert isinstance(tree, Root)
+    assert len(tree.children) < 10
+    names = [c.name for c in tree.children]
+    assert 'worker_processes' in names
+
+
+def test_dump_include_mutual_cycle_is_broken():
+    """An A <-> B mutual include cycle between dump files is broken."""
+    config = '''
+# configuration file /etc/nginx/nginx.conf:
+worker_processes 1;
+include /etc/nginx/a.conf;
+
+# configuration file /etc/nginx/a.conf:
+include /etc/nginx/b.conf;
+
+# configuration file /etc/nginx/b.conf:
+include /etc/nginx/a.conf;
+    '''
+
+    tree = _parse(config)
+    assert isinstance(tree, Root)
+    assert len(tree.children) < 10
+    names = [c.name for c in tree.children]
+    assert 'worker_processes' in names
+
+
 def assert_config(config, expected):
     tree = _parse(config)
     assert isinstance(tree, Directive)
