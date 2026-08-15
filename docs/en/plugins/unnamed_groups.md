@@ -12,7 +12,7 @@ CVE-2026-42945 is a remote code execution vulnerability affecting nginx. In cert
 This plugin flags a `rewrite` directive where both of the following are true within the same scope (the same block, or across `if`, `include`, `map`, or `geo` boundaries that do not introduce a new context):
 
 1. The replacement string contains `?` (which activates nginx's args-escaping flag on the script engine).
-2. A subsequent directive references a numeric capture group (`$1`, `$2`, ...) via `set $var ...`, `if ($var = ...)`, `if ($var != ...)`, or `if (-f ...)` (the `-d`, `-e`, `-x`, and negated file-test operators are treated identically).
+2. A subsequent directive references a numeric capture group (`$1`, `$2`, ...) via `set $var ...`, `if ($var = ...)`, `if ($var != ...)`, `if (-f ...)` (the `-d`, `-e`, `-x`, and negated file-test operators are treated identically), or as the tested variable itself, e.g. `if ($1)` or `if ($1 = ...)`.
 
 Because Gixy-Next cannot determine the nginx version from the configuration, any matching pattern is reported as **INFORMATION** rather than a warning — if you are already on a patched version, no action is required.
 
@@ -75,7 +75,7 @@ The plugin deliberately does not flag the following shapes:
 - A `set $var $N` that appears *before* the `rewrite` in the same block. The args flag is only set when the `rewrite` actually runs, so earlier `set` directives are unaffected.
 - A `rewrite` that terminates the rewrite phase on its own. This covers the `last`, `break`, `redirect`, and `permanent` flags, as well as replacements that start with `http://`, `https://`, or `$scheme` (which nginx treats as implicit redirects). When the `rewrite` matches, the engine halts and any later `set` or `if` does not run.
 - A `return` or standalone `break;` directive sitting between the `rewrite` and the consumer. Both unconditionally halt the engine before the vulnerable directive can execute.
-- `if ($var ~ "regex")` (a regex-match condition) and `if ($var)` (a truthy test). Neither goes through the same code path as the vulnerable equality and file-test forms.
+- `$N` inside the pattern of a regex-match condition, e.g. `if ($var ~ "$1")`. The pattern is compiled once at configuration time, so `$1` there is literal regex text, not a runtime capture read. The tested variable is still checked: `if ($1 ~ "regex")` is flagged.
 - `return 200 $N`. The `return` directive uses a separate script engine that is not affected.
 
 Affected versions: NGINX Open Source 0.6.27 through 1.30.0 (fixed in 1.30.1 and 1.31.0), and NGINX Plus R32 through R36 (fixed in R32 P6 and R36 P4).
