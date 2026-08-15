@@ -201,6 +201,7 @@ class Variable(object):
         # If the value is a list (hash block), check all values
         if isinstance(self.value, list):
             # Ensure that every map value must contain the char
+            evaluated = False
             for var in self.value:
                 if (
                     not isinstance(var, Variable)
@@ -221,8 +222,9 @@ class Variable(object):
                         break
                 if not found_must_contain:  # A map value doesn't need to contain the char, therefore return False
                     return False
+                evaluated = True
 
-            return True
+            return evaluated
 
         # Otherwise checks literal
         return self.value and char in self.value
@@ -249,6 +251,7 @@ class Variable(object):
 
         # If the value is a list (hash block), check all values
         if isinstance(self.value, list):
+            evaluated = False
             for var in self.value:
                 if (
                     not isinstance(var, Variable)
@@ -264,8 +267,9 @@ class Variable(object):
                 )
                 if not compiled_val or not compiled_val[0].must_startswith(char):
                     return False
+                evaluated = True
 
-            return True
+            return evaluated
 
         # Otherwise checks literal
         return self.value and self.value[0] == char
