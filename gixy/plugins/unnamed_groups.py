@@ -108,6 +108,8 @@ class unnamed_groups(Plugin):
         if node.name == "set" and len(node.args) >= 2:
             return bool(self._NUMERIC_CAPTURE.search(node.args[1]))
         if node.name == "if":
+            if node.args and self._NUMERIC_CAPTURE.search(node.args[0]):
+                return True
             if len(node.args) >= 3 and node.args[1] in ("=", "!="):
                 return bool(self._NUMERIC_CAPTURE.search(node.args[2]))
             if len(node.args) >= 2 and node.args[0] in self._IF_FILE_OPS:
