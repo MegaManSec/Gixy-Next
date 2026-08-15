@@ -1,8 +1,10 @@
-import re
 from urllib.parse import urlparse
 
 import gixy
+from gixy.core.variable import EXTRACT_RE
 from gixy.plugins.plugin import Plugin
+
+MITIGATION_VARS = frozenset({"uri", "1", "2", "3", "4", "5", "6", "7", "8", "9"})
 
 
 class proxy_pass_normalized(Plugin):
@@ -20,9 +22,12 @@ class proxy_pass_normalized(Plugin):
     help_url = "https://gixy.io/plugins/proxy_pass_normalized/"
     directives = ["proxy_pass"]
 
-    def __init__(self, config):
-        super(proxy_pass_normalized, self).__init__(config)
-        self.num_pattern = re.compile(r"\$\d+")
+    @staticmethod
+    def _has_mitigation_variable(script):
+        return any(
+            name.strip("{}").lower() in MITIGATION_VARS
+            for name in EXTRACT_RE.findall(script)
+        )
 
     @staticmethod
     def _is_conditional(rewrite):
@@ -78,17 +83,11 @@ class proxy_pass_normalized(Plugin):
             if self._is_conditional(rewrite):
                 continue
             if rewrite.pattern == "^" and rewrite.replace.lower() == "$request_uri":
-                if path:
-                    # Check for $uri or any numbered variable in the path.
-                    if "$uri" in path.lower() or self.num_pattern.search(path):
-                        return
-                    rewritten = rewrite
-                    break
-                else:
-                    if "$uri" in host.lower() or self.num_pattern.search(host):
-                        return
-                    rewritten = rewrite
-                    break
+                # Check for $uri or any numbered variable in the path.
+                if self._has_mitigation_variable(path if path else host):
+                    return
+                rewritten = rewrite
+                break
 
         if not path and not rewritten:
             return
