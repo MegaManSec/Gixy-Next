@@ -35,7 +35,13 @@ class default_server_flag(Plugin):
         listen_groups = {}
 
         for srv in server_blocks:
-            for listen in srv.find("listen"):
+            listens = srv.find("listen")
+            if not listens:
+                if "*:80" not in listen_groups:
+                    listen_groups["*:80"] = []
+                listen_groups["*:80"].append((srv, srv, False))
+                continue
+            for listen in listens:
                 key, is_default = self._parse_listen_key_and_default(listen.args)
                 if not key:
                     # Could not parse a concrete socket
