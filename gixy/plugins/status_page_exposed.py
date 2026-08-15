@@ -37,6 +37,25 @@ class status_page_exposed(Plugin):
         return False
 
     @staticmethod
+    def _satisfy_any_allows_all(directive):
+        """True if `satisfy any` applies and the first universal access rule is an allow."""
+        satisfy = resolve_inherited_single(directive.parent, "satisfy")
+        if satisfy is None or satisfy.args[0].lower() != "any":
+            return False
+        scope = directive.parent
+        while scope:
+            allow_deny = [
+                c for c in scope.children if (c.name or "").lower() in ("allow", "deny")
+            ]
+            if allow_deny:
+                for c in allow_deny:
+                    if c.args and c.args[0].lower() in ("all", "0.0.0.0/0", "::/0"):
+                        return (c.name or "").lower() == "allow"
+                return False
+            scope = scope.parent
+        return False
+
+    @staticmethod
     def _location_is_internal_only(directive):
         """True if the directive is inside a `location` carrying `internal`."""
         for parent in directive.parents:
@@ -82,7 +101,9 @@ class status_page_exposed(Plugin):
         if self._location_is_internal_only(directive):
             return
 
-        if self._has_inherited_auth(directive):
+        if self._has_inherited_auth(directive) and not self._satisfy_any_allows_all(
+            directive
+        ):
             return
 
         if not directive.parent:
