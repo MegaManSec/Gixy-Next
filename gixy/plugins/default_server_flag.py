@@ -113,7 +113,7 @@ class default_server_flag(Plugin):
 
         if port is None:
             return None, is_default
-        if address is None:
+        if address is None or address == "0.0.0.0":
             address = "*"
         # Normalize IPv6 addresses to include brackets
         if ":" in address and not address.startswith("["):
