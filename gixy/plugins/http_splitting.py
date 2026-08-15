@@ -48,6 +48,8 @@ class http_splitting(Plugin):
 def _get_value(directive):
     if directive.name == "proxy_pass" and len(directive.args) >= 1:
         return directive.args[0]
+    elif directive.name == "return" and len(directive.args) == 1 and not directive.args[0].isdigit():
+        return directive.args[0]
     elif len(directive.args) >= 2:
         return directive.args[1]
     return None
