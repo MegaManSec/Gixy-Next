@@ -34,9 +34,21 @@ class proxy_set_header_redefinition(Plugin):
     description = '"proxy_set_header" at a nested level replaces the whole set of headers inherited from parent levels.'
     help_url = "https://gixy.io/plugins/proxy_set_header_redefinition/"
     directives = ["server", "location"]
+    options = {"headers": set(), "merge_reported_headers": True}
+    options_help = {
+        "headers": 'Only report dropped headers from this allowlist. Case-insensitive. Comma-separated list, e.g. "host,x-forwarded-for".',
+        "merge_reported_headers": "Report headers declared in higher scopes that are no longer sent to the upstream (but were dropped at an intermediate level).",
+    }
 
     def __init__(self, config):
         super(proxy_set_header_redefinition, self).__init__(config)
+        raw_headers = self.config.get("headers")
+        if isinstance(raw_headers, (list, tuple, set)):
+            self.interesting_headers = set(
+                h.lower().strip() for h in raw_headers if h and isinstance(h, str)
+            )
+        else:
+            self.interesting_headers = set()
         # Request headers that tell the upstream who the client really is, or
         # that overwrite a value the client must not be able to choose
         self.secure_headers = [
@@ -50,6 +62,7 @@ class proxy_set_header_redefinition(Plugin):
             "x-forwarded-proto",
             "x-real-ip",
         ]
+        self.merge_reported_headers = self.config.get("merge_reported_headers")
 
     def audit(self, directive):
         if not directive.is_block:
@@ -59,7 +72,14 @@ class proxy_set_header_redefinition(Plugin):
         if not own:
             return
 
-        dropped = self.inherited_headers(directive) - own
+        if self.merge_reported_headers:
+            dropped = self.declared_above(directive) - own
+        else:
+            dropped = self.inherited_headers(directive) - own
+
+        if self.interesting_headers:
+            dropped = dropped & self.interesting_headers
+
         if not dropped:
             return
 
@@ -84,10 +104,28 @@ class proxy_set_header_redefinition(Plugin):
             gixy.severity.MEDIUM if is_secure_header_dropped else self.severity
         )
 
-        reason = "Parent headers `{headers}` were dropped at this level.".format(
-            headers="`, `".join(sorted(dropped))
-        )
+        if self.merge_reported_headers:
+            reason = "Headers declared in higher scopes `{headers}` are not sent to the upstream here.".format(
+                headers="`, `".join(sorted(dropped))
+            )
+        else:
+            reason = "Parent headers `{headers}` were dropped at this level.".format(
+                headers="`, `".join(sorted(dropped))
+            )
+
         self.add_issue(directive=directives, reason=reason, severity=issue_severity)
+
+    def declared_above(self, directive):
+        """
+        Every header declared in an ancestor level, including those already
+        dropped before reaching the parent level.
+        """
+        headers = set()
+        parent = directive.parent
+        while parent is not None:
+            headers |= self.get_headers(parent)
+            parent = parent.parent
+        return headers
 
     def inherited_headers(self, directive):
         """
