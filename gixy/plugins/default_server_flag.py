@@ -59,7 +59,7 @@ class default_server_flag(Plugin):
         # For each listen group with multiple servers and none marked default_server,
         # raise one issue per group (pointing to the first listen directive).
         for (_, key), entries in listen_groups.items():
-            if len(entries) < 2:
+            if len({srv for (srv, _, _) in entries}) < 2:
                 continue
             has_default = any(is_def for (_, _, is_def) in entries)
             if has_default:
