@@ -7,6 +7,10 @@ from gixy.core.regexp import Regexp
 LOG = logging.getLogger(__name__)
 # See ngx_http_script_compile in http/ngx_http_script.c
 EXTRACT_RE = re.compile(r"\$([1-9]|[a-z_][a-z0-9_]*|\{[a-z0-9_]+\})", re.IGNORECASE)
+# See ngx_http_geo_module.c: parameters that configure the block instead of providing a value
+GEO_PARAMETERS = frozenset(
+    ("delete", "include", "proxy", "proxy_recursive", "ranges", "volatile")
+)
 
 
 def compile_script(script, ctx=None):
@@ -38,6 +42,33 @@ def compile_script(script, ctx=None):
             # Literal
             depends.append(Variable(name=None, value=var, have_script=False, ctx=ctx))
     return depends
+
+
+def compile_hash_entry(var):
+    """
+    Compile a single entry of a map/geo block into the variables it may resolve to.
+
+    :param Variable var: entry taken from the value of a MapBlock/GeoBlock variable.
+    :return Variable[]|None: entry dependencies, None if the entry provides no value.
+    """
+    # nginx_name is compared instead of importing MapDirective/MapBlock/GeoBlock, circular import..
+    provider = var.provider if isinstance(var, Variable) else None
+    if not provider or provider.nginx_name != "map":
+        return None
+    if provider.dest_val is None:
+        return None
+
+    block = provider.parent
+    if not block or block.nginx_name not in ("map", "geo"):
+        return None
+
+    if block.nginx_name == "geo":
+        if provider.src_val in GEO_PARAMETERS:
+            return None
+        # ngx_http_geo_module stores values verbatim, they are not nginx scripts
+        return [Variable(name=None, value=provider.dest_val, have_script=False)]
+
+    return compile_script(provider.dest_val, ctx=provider.src_val)
 
 
 class Variable(object):
@@ -201,19 +232,12 @@ class Variable(object):
         # If the value is a list (hash block), check all values
         if isinstance(self.value, list):
             # Ensure that every map value must contain the char
+            has_default = False
             for var in self.value:
-                if (
-                    not isinstance(var, Variable)
-                    or not var.provider
-                    or var.provider.nginx_name != "map"
-                ):
-                    continue
-                if var.provider.parent.nginx_name != "map":
+                compiled_val = compile_hash_entry(var)
+                if compiled_val is None:
                     continue
 
-                compiled_val = compile_script(
-                    var.provider.dest_val, ctx=var.provider.src_val
-                )
                 found_must_contain = False
                 for dep in compiled_val:
                     if dep.must_contain(char):
@@ -221,8 +245,10 @@ class Variable(object):
                         break
                 if not found_must_contain:  # A map value doesn't need to contain the char, therefore return False
                     return False
+                if var.provider.src_val == "default":
+                    has_default = True
 
-            return True
+            return has_default
 
         # Otherwise checks literal
         return self.value and char in self.value
@@ -249,23 +275,18 @@ class Variable(object):
 
         # If the value is a list (hash block), check all values
         if isinstance(self.value, list):
+            has_default = False
             for var in self.value:
-                if (
-                    not isinstance(var, Variable)
-                    or not var.provider
-                    or var.provider.nginx_name != "map"
-                ):
-                    continue
-                if var.provider.parent.nginx_name != "map":
+                compiled_val = compile_hash_entry(var)
+                if compiled_val is None:
                     continue
 
-                compiled_val = compile_script(
-                    var.provider.dest_val, ctx=var.provider.src_val
-                )
                 if not compiled_val or not compiled_val[0].must_startswith(char):
                     return False
+                if var.provider.src_val == "default":
+                    has_default = True
 
-            return True
+            return has_default
 
         # Otherwise checks literal
         return self.value and self.value[0] == char
