@@ -15,7 +15,11 @@ class status_page_exposed(Plugin):
     directives = ["stub_status"]
     help_url = "https://gixy.io/plugins/status_page_exposed/"
 
-    UNIVERSAL_ADDRESSES = ("all", "0.0.0.0/0", "::/0")
+    UNIVERSAL_ADDRESSES = (
+        ("all", ("inet", "inet6")),
+        ("0.0.0.0/0", ("inet",)),
+        ("::/0", ("inet6",)),
+    )
 
     def _server_uses_only_unix_sockets(self, directive):
         """True if the enclosing server listens only on unix: sockets."""
@@ -59,15 +63,69 @@ class status_page_exposed(Plugin):
             scope = scope.parent
         return []
 
+    @staticmethod
+    def _listen_families(listen):
+        """Address families a single `listen` directive accepts connections from."""
+        args = [a for a in listen.args if a]
+        if not args:
+            return set()
+
+        address = args[0]
+        if address.lower().startswith("unix:"):
+            return set()
+        if address.startswith("["):
+            if any(a.lower() == "ipv6only=off" for a in args[1:]):
+                return {"inet", "inet6"}
+            return {"inet6"}
+
+        host = address.rsplit(":", 1)[0] if ":" in address else address
+        if host in ("", "*") or all(c.isdigit() or c == "." for c in host):
+            return {"inet"}
+        return {"inet", "inet6"}
+
     @classmethod
-    def _first_universal_rule(cls, rules):
+    def _reachable_families(cls, directive):
+        """Address families the enclosing server can be reached over.
+
+        A server with no `listen` gets the implicit `*:80`, which
+        ngx_http_core_server() builds as an AF_INET wildcard.
+        """
+        for parent in directive.parents:
+            if parent.name == "server":
+                listen_directives = parent.find("listen")
+                if not listen_directives:
+                    return {"inet"}
+                families = set()
+                for listen in listen_directives:
+                    families.update(cls._listen_families(listen))
+                return families
+        return {"inet", "inet6"}
+
+    @classmethod
+    def _universal_addresses(cls, directive):
+        """Rule addresses that match every client the server can accept.
+
+        ngx_http_access_rule() files `0.0.0.0/0` under the IPv4 rule list and
+        `::/0` under the IPv6 one, and ngx_http_access_handler() consults only
+        the list matching the client's family, so each is universal only where
+        the server actually accepts that family.
+        """
+        families = cls._reachable_families(directive)
+        return frozenset(
+            address
+            for address, covered in cls.UNIVERSAL_ADDRESSES
+            if families.intersection(covered)
+        )
+
+    @staticmethod
+    def _first_universal_rule(rules, universal):
         """"allow"/"deny" of the first rule matching every address, else None.
 
         ngx_http_access_inet() stops at the first matching rule, so this one
         decides the fate of every address no earlier rule matched.
         """
         for rule in rules:
-            if rule.args[0].lower() in cls.UNIVERSAL_ADDRESSES:
+            if rule.args[0].lower() in universal:
                 return (rule.name or "").lower()
         return None
 
@@ -77,7 +135,9 @@ class status_page_exposed(Plugin):
         satisfy = resolve_inherited_single(directive.parent, "satisfy")
         if satisfy is None or satisfy.args[0].lower() != "any":
             return False
-        return cls._first_universal_rule(cls._access_rules(directive)) == "allow"
+        rules = cls._access_rules(directive)
+        universal = cls._universal_addresses(directive)
+        return cls._first_universal_rule(rules, universal) == "allow"
 
     @staticmethod
     def _location_is_internal_only(directive):
@@ -91,12 +151,12 @@ class status_page_exposed(Plugin):
     def _effective_access(cls, directive):
         """Resolve effective (has_allow, has_deny_all) for this scope."""
         rules = cls._access_rules(directive)
+        universal = cls._universal_addresses(directive)
         has_allow = any(
-            (c.name or "").lower() == "allow"
-            and c.args[0].lower() not in cls.UNIVERSAL_ADDRESSES
+            (c.name or "").lower() == "allow" and c.args[0].lower() not in universal
             for c in rules
         )
-        return has_allow, cls._first_universal_rule(rules) == "deny"
+        return has_allow, cls._first_universal_rule(rules, universal) == "deny"
 
     def audit(self, directive):
         if self._server_uses_only_unix_sockets(directive):
