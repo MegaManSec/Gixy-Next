@@ -120,3 +120,7 @@ server {
 ## Additional notes
 
 This plugin only runs when a scan of full configuration is performed, i.e. when the configuration scanned includes an `http { .. }` block.
+
+An `http` `server` block with no `listen` directive at all still takes part in the check: NGINX gives it `*:80` when running as the superuser (`*:8000` otherwise), so it shares the socket with any `listen 80;` sibling. Because the scanned configuration says nothing about the user NGINX will run as, the check assumes the `*:80` case.
+
+`server` blocks are only compared within their own module, so an `http` server and a `stream` server on the same port are not reported against each other.
