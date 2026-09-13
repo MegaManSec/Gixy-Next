@@ -24,6 +24,16 @@ class proxy_pass_normalized(Plugin):
         super(proxy_pass_normalized, self).__init__(config)
         self.num_pattern = re.compile(r"\$\d+")
 
+    @staticmethod
+    def _is_conditional(rewrite, directive):
+        scopes = list(directive.parents)
+        for parent in rewrite.parents:
+            if parent.self_context:
+                return False
+            if parent.name == "if" and parent not in scopes:
+                return True
+        return False
+
     def audit(self, directive):
         parent = directive.parent
 
@@ -69,6 +79,9 @@ class proxy_pass_normalized(Plugin):
 
         for rewrite in directive.find_declarative_directives_in_scope("rewrite"):
             if rewrite.pattern == "^" and rewrite.replace.lower() == "$request_uri":
+                if self._is_conditional(rewrite, directive):
+                    rewritten = rewritten or rewrite
+                    continue
                 if path:
                     # Check for $uri or any numbered variable in the path.
                     if "$uri" in path.lower() or self.num_pattern.search(path):
