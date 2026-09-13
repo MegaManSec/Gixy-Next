@@ -1,13 +1,17 @@
+import logging
 import re
 from urllib.parse import urlparse
 
 import tldextract
 
 import gixy
+import gixy.core.sre_parse.sre_parse as sre_parse
 from gixy.core.regexp import Regexp
 from gixy.directives.block import MapBlock
 from gixy.directives.directive import AddHeaderDirective, MapDirective, SetDirective
 from gixy.plugins.plugin import Plugin
+
+LOG = logging.getLogger(__name__)
 
 _EXTRACT = tldextract.TLDExtract(
     include_psl_private_domains=True, suffix_list_urls=()
@@ -136,8 +140,13 @@ class origins(Plugin):
             else self.severity_insecure_referer
         )
 
-        regexp = Regexp(pattern, case_sensitive=case_sensitive)
-        for candidate_match in regexp.generate("`", anchored=True, max_repeat=5):
+        try:
+            regexp = Regexp(pattern, case_sensitive=case_sensitive)
+            candidates = list(regexp.generate("`", anchored=True, max_repeat=5))
+        except sre_parse.error as e:
+            LOG.warning("Failed to parse regex: %s (%s)", pattern, str(e))
+            return
+        for candidate_match in candidates:
             try:
                 candidate_match = candidate_match.encode("idna").decode()
             except UnicodeError:
