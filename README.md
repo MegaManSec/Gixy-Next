@@ -100,6 +100,7 @@ Gixy-Next can detect a wide range of NGINX security and performance misconfigura
 - [[overlapping_captures] Overlapping captures in rewrite redirect/args context](https://gixy.io/plugins/overlapping_captures/)
 - [[proxy_buffering_off] Disabling `proxy_buffering`](https://gixy.io/plugins/proxy_buffering_off/)
 - [[proxy_pass_normalized] `proxy_pass` path normalization issues](https://gixy.io/plugins/proxy_pass_normalized/)
+- [[proxy_set_header_redefinition] Redefining of proxied request headers by "proxy_set_header" directive](https://gixy.io/plugins/proxy_set_header_redefinition/)
 - [[quic_bpf_reuseport] QUIC connections silently dropped after reload](https://gixy.io/plugins/quic_bpf_reuseport/)
 - [[regex_redos] Regular expression denial of service (ReDoS)](https://gixy.io/plugins/regex_redos/)
 - [[resolver_external] Using external DNS nameservers](https://gixy.io/plugins/resolver_external/)
