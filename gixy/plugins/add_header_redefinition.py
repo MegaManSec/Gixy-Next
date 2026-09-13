@@ -1,6 +1,11 @@
 import gixy
 from gixy.plugins.plugin import Plugin
 
+FIELD_FAMILIES = (
+    ("add_header", "add_header_inherit", "header"),
+    ("add_trailer", "add_trailer_inherit", "trailer"),
+)
+
 
 class add_header_redefinition(Plugin):
     """
@@ -24,13 +29,13 @@ class add_header_redefinition(Plugin):
 
     summary = 'Nested "add_header" drops parent headers.'
     severity = gixy.severity.LOW
-    description = '"add_header" at a nested level replaces inherited headers unless `add_header_inherit merge` is in effect (nginx 1.29.3+).'
+    description = '"add_header" and "add_trailer" at a nested level replace inherited fields unless `add_header_inherit merge` / `add_trailer_inherit merge` is in effect (nginx 1.29.3+).'
     help_url = "https://gixy.io/plugins/add_header_redefinition/"
     directives = ["server", "location", "if"]
     options = {"headers": set(), "merge_reported_headers": True}
     options_help = {
-        "headers": 'Only report dropped headers from this allowlist. Case-insensitive. Comma-separated list, e.g. "x-frame-options,content-security-policy".',
-        "merge_reported_headers": "Report headers declared in higher scopes that are not inherited (but were dropped at an intermediate level).",
+        "headers": 'Only report dropped fields from this allowlist. Case-insensitive. Comma-separated list, e.g. "x-frame-options,content-security-policy".',
+        "merge_reported_headers": "Report fields declared in higher scopes that are not inherited (but were dropped at an intermediate level).",
     }
 
     def __init__(self, config):
@@ -70,12 +75,16 @@ class add_header_redefinition(Plugin):
             # Skip all not block directives
             return
 
-        current_headers = self.get_headers(directive)
-        if not current_headers:
+        for field_directive, inherit_directive, kind in FIELD_FAMILIES:
+            self._audit_family(directive, field_directive, inherit_directive, kind)
+
+    def _audit_family(self, directive, field_directive, inherit_directive, kind):
+        current_fields = self.get_fields(directive, field_directive)
+        if not current_fields:
             return
 
-        mode = self.effective_add_header_inherit_mode(directive)
-        # 'merge', parent headers are appended.
+        mode = self.effective_inherit_mode(directive, inherit_directive)
+        # 'merge', parent fields are appended.
         # 'off', inheritance is explicitly cancelled.
         if mode in ("merge", "off"):
             return
@@ -84,78 +93,93 @@ class add_header_redefinition(Plugin):
         if not parent:
             return
 
-        parent_effective = self.effective_headers(parent)
+        parent_effective = self.effective_fields(parent, field_directive, inherit_directive)
         if not parent_effective:
             return
 
         if self.merge_reported_headers:
-            # headers declared in ancestors (not including this directive)
-            declared_above = self.get_headers(parent, inherited=True)
-            # headers actually effective here
-            current_effective = self.effective_headers(directive)
+            # fields declared in ancestors (not including this directive)
+            declared_above = self.get_fields(parent, field_directive, inherited=True)
+            # fields actually effective here
+            current_effective = self.effective_fields(directive, field_directive, inherit_directive)
             diff = declared_above - current_effective
         else:
-            diff = parent_effective - current_headers
+            diff = parent_effective - current_fields
 
         if self.interesting_headers:
             diff = diff & self.interesting_headers
 
         if diff:
-            self._report_issue(directive, parent, diff)
+            self._report_issue(directive, parent, diff, field_directive, inherit_directive, kind)
 
-    def _report_issue(self, current, parent, diff):
+    def _report_issue(self, current, parent, diff, field_directive, inherit_directive, kind):
         directives = []
-        # Use the parent's scope so we pick up server-level headers and includes.
-        scope_add_headers = parent.find_imperative_directives_in_scope("add_header")
+        # Use the parent's scope so we pick up server-level fields and includes.
+        scope_fields = parent.find_imperative_directives_in_scope(field_directive)
         directives.extend(
-            d
-            for d in scope_add_headers
-            if getattr(d, "header", None) and d.header.lower() in diff
+            d for d in scope_fields if self.field_name(d) in diff
         )
-        # and always include the headers at the current and parent level
-        directives.extend(current.find("add_header"))
-        directives.extend(parent.find("add_header"))
+        # and always include the fields at the current and parent level
+        directives.extend(current.find(field_directive))
+        directives.extend(parent.find(field_directive))
 
-        directives.extend(parent.find("add_header_inherit"))
-        directives.extend(current.find("add_header_inherit"))
+        directives.extend(parent.find(inherit_directive))
+        directives.extend(current.find(inherit_directive))
 
-        is_secure_header_dropped = any(h in self.secure_headers for h in diff)
+        is_secure_header_dropped = kind == "header" and any(
+            h in self.secure_headers for h in diff
+        )
         issue_severity = (
             gixy.severity.MEDIUM if is_secure_header_dropped else self.severity
         )
 
+        summary = None
+        if kind == "trailer":
+            summary = 'Nested "add_trailer" drops parent trailers.'
+
         if self.merge_reported_headers:
-            reason = "Headers declared in higher scopes `{headers}` are not effective here.".format(
-                headers="`, `".join(sorted(diff))
+            reason = "{kind}s declared in higher scopes `{fields}` are not effective here.".format(
+                kind=kind.capitalize(), fields="`, `".join(sorted(diff))
             )
         else:
-            reason = "Parent headers `{headers}` were dropped at this level.".format(
-                headers="`, `".join(sorted(diff))
+            reason = "Parent {kind}s `{fields}` were dropped at this level.".format(
+                kind=kind, fields="`, `".join(sorted(diff))
             )
 
-        self.add_issue(directive=directives, reason=reason, severity=issue_severity)
+        self.add_issue(
+            directive=directives, summary=summary, reason=reason, severity=issue_severity
+        )
 
-    def get_headers(self, directive, inherited=False):
+    @staticmethod
+    def field_name(directive):
+        header = getattr(directive, "header", None)
+        if header is not None:
+            return header
+        if directive.args:
+            return directive.args[0].lower()
+        return None
+
+    def get_fields(self, directive, field_directive, inherited=False):
         """
-        Headers defined at this level.
-        If inherited=True, also include headers declared in the current scope (ancestors + current)
+        Fields defined at this level.
+        If inherited=True, also include fields declared in the current scope (ancestors + current)
         """
-        headers = []
+        fields = []
         if inherited:
-            headers.extend(directive.find_imperative_directives_in_scope("add_header"))
-        headers.extend(directive.find("add_header"))
+            fields.extend(directive.find_imperative_directives_in_scope(field_directive))
+        fields.extend(directive.find(field_directive))
 
-        if not headers:
+        if not fields:
             return set()
-        return {d.header.lower() for d in headers if getattr(d, "header", None)}
+        return {self.field_name(d) for d in fields if self.field_name(d)}
 
-    def effective_add_header_inherit_mode(self, directive):
+    def effective_inherit_mode(self, directive, inherit_directive):
         """
-        add_header_inherit itself is inherited "normally" (nearest definition wins).
+        The inherit directive itself is inherited "normally" (nearest definition wins).
         """
         node = directive
         while node is not None:
-            inherit_directives = node.find("add_header_inherit")
+            inherit_directives = node.find(inherit_directive)
             mode = None
             # If multiple are present at the same level, the last valid one wins.
             for d in inherit_directives:
@@ -168,20 +192,24 @@ class add_header_redefinition(Plugin):
             node = getattr(node, "parent", None)
         return "on"
 
-    def effective_headers(self, directive):
+    def effective_fields(self, directive, field_directive, inherit_directive):
         """
-        Effective header names at this level, respecting add_header_inherit mode:
-          - on    : standard behavior (if any headers here, they replace inherited; else inherit)
+        Effective field names at this level, respecting the inherit mode:
+          - on    : standard behavior (if any fields here, they replace inherited; else inherit)
           - merge : inherit + append current
-          - off   : cancel inheritance entirely (only current headers apply)
+          - off   : cancel inheritance entirely (only current fields apply)
         """
         if directive is None:
             return set()
 
-        mode = self.effective_add_header_inherit_mode(directive)
-        own = self.get_headers(directive, inherited=False)
+        mode = self.effective_inherit_mode(directive, inherit_directive)
+        own = self.get_fields(directive, field_directive, inherited=False)
         parent = getattr(directive, "parent", None)
-        inherited = self.effective_headers(parent) if parent is not None else set()
+        inherited = (
+            self.effective_fields(parent, field_directive, inherit_directive)
+            if parent is not None
+            else set()
+        )
 
         if mode == "off":
             return set(own)
