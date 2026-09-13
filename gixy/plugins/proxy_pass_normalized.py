@@ -4,7 +4,9 @@ import gixy
 from gixy.core.variable import EXTRACT_RE
 from gixy.plugins.plugin import Plugin
 
-MITIGATION_VARS = frozenset({"uri", "1", "2", "3", "4", "5", "6", "7", "8", "9"})
+MITIGATION_VARS = frozenset(
+    {"uri", "document_uri", "1", "2", "3", "4", "5", "6", "7", "8", "9"}
+)
 
 
 class proxy_pass_normalized(Plugin):
