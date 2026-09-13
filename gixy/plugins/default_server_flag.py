@@ -31,28 +31,32 @@ class default_server_flag(Plugin):
             # Single server cannot be ambiguous
             return
 
-        # Map listen socket -> list of (server_block, listen_directive, is_default)
+        # Map (module, listen socket) -> list of (server_block, listen_directive, is_default)
         listen_groups = {}
 
         for srv in server_blocks:
+            module = self._enclosing_module(srv)
             listens = srv.find("listen")
             if not listens:
-                if "*:80" not in listen_groups:
-                    listen_groups["*:80"] = []
-                listen_groups["*:80"].append((srv, srv, False))
+                # Only http gives a listen-less server an implicit socket
+                if module != "http":
+                    continue
+                listen_groups.setdefault((module, "*:80"), []).append(
+                    (srv, srv, False)
+                )
                 continue
             for listen in listens:
                 key, is_default = self._parse_listen_key_and_default(listen.args)
                 if not key:
                     # Could not parse a concrete socket
                     continue
-                if key not in listen_groups:
-                    listen_groups[key] = []
-                listen_groups[key].append((srv, listen, is_default))
+                listen_groups.setdefault((module, key), []).append(
+                    (srv, listen, is_default)
+                )
 
         # For each listen group with multiple servers and none marked default_server,
         # raise one issue per group (pointing to the first listen directive).
-        for key, entries in listen_groups.items():
+        for (_, key), entries in listen_groups.items():
             if len(entries) < 2:
                 continue
             has_default = any(is_def for (_, _, is_def) in entries)
@@ -69,6 +73,13 @@ class default_server_flag(Plugin):
                 ),
                 help_url=self.help_url,
             )
+
+    def _enclosing_module(self, server):
+        """Return the module context ('http', 'stream', 'mail') holding a server block."""
+        for parent in server.parents:
+            if parent.name in ("http", "stream", "mail"):
+                return parent.name
+        return None
 
     def _parse_listen_key_and_default(self, args):
         """
