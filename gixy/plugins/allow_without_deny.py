@@ -11,7 +11,10 @@ class allow_without_deny(Plugin):
 
     summary = "Allow directives without a deny restriction."
     severity = gixy.severity.HIGH
-    description = "Allow directives should typically be paired with a restrictive deny rule (for example, deny all;) in the same context."
+    description = (
+        "Allow directives should typically be paired with a restrictive deny rule "
+        "(for example, deny all;) in the same context."
+    )
     help_url = "https://gixy.io/plugins/allow_without_deny/"
     directives = ["allow"]
 

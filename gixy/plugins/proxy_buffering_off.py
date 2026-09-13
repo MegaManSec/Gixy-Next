@@ -10,7 +10,10 @@ class proxy_buffering_off(Plugin):
 
     summary = "Do not disable `proxy_buffering`."
     severity = gixy.severity.MEDIUM
-    description = "Disabling `proxy_buffering` can increase slow-client DoS risk by tying up upstream connections and workers."
+    description = (
+        "Disabling `proxy_buffering` can increase slow-client DoS risk by tying up "
+        "upstream connections and workers."
+    )
     help_url = "https://gixy.io/plugins/proxy_buffering_off/"
     directives = ["proxy_buffering"]
 

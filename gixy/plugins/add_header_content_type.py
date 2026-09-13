@@ -27,9 +27,10 @@ class add_header_content_type(Plugin):
         if self._has_hide_header_content_type(directive):
             return
 
-        reason = "Use `default_type {default_type};` instead of `add_header`/`more_set_headers` to set Content-Type.".format(
-            default_type=ct_value
-        )
+        reason = (
+            "Use `default_type {default_type};` instead of "
+            "`add_header`/`more_set_headers` to set Content-Type."
+        ).format(default_type=ct_value)
         self.add_issue(directive=directive, reason=reason)
 
     def _has_hide_header_content_type(self, directive):

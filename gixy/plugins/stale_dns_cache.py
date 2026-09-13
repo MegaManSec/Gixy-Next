@@ -20,8 +20,9 @@ class stale_dns_cache(Plugin):
     summary = "proxy_pass may use stale IP addresses for hostnames that are only resolved at start-up."
     severity = gixy.severity.LOW
     description = (
-        "Using proxy_pass with a static hostname (or an upstream with hostname servers without 'resolve') results in DNS "
-        "resolution only at startup, risking proxying to stale IPs. Use a variable in proxy_pass (resolver-based), or "
+        "Using proxy_pass with a static hostname (or an upstream with hostname servers "
+        "without 'resolve') results in DNS resolution only at startup, risking "
+        "proxying to stale IPs. Use a variable in proxy_pass (resolver-based), or "
         "use upstream 'server ... resolve' (nginx>=1.27.3) so TTLs are respected."
     )
     help_url = "https://gixy.io/plugins/stale_dns_cache/"
@@ -136,7 +137,11 @@ class stale_dns_cache(Plugin):
                 self.add_issue(
                     severity=gixy.severity.MEDIUM,
                     directive=directive,
-                    reason="proxy_pass uses variables, but no `resolver` is configured. Requests will fail because nginx cannot resolve the upstream at runtime.",
+                    reason=(
+                        "proxy_pass uses variables, but no `resolver` is configured. "
+                        "Requests will fail because nginx cannot resolve the upstream "
+                        "at runtime."
+                    ),
                 )
             return
 

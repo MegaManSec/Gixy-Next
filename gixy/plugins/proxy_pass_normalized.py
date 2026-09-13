@@ -70,7 +70,8 @@ class proxy_pass_normalized(Plugin):
         proxy_pass_arg = directive.arg(0)
 
         if proxy_pass_arg.startswith("$") and "/" not in proxy_pass_arg:
-            # If proxy pass destination is defined by only a variable, it is not possible to check for path normalization issues
+            # If proxy pass destination is defined by only a variable, it is not
+            # possible to check for path normalization issues
             return
 
         parsed = urlparse(proxy_pass_arg)
@@ -101,7 +102,8 @@ class proxy_pass_normalized(Plugin):
         self.add_issue(
             directive=[directive] + ([rewritten] if rewritten is not None else []),
             reason=(
-                "A path is present after the host in `proxy_pass` without using `$request_uri` and a variable (for example, `$1` or `$uri`). "
+                "A path is present after the host in `proxy_pass` without using "
+                "`$request_uri` and a variable (for example, `$1` or `$uri`). "
                 "This can lead to path decoding or double-encoding issues."
             ),
         )

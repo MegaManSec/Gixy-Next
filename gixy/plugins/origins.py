@@ -57,7 +57,11 @@ class origins(Plugin):
     supports_full_config = True
     options = {"domains": ["*"], "https_only": False, "lower_hostname": True}
     options_help = {
-        "domains": 'Comma-separated list of trusted registrable domains. Origins/referers that may match a different domain are flagged as insecure. Use "*" to skip domain allowlisting',
+        "domains": (
+            "Comma-separated list of trusted registrable domains. Origins/referers "
+            "that may match a different domain are flagged as insecure. "
+            'Use "*" to skip domain allowlisting'
+        ),
         "https_only": "Boolean. Only allow https scheme in origins/referers when true.",
         "lower_hostname": "Boolean. Normalize hostnames to lowercase prior to validation.",
     }
@@ -108,7 +112,8 @@ class origins(Plugin):
             if not parsed_url.hostname or not parsed_url.scheme:
                 # Attempt to fixup the url for the second pass
                 # e.g. 'domain.com$', 'google.com/lol', '/lol$'
-                # should become 'https://def.comdomain.com', 'https://def.comgoogle.com/lol', and 'https://def.comabc.com/lol'.
+                # should become 'https://def.comdomain.com',
+                # 'https://def.comgoogle.com/lol', and 'https://def.comabc.com/lol'.
                 if url[0] == "/":
                     url = "abc.com" + url
                 if "://" not in url:

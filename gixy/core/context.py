@@ -77,13 +77,17 @@ class Context(object):
                     result = builtins.builtin_var(name)
 
         if not result:
-            # We can try again if it's a MapDirective (ctx is set), because it may be another variable in the same http context
+            # We can try again if it's a MapDirective (ctx is set), because it may be
+            # another variable in the same http context
             if ctx and var_type == "name":
                 try:
                     result = self.variables[var_type][name]
                 except KeyError:
-                    # It may actually be another variable outside of the same http context, but we have no way to traverse up and down all contexts.
-                    # So, just create a fake variable with the same name, and the caller can use compile_script during a second pass if it wants to resolve the variable.
+                    # It may actually be another variable outside of the same http
+                    # context, but we have no way to traverse up and down all contexts.
+                    # So, just create a fake variable with the same name, and the caller
+                    # can use compile_script during a second pass if it wants to resolve
+                    # the variable.
                     import gixy.core.builtin_variables as builtins
 
                     result = builtins.fake_var(name)

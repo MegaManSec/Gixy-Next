@@ -243,7 +243,7 @@ class RawParser(object):
                     if comment_text.startswith(
                         "configuration file "
                     ) and comment_text.endswith(":"):
-                        file_path = comment_text[len("configuration file ") : -1]
+                        file_path = comment_text[len("configuration file "):-1]
                         result.append(
                             {
                                 "kind": "file_delimiter",

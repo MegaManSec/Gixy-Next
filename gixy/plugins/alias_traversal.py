@@ -20,7 +20,10 @@ class alias_traversal(Plugin):
 
     summary = "Path traversal via misconfigured alias."
     severity = gixy.severity.HIGH
-    description = "Using alias in a prefixed location that doesn't end with a directory separator could lead to path traversal vulnerability."
+    description = (
+        "Using alias in a prefixed location that doesn't end with a directory "
+        "separator could lead to path traversal vulnerability."
+    )
     help_url = "https://gixy.io/plugins/alias_traversal/"
     directives = ["alias"]
 

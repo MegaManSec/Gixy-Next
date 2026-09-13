@@ -39,7 +39,7 @@ class missing_worker_processes(Plugin):
         if self.has_directive:
             return
 
-        fake = Directive("#", ["worker_processes 1"]) # hacky way to get a directive in the output
+        fake = Directive("#", ["worker_processes 1"])  # hacky way to get a directive in the output
         fake.set_parent(root)
         root.children.append(fake)
 
