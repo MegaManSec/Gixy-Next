@@ -80,7 +80,9 @@ server {
 
 ## Additional notes
 
-- This plugin treats `allow all` as not a whitelist and does not count it as a restriction.
+- This plugin treats an `allow` covering every address (`all`, `0.0.0.0/0`, `::/0`) as not a whitelist and does not count it as a restriction.
+- `allow`/`deny` are read in order, as NGINX evaluates them: the first matching rule decides the request, so anything written after an `allow all` is dead. `allow 10.0.0.0/8; allow all; deny all;` is reported, because everyone the `/8` did not cover is let in by the `allow all` and the `deny all` never applies.
 - `allow`/`deny` are resolved with NGINX inheritance: rules set on an enclosing `server`/`http` scope protect a `stub_status` location that declares none of its own. (A location that sets its *own* `allow`/`deny` does not inherit the parent's, matching `ngx_http_access_module`, so in that case it must repeat them.)
+- An endpoint protected by `auth_basic` or `auth_request` is not reported, with one exception: under `satisfy any`, an `allow` covering every address makes the access module succeed on its own and NGINX then skips the rest of the access phase, so the authentication never runs. `satisfy any; allow all;` alongside `auth_basic` is therefore reported as exposed. The intended `trusted network OR password` shape — `satisfy any; allow 10.0.0.0/8; deny all;` with `auth_basic` — is not.
 - Servers that listen only on `unix:` sockets are ignored by this check, since they are not reachable over the network.
 - Prefer keeping the endpoint unadvertised (non-obvious path) in addition to access control, but do not rely on obscurity alone.
