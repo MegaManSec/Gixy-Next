@@ -1,4 +1,4 @@
-AUTH_DIRECTIVES = ("auth_basic", "auth_request", "auth_jwt")
+AUTH_DIRECTIVES = ("auth_basic", "auth_request", "auth_jwt", "auth_oidc")
 
 
 def is_indexed_name(name):
