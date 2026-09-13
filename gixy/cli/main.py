@@ -18,12 +18,15 @@ from gixy.formatters import get_all as formatters
 
 LOG = logging.getLogger()
 
-# Exit codes (documented contract; see --help epilog). max() precedence:
-# a more severe outcome across multiple files / diagnostics wins.
-EXIT_OK = 0  # parsed and audited cleanly, no issues found
-EXIT_FINDINGS = 1  # one or more issues were reported
-EXIT_INVALID_CONFIG = 2  # input is not valid nginx; could not be fully analyzed
-EXIT_INTERNAL_ERROR = 3  # an unexpected error in Gixy-Next (likely a bug)
+# Exit codes (documented contract; see --help epilog). max() precedence over
+# the audit outcomes: a more severe result across files / diagnostics wins.
+from gixy.cli import (  # noqa: E402
+    EXIT_FINDINGS,
+    EXIT_INTERNAL_ERROR,
+    EXIT_INVALID_CONFIG,
+    EXIT_OK,
+    EXIT_USAGE,
+)
 
 # Exit code for each diagnostic kind.
 _KIND_EXIT = {"malformed": EXIT_INVALID_CONFIG, "internal": EXIT_INTERNAL_ERROR}
@@ -170,7 +173,8 @@ def _get_cli_parser():
     parser = create_parser()
     parser.epilog = (
         "exit codes: 0 = clean (no issues); 1 = issues found; "
-        "2 = invalid/unparsable nginx config; 3 = internal error (likely a bug)."
+        "2 = invalid/unparsable nginx config; 3 = internal error (likely a bug); "
+        "4 = gixy was invoked incorrectly."
     )
     parser.add_argument(
         "nginx_files",
@@ -306,7 +310,7 @@ def main():
         if input_path == gixy.STDIN_ARG:
             if len(args.nginx_files) > 1:
                 sys.stderr.write("Expected either file paths or stdin, got both.\n")
-                sys.exit(1)
+                sys.exit(EXIT_USAGE)
 
             nginx_files.append(gixy.STDIN_ARG)
         else:
@@ -318,7 +322,7 @@ def main():
                         path=path
                     )
                 )
-                sys.exit(1)
+                sys.exit(EXIT_USAGE)
 
             nginx_files.append(path)
 
@@ -330,7 +334,7 @@ def main():
                 "l" * (len(gixy.severity.ALL) - 1)
             )
         )
-        sys.exit(1)
+        sys.exit(EXIT_USAGE)
 
     if args.tests:
         tests = [x.strip() for x in args.tests.split(",")]

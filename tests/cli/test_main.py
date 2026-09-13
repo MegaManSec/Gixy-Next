@@ -21,6 +21,7 @@ from gixy.cli.main import (
     EXIT_INTERNAL_ERROR,
     EXIT_INVALID_CONFIG,
     EXIT_OK,
+    EXIT_USAGE,
 )
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -92,10 +93,35 @@ def test_unparsable_config_exits_two(conf):
     assert "could not fully analyze" in result.stderr
 
 
-def test_missing_file_exits_one():
+def test_missing_file_is_a_usage_error():
     result = run("/nonexistent/nginx.conf")
-    assert result.returncode == 1
+    assert result.returncode == EXIT_USAGE
     assert "was not found" in result.stderr
+
+
+def test_unknown_flag_is_a_usage_error():
+    """argparse exits 2 by default, which the contract reserves for an
+    unparsable config."""
+    result = run("--no-such-flag")
+    assert result.returncode == EXIT_USAGE
+
+
+def test_too_high_severity_level_is_a_usage_error(conf):
+    result = run("-lllllll", conf(CLEAN))
+    assert result.returncode == EXIT_USAGE
+    assert "Too high level filtering" in result.stderr
+
+
+def test_stdin_mixed_with_files_is_a_usage_error(conf):
+    result = run("-", conf(CLEAN))
+    assert result.returncode == EXIT_USAGE
+    assert "got both" in result.stderr
+
+
+def test_usage_errors_are_distinct_from_findings(conf):
+    """A mistyped path must not look like 'issues found' to a CI script."""
+    assert run("/nonexistent/nginx.conf").returncode != EXIT_FINDINGS
+    assert run(conf(WITH_FINDING)).returncode == EXIT_FINDINGS
 
 
 # ---------------------------------------------------------------------------
@@ -158,8 +184,12 @@ def test_identical_diagnostics_are_reported_once(conf):
 
 def test_help_documents_exit_codes():
     result = run("--help")
-    assert "exit codes" in result.stdout
-    assert "2 = invalid" in result.stdout
+    # argparse re-wraps the epilog, so compare without regard to line breaks.
+    flat = " ".join(result.stdout.split())
+    assert "exit codes" in flat
+    assert "2 = invalid/unparsable nginx config" in flat
+    assert "3 = internal error" in flat
+    assert "4 = gixy was invoked incorrectly" in flat
 
 
 # ---------------------------------------------------------------------------
