@@ -1,13 +1,13 @@
 ---
 title: "Header Inheritance Issues"
-description: "Detects add_header usage that unintentionally drops headers due to inheritance rules. Adding a header in a nested block replaces inherited add_header values unless add_header_inherit merge is enabled (nginx 1.29.3+)."
+description: "Detects add_header and add_trailer usage that unintentionally drops fields due to inheritance rules. Adding a header in a nested block replaces inherited add_header values unless add_header_inherit merge is enabled (nginx 1.29.3+)."
 ---
 
 # [add_header_redefinition] Redefining response headers with `add_header`
 
 ## What this check looks for
 
-This plugin looks for nested contexts where `add_header` is used at a lower level and headers declared at higher levels are not effective at that lower level.
+This plugin looks for nested contexts where `add_header` is used at a lower level and headers declared at higher levels are not effective at that lower level. The same check is applied to `add_trailer`, which follows the identical inheritance rule.
 
 ## Why this is a problem
 
@@ -109,6 +109,24 @@ merge_reported_headers = false
 ### add_header_inherit
 
 Recent NGINX versions added `add_header_inherit` to adjust how `add_header` inherits across levels. If you have it available (nginx 1.29.3+), using `add_header_inherit merge;` prevents nested `add_header` blocks from wiping out headers defined at higher levels by merging inherited headers with headers defined at the current level. See the [documentation](https://nginx.org/en/docs/http/ngx_http_headers_module.html#add_header_inherit).
+
+### add_trailer
+
+`add_trailer` has the same all-or-nothing inheritance rule as `add_header`, and `add_trailer_inherit` (also nginx 1.29.3+) tunes it the same way. NGINX keeps the two sets apart, so an `add_trailer` in a nested block drops inherited trailers but leaves inherited headers alone, and an `add_header` drops inherited headers but leaves inherited trailers alone. This plugin tracks them separately and reports each drop on its own.
+
+```nginx
+server {
+    add_header  X-Frame-Options "DENY";
+    add_trailer X-Checksum "$request_id";
+
+    location /static/ {
+        # Drops X-Checksum for /static/. X-Frame-Options is still inherited.
+        add_trailer X-Served-By "$hostname";
+    }
+}
+```
+
+Dropped trailers are always reported as LOW: the secure-header list below escalates severity for response headers only, since a security header carries no weight in a trailer.
 
 ### What "dropped" means in reports
 
