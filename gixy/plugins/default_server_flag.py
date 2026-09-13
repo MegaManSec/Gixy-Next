@@ -22,6 +22,10 @@ class default_server_flag(Plugin):
     directives = []
     supports_full_config = True
 
+    # ngx_mail_core_module has no `default_server` listen parameter, and rejects
+    # two servers on one socket outright instead of picking a default.
+    MODULES_WITHOUT_DEFAULT_SERVER = ("mail",)
+
     def audit(self, directive):
         # This plugin performs checks in post_audit over full config
         return
@@ -38,6 +42,8 @@ class default_server_flag(Plugin):
 
         for srv in server_blocks:
             module = self._enclosing_module(srv)
+            if module in self.MODULES_WITHOUT_DEFAULT_SERVER:
+                continue
             listens = srv.find("listen")
             if not listens:
                 # Only http gives a listen-less server an implicit socket
