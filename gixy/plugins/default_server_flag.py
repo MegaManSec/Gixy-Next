@@ -1,3 +1,5 @@
+import ipaddress
+
 import gixy
 from gixy.plugins.plugin import Plugin
 
@@ -89,52 +91,57 @@ class default_server_flag(Plugin):
         Returns: (key, is_default) where key is a string like "*:80",
         "127.0.0.1:80", "[::]:443". If parsing fails, key is None.
         """
-        is_default = any(a.lower() in ("default_server", "default") for a in args)
+        if not args:
+            return None, False
 
-        address = None
-        port = None
+        params = [a.lower() for a in args[1:]]
+        is_default = any(p in ("default_server", "default") for p in params)
 
-        for token in args:
-            lower = token.lower()
-            if lower in ("default_server", "default"):
-                continue
-            if lower.startswith("unix:"):
-                # Not supported for ambiguity check
-                return None, is_default
-            if token.startswith("[") and "]" in token:
-                # IPv6 like [::]:443 or [::1]:80
-                addr_part = token
-                address = addr_part.split("]")[0] + "]"
-                if ":" in addr_part.split("]")[-1]:
-                    # Something like "]:443"
-                    try:
-                        port = int(addr_part.split("]:")[-1])
-                    except ValueError:
-                        pass
-                continue
-            if ":" in token:
-                # IPv4 or wildcard *:80
-                host, p = token.split(":", 1)
-                address = host if host else "*"
-                try:
-                    port = int(p)
-                except ValueError:
-                    pass
-                continue
-            if token.isdigit():
-                port = int(token)
-                # leave address as is (may be set by previous token),
-                # otherwise assume wildcard
-                continue
-            # token could be bare address; leave parsing to a later numeric port token
-
-        if port is None:
+        if args[0].lower().startswith("unix:"):
+            # Not supported for ambiguity check
             return None, is_default
-        if address is None or address == "0.0.0.0":
-            address = "*"
-        # Normalize IPv6 addresses to include brackets
-        if ":" in address and not address.startswith("["):
-            # It's likely an IPv6 without brackets (rare in nginx), keep as is
-            pass
-        key = f"{address}:{port}"
-        return key, is_default
+
+        address, port = self._split_address_port(args[0])
+        if address is None:
+            return None, is_default
+
+        return f"{address}:{port}", is_default
+
+    def _split_address_port(self, socket):
+        """
+        Split a listen socket argument into a normalized address and port.
+
+        nginx accepts "address:port", a bare "address" (port 80 is implied) or
+        a bare "port" (the wildcard address is implied).
+        """
+        if socket.startswith("["):
+            address, _, port = socket.partition("]")
+            address = self._normalize_address(address[1:])
+            port = port[1:] if port.startswith(":") else port
+        elif socket.isdigit():
+            address, port = "*", socket
+        elif socket.count(":") == 1:
+            address, _, port = socket.partition(":")
+            address = self._normalize_address(address)
+        elif ":" in socket:
+            return None, None
+        else:
+            address, port = self._normalize_address(socket), ""
+
+        if not port:
+            port = "80"
+        if not port.isdigit():
+            return None, None
+        return address, int(port)
+
+    def _normalize_address(self, address):
+        """Collapse the spellings nginx treats as one listen address."""
+        if address in ("", "*", "0.0.0.0"):
+            return "*"
+        try:
+            parsed = ipaddress.ip_address(address)
+        except ValueError:
+            return address
+        if parsed.version == 6:
+            return f"[{parsed.compressed}]"
+        return parsed.compressed
