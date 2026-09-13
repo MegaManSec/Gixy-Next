@@ -21,6 +21,9 @@ class proxy_set_header_redefinition(Plugin):
             proxy_set_header Host $host;
 
             location / {
+                proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+                proxy_set_header Host $host;
+                proxy_set_header X-Real-IP $remote_addr;
                 proxy_pass http://backend;
             }
         }
@@ -28,63 +31,58 @@ class proxy_set_header_redefinition(Plugin):
 
     summary = 'Nested "proxy_set_header" drops parent headers.'
     severity = gixy.severity.MEDIUM
-    description = (
-        '"proxy_set_header" at a nested level stips off inherited headers from parent scopes.'
-    )
+    description = '"proxy_set_header" at a nested level replaces the whole set of headers inherited from parent levels.'
     help_url = "https://gixy.io/plugins/proxy_set_header_redefinition/"
-    directives = ["location", "if"]
-
-    @staticmethod
-    def _get_proxy_set_headers(block):
-        """Return set of lowercased header names defined by proxy_set_header
-        directly inside *block*."""
-        headers = set()
-        for d in block.find("proxy_set_header", flat=True):
-            if d.args:
-                headers.add(d.args[0].lower())
-        return headers
-
-    @staticmethod
-    def _get_proxy_set_header_directives(block):
-        """Return list of proxy_set_header directives inside *block*."""
-        return block.find("proxy_set_header", flat=True)
-
-    def _effective_parent_headers(self, block):
-        """Walk up from *block* collecting effective proxy_set_header names.
-        At each ancestor, if it defines any proxy_set_header, those win and
-        we stop (nginx inheritance: nearest scope that declares any wins)."""
-        node = getattr(block, "parent", None)
-        while node is not None:
-            headers = self._get_proxy_set_headers(node)
-            if headers:
-                return headers
-            node = getattr(node, "parent", None)
-        return set()
+    directives = ["server", "location"]
 
     def audit(self, directive):
         if not directive.is_block:
             return
 
-        own = self._get_proxy_set_headers(directive)
+        own = self.get_headers(directive)
         if not own:
-            return  # no proxy_set_header defined here, inheriting normally
+            return
 
-        parent_headers = self._effective_parent_headers(directive)
-        if not parent_headers:
-            return  # no parent headers to drop
-
-        dropped = parent_headers - own
+        dropped = self.inherited_headers(directive) - own
         if not dropped:
-            return  # child explicitly re-declares all parent headers
+            return
 
-        # Collect directives for report
-        report_directives = list(self._get_proxy_set_header_directives(directive))
-        parent = getattr(directive, "parent", None)
-        if parent:
-            report_directives.extend(self._get_proxy_set_header_directives(parent))
+        self._report_issue(directive, dropped)
 
-        reason = (
-            "Headers declared in higher scopes `{headers}` are not effective here."
-        ).format(headers="`, `".join(sorted(dropped)))
+    def _report_issue(self, directive, dropped):
+        directives = self.find_headers(directive)
+        parent = directive.parent
+        while parent is not None:
+            directives.extend(
+                d for d in self.find_headers(parent) if self.header_name(d) in dropped
+            )
+            parent = parent.parent
 
-        self.add_issue(directive=report_directives, reason=reason)
+        reason = "Parent headers `{headers}` were dropped at this level.".format(
+            headers="`, `".join(sorted(dropped))
+        )
+        self.add_issue(directive=directives, reason=reason)
+
+    def inherited_headers(self, directive):
+        """
+        Headers in effect at the parent level: the nearest ancestor that declares
+        any "proxy_set_header" replaces everything declared above it.
+        """
+        parent = directive.parent
+        while parent is not None:
+            headers = self.get_headers(parent)
+            if headers:
+                return headers
+            parent = parent.parent
+        return set()
+
+    @staticmethod
+    def find_headers(block):
+        return block.find("proxy_set_header", flat=True)
+
+    @staticmethod
+    def header_name(directive):
+        return directive.args[0].lower() if directive.args else None
+
+    def get_headers(self, block):
+        return {self.header_name(d) for d in self.find_headers(block) if d.args}
