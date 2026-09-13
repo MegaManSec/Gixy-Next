@@ -1,6 +1,10 @@
 import os
+import traceback
 
 import gixy
+from gixy.core.diagnostics import Diagnostic
+from gixy.core.exceptions import InvalidConfiguration, MalformedDirective
+from gixy.directives.directive import MapDirective
 from gixy.plugins.plugin import Plugin
 
 
@@ -9,6 +13,9 @@ class PluginsManager(object):
         self.imported = False
         self.config = config
         self._plugins = []
+        # Diagnostics for plugins that hit malformed input or failed
+        # unexpectedly while auditing. Surfaced via Manager.errors / the CLI.
+        self.audit_errors = []
 
     def import_plugins(self):
         if self.imported:
@@ -76,10 +83,16 @@ class PluginsManager(object):
         return map(lambda a: a.name, self.plugins)
 
     def audit(self, directive):
+        # A map/geo entry's name is its lookup key, not a directive name, so it
+        # must not be dispatched to plugins that select by directive name: the
+        # key is attacker-chosen text that can collide with any of them.
+        is_hash_entry = isinstance(directive, MapDirective)
         for plugin in self.plugins:
-            if plugin.directives and directive.name not in plugin.directives:
+            if plugin.directives and (
+                is_hash_entry or directive.name not in plugin.directives
+            ):
                 continue
-            plugin.audit(directive)
+            self._run_plugin_safely(plugin, plugin.audit, directive, directive)
 
     def post_audit(self, root):
         """Call post_audit on plugins that support full config analysis when full config is detected."""
@@ -88,7 +101,39 @@ class PluginsManager(object):
 
         for plugin in self.plugins:
             if plugin.supports_full_config:
-                plugin.post_audit(root)
+                self._run_plugin_safely(plugin, plugin.post_audit, root, None)
+
+    def _run_plugin_safely(self, plugin, hook, arg, directive):
+        """Run a plugin hook, isolating failures so one plugin can't abort the
+        whole audit with an uncaught traceback.
+
+        A MalformedDirective / InvalidConfiguration means the input is not valid
+        nginx ("malformed"); any other exception is an unexpected failure — a
+        likely Gixy-Next bug — recorded as "internal" with a traceback so it is
+        reported rather than silently masked. Either way the audit continues.
+        """
+        try:
+            hook(arg)
+        except MalformedDirective as e:
+            self._record("malformed", plugin, e.directive or directive, str(e))
+        except InvalidConfiguration as e:
+            self._record("malformed", plugin, directive, str(e))
+        except Exception as e:
+            self._record(
+                "internal", plugin, directive,
+                "{0}: {1}".format(type(e).__name__, e),
+                tb=traceback.format_exc(),
+            )
+
+    def _record(self, kind, plugin, directive, message, tb=None):
+        self.audit_errors.append(Diagnostic(
+            kind, "audit", message,
+            directive=getattr(directive, "name", None),
+            line=getattr(directive, "line", None),
+            file=getattr(directive, "file", None),
+            plugin=plugin.name if plugin is not None else None,
+            traceback=tb,
+        ))
 
     def _is_full_config(self, root):
         """Detect if this is a full nginx config by checking for http block."""

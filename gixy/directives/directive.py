@@ -7,10 +7,16 @@ import ipaddress
 
 import tldextract
 
+from gixy.core.exceptions import MalformedDirective
 from gixy.core.regexp import Regexp
 from gixy.core.variable import Variable
 
 _TLD = tldextract.TLDExtract(include_psl_private_domains=False, suffix_list_urls=())
+
+# Sentinel distinguishing "no default supplied" from an explicit default of None
+# in Directive.arg().
+_NO_DEFAULT = object()
+_MISSING = object()
 
 
 def get_overrides():
@@ -71,6 +77,51 @@ class Directive:
     def set_parent(self, parent):
         """Set parent block for this directive"""
         self.parent = parent
+
+    def arg(self, index, default=_NO_DEFAULT):
+        """Return positional argument ``index``, like ``self.args[index]``.
+
+        Unlike direct indexing, a missing argument raises
+        :class:`~gixy.core.exceptions.MalformedDirective` (a kind of
+        ``InvalidConfiguration``) rather than ``IndexError``. Callers that
+        require an argument therefore signal "this directive is malformed
+        input" — handled gracefully by the CLI with a distinct exit code —
+        instead of crashing with a traceback. Pass ``default`` to tolerate a
+        missing argument instead of raising.
+        """
+        try:
+            return self.args[index]
+        except IndexError:
+            if default is not _NO_DEFAULT:
+                return default
+            raise MalformedDirective(
+                "Directive '{0}' is missing a required argument.".format(self.name),
+                directive=self,
+            )
+
+    def int_arg(self, index, default=_NO_DEFAULT):
+        """Return positional argument ``index`` as an int.
+
+        A missing or non-numeric argument raises
+        :class:`~gixy.core.exceptions.MalformedDirective`, so a value nginx
+        itself would reject is reported as invalid input rather than crashing
+        the audit with a ``ValueError``.
+        """
+        value = self.arg(index, _MISSING)
+        if value is _MISSING:
+            if default is not _NO_DEFAULT:
+                return default
+            raise MalformedDirective(
+                "Directive '{0}' is missing a required argument.".format(self.name),
+                directive=self,
+            )
+        try:
+            return int(value)
+        except (TypeError, ValueError):
+            raise MalformedDirective(
+                "Directive '{0}' expects a number, got {1!r}.".format(self.name, value),
+                directive=self,
+            )
 
     @property
     def parents(self):

@@ -32,7 +32,9 @@ class ssrf(Plugin):
         self.parse_uri_re = re.compile(r"(?P<scheme>[^?#/)]+://)?(?P<host>[^?#/)]+)")
 
     def audit(self, directive):
-        value = directive.args[0]
+        # proxy_pass and friends require an upstream argument; its absence is
+        # malformed input (handled gracefully), not a crash.
+        value = directive.arg(0)
         if not value:
             return
 

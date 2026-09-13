@@ -48,13 +48,15 @@ class proxy_pass_normalized(Plugin):
         if effective_location.modifier == "=":
             return
 
-        proxy_pass_args = directive.args
+        # proxy_pass requires an upstream argument; its absence is malformed
+        # input (handled gracefully), not a crash.
+        proxy_pass_arg = directive.arg(0)
 
-        if proxy_pass_args[0].startswith("$") and "/" not in proxy_pass_args[0]:
+        if proxy_pass_arg.startswith("$") and "/" not in proxy_pass_arg:
             # If proxy pass destination is defined by only a variable, it is not possible to check for path normalization issues
             return
 
-        parsed = urlparse(proxy_pass_args[0])
+        parsed = urlparse(proxy_pass_arg)
 
         host = parsed.netloc
         path = parsed.path

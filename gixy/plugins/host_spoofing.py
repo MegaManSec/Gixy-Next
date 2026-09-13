@@ -15,7 +15,8 @@ class host_spoofing(Plugin):
     directives = ["proxy_set_header"]
 
     def audit(self, directive):
-        name, value = directive.args
+        name = directive.arg(0)
+        value = directive.arg(1)
         if name.lower() != "host":
             # Not a "Host" header
             return

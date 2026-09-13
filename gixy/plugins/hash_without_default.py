@@ -1,4 +1,5 @@
 import gixy
+from gixy.core.exceptions import MalformedDirective
 from gixy.directives.block import GeoBlock, MapBlock
 from gixy.directives.directive import MapDirective
 from gixy.plugins.plugin import Plugin
@@ -17,6 +18,10 @@ class hash_without_default(Plugin):
             entries = list(directive.gather_map_directives(directive.children))
         elif isinstance(directive, GeoBlock):
             entries = list(directive.gather_geo_directives(directive.children))
+        elif not directive.is_block:
+            raise MalformedDirective(
+                "'{0}' must be a block.".format(directive.name), directive=directive
+            )
         else:
             entries = directive.children
 

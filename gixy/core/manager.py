@@ -38,6 +38,15 @@ class Manager(object):
         self.root = None
         self.config = config or Config()
         self.auditor = PluginsManager(config=self.config)
+        # Diagnostics for directives skipped while parsing; audit-phase
+        # diagnostics live on self.auditor. Both surfaced via self.errors.
+        self.parse_errors = []
+
+    @property
+    def errors(self):
+        """All diagnostics for this config (gixy.core.diagnostics.Diagnostic):
+        directives skipped during parsing plus plugin failures during auditing."""
+        return list(self.parse_errors) + list(self.auditor.audit_errors)
 
     def audit(self, file_path, file_data, is_stdin=False):
         LOG.debug("Audit config file: {fname}".format(fname=file_path))
@@ -60,6 +69,10 @@ class Manager(object):
         else:
             # Prefer path-based parsing to avoid temporary files
             self.root = parser.parse_file(file_path)
+
+        # Directives the parser had to skip because they were malformed (e.g.
+        # missing a required argument). Surfaced via self.errors for the CLI.
+        self.parse_errors = list(parser.malformed)
 
         push_context(self.root)
         self._audit_recursive(self.root.children)

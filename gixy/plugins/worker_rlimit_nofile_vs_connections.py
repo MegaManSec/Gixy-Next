@@ -27,21 +27,22 @@ class worker_rlimit_nofile_vs_connections(Plugin):
 
     def audit(self, directive):
         self.has_directive = True
-        # get worker_connections value
-        worker_connections = directive.args[0]
+        # get worker_connections value (a missing or non-numeric value is
+        # malformed input)
+        worker_connections = directive.int_arg(0)
         worker_rlimit_nofile_directive = directive.find_single_directive_in_scope(
             "worker_rlimit_nofile"
         )
         if worker_rlimit_nofile_directive:
-            worker_rlimit_nofile = worker_rlimit_nofile_directive.args[0]
-            if int(worker_rlimit_nofile) < int(worker_connections) * 2:
+            worker_rlimit_nofile = worker_rlimit_nofile_directive.int_arg(0)
+            if worker_rlimit_nofile < worker_connections * 2:
                 self.add_issue(
                     directive=[directive, worker_rlimit_nofile_directive],
                     reason="`worker_rlimit_nofile` should be at least twice `worker_connections`.",
                 )
         else:
             worker_rlimit_nofile = self.DEFAULT_WORKER_RLIMIT_NOFILE
-            if int(worker_rlimit_nofile) < int(worker_connections) * 2:
+            if worker_rlimit_nofile < worker_connections * 2:
                 self.add_issue(
                     directive=directive,
                     reason=(
@@ -60,8 +61,8 @@ class worker_rlimit_nofile_vs_connections(Plugin):
 
         worker_rlimit_nofile_directive = root.some("worker_rlimit_nofile")
         if worker_rlimit_nofile_directive and worker_rlimit_nofile_directive.args:
-            worker_rlimit_nofile = worker_rlimit_nofile_directive.args[0]
-            if int(worker_rlimit_nofile) < int(worker_connections) * 2:
+            worker_rlimit_nofile = worker_rlimit_nofile_directive.int_arg(0)
+            if worker_rlimit_nofile < worker_connections * 2:
                 self.add_issue(
                     directive=worker_rlimit_nofile_directive,
                     reason=(
@@ -73,7 +74,7 @@ class worker_rlimit_nofile_vs_connections(Plugin):
             # In the current code, this can never happen, since 1024 < 1024 is always false.
             # We keep this code around just in case we ever want to change the defaults, though.
             worker_rlimit_nofile = self.DEFAULT_WORKER_RLIMIT_NOFILE
-            if int(worker_rlimit_nofile) < int(worker_connections) * 2:
+            if worker_rlimit_nofile < worker_connections * 2:
                 self.add_issue(
                     directive=root,
                     reason=(
