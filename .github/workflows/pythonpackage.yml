@@ -12,9 +12,15 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: ['3.6', '3.7']
+        include:
+          # Pinned by digest, as the actions are: these images are frozen
+          # (both Python versions are end-of-life), so the tags never move.
+          - python-version: '3.6'
+            image: python:3.6@sha256:f8652afaf88c25f0d22354d547d892591067aa4026a7fa9a6819df9f300af6fc
+          - python-version: '3.7'
+            image: python:3.7@sha256:eedf63967cdb57d8214db38ce21f105003ed4e4d0358f02bedc057341bcf92a0
     container:
-      image: python:${{ matrix.python-version }}
+      image: ${{ matrix.image }}
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10  # v6.0.3
       - name: Install dependencies & test
