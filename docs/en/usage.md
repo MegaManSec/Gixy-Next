@@ -176,8 +176,9 @@ gixy -f json -o gixy-report.json
 | `1`  | One or more issues were reported.                                       |
 | `2`  | The input is not valid NGINX config, so it could not be fully analyzed. |
 | `3`  | An unexpected error occurred inside `gixy` — most likely a bug.         |
+| `4`  | `gixy` was invoked incorrectly (bad option, missing file).              |
 
-When several files are scanned, the highest code wins.
+When several files are scanned, the highest of codes `0`-`3` wins. Code `4` means `gixy` never got as far as analyzing anything, so it is reported on its own.
 
 Codes `2` and `3` are reported on stderr, leaving the report itself on stdout. `gixy` is a security linter rather than a configuration validator, so use `nginx -t` to check your config for syntax errors. If you hit a `3`, please [open an issue](https://github.com/MegaManSec/gixy-next/issues) — re-run with `--debug` to include the full traceback.
 

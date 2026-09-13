@@ -8,6 +8,9 @@ from configargparse import *
 from io import StringIO
 
 
+import sys
+
+from gixy.cli import EXIT_USAGE
 from gixy.core.plugins_manager import PluginsManager
 
 # used while parsing args to keep track of where they came from
@@ -144,6 +147,12 @@ class GixyHelpFormatter(HelpFormatter):
 
 class ArgsParser(ArgumentParser):
     """Custom argument parser for Gixy."""
+
+    def error(self, message):
+        """Exit with the CLI's usage code rather than argparse's default 2,
+        which the exit-code contract reserves for an unparsable nginx config."""
+        self.print_usage(sys.stderr)
+        self.exit(EXIT_USAGE, "{0}: error: {1}\n".format(self.prog, message))
 
     def get_possible_config_keys(self, action):
         """This method decides which actions can be set in a config file and
