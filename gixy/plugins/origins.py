@@ -315,14 +315,14 @@ class origins(Plugin):
                 except (TypeError, ValueError):
                     continue
             if self.insecure_set:
-                invalids = ", ".join(self.insecure_set).replace("`", "a")
+                invalids = ", ".join(sorted(self.insecure_set)).replace("`", "a")
                 reason = "Regex matches insecure `{value}` as a valid {name}.".format(
                     value=invalids, name=name
                 )
                 self.add_issue(directive=directive, reason=reason, severity=severity)
 
         if self.invalid_set:
-            invalids = '", "'.join(self.invalid_set).replace("`", "a")
+            invalids = '", "'.join(sorted(self.invalid_set)).replace("`", "a")
             reason = 'Regex matches invalid "{value}" as a valid {name}.'.format(
                 value=invalids, name=name
             )
