@@ -3,6 +3,7 @@ try:
 except ImportError:
     from functools import cached_property
 
+from gixy.core.exceptions import MalformedDirective
 from gixy.core.regexp import Regexp
 from gixy.core.variable import Variable, compile_script
 from gixy.directives.directive import Directive, MapDirective
@@ -187,7 +188,11 @@ class IfBlock(Block):
             self.operand = args[1]
             self.value = args[2]
         else:
-            raise Exception('Unknown "if" definition, args: {0!r}'.format(args))
+            # An `if` with a condition we can't interpret is malformed input,
+            # not a bug: signal it as such so it is reported gracefully.
+            raise MalformedDirective(
+                'Unknown "if" definition, args: {0!r}'.format(args), directive=self
+            )
 
     @property
     def provide_variables(self):

@@ -3,14 +3,20 @@ import glob
 import logging
 import os
 import re
+import traceback
 
-from gixy.core.exceptions import InvalidConfiguration
+from gixy.core.diagnostics import Diagnostic
+from gixy.core.exceptions import InvalidConfiguration, MalformedDirective
 from gixy.directives import block, directive
 from gixy.parser import raw_parser
 from gixy.parser.raw_parser import ParseException
 from gixy.utils.text import to_native
 
 LOG = logging.getLogger(__name__)
+
+# Block names nginx also accepts as a simple directive in some other context:
+# `server host:port;` inside `upstream`, and `include` everywhere.
+BLOCK_NAMES_VALID_AS_DIRECTIVES = frozenset({"server", "include"})
 
 
 class NginxParser(object):
@@ -24,6 +30,10 @@ class NginxParser(object):
         self._init_directives()
         self._path_stack = None
         self._active_includes = set()
+        # Diagnostic records for directives that could not be constructed:
+        # malformed input, or an unexpected internal error. Consumed via
+        # Manager.errors / the CLI.
+        self.malformed = []
 
     def parse_file(self, path, root=None, display_path=None):
         """Parse an nginx configuration file from disk.
@@ -184,7 +194,8 @@ class NginxParser(object):
                 continue
 
             if parsed_type == "include":
-                # include is handled specially
+                # include is handled specially (before the generic construction
+                # path below), so guard its argument access here too.
                 path_info = self.path_info
                 try:
                     self._resolve_include(node["args"], parent)
@@ -192,6 +203,9 @@ class NginxParser(object):
                     InvalidConfiguration
                 ):  # We can continue after error in parsed include file, I guess.
                     pass
+                except IndexError as e:
+                    # `include;` with no path is malformed input, not a crash.
+                    self._record_malformed("include", node.get("line"), e)
                 finally:
                     self._path_stack = path_info
 
@@ -232,9 +246,25 @@ class NginxParser(object):
                     continue
                 parsed_type = "hash_value"
 
-            directive_inst = self.directive_factory(
-                parsed_type, parsed_name, parsed_args
-            )
+            try:
+                directive_inst = self.directive_factory(
+                    parsed_type, parsed_name, parsed_args
+                )
+            except (InvalidConfiguration, IndexError) as e:
+                # A directive whose construction fails — typically because a
+                # required positional argument is missing (IndexError), or a
+                # block whose header is malformed — is invalid nginx, not a bug
+                # in Gixy-Next. Skip it and record it so the CLI can report a
+                # clear message with a distinct exit code instead of crashing
+                # with a traceback.
+                self._record_malformed(parsed_name, parsed_line, e)
+                continue
+            except Exception as e:
+                # Any other failure constructing a directive is unexpected and
+                # likely a bug in Gixy-Next; record it (with a traceback) so it
+                # is reported rather than silently masked, and keep going.
+                self._record_internal(parsed_name, parsed_line, e)
+                continue
             if directive_inst:
                 # RawParser emits 'raw' for *_lua_block
                 if parsed_type == "block" and node.get("raw") is not None:
@@ -246,6 +276,30 @@ class NginxParser(object):
                 directive_inst.line = parsed_line
                 directive_inst.file = self.path_info
                 parent.append(directive_inst)
+
+    def _record_malformed(self, name, line, exc):
+        """Record a directive skipped because it is malformed input."""
+        if isinstance(exc, MalformedDirective):
+            message = str(exc)
+        elif isinstance(exc, IndexError):
+            message = "Directive '{0}' is missing one or more required arguments.".format(
+                name
+            )
+        else:
+            message = str(exc) or type(exc).__name__
+        self.malformed.append(
+            Diagnostic("malformed", "parse", message, directive=name, line=line, file=self.path_info)
+        )
+
+    def _record_internal(self, name, line, exc):
+        """Record a directive skipped due to an unexpected construction error."""
+        self.malformed.append(
+            Diagnostic(
+                "internal", "parse", "{0}: {1}".format(type(exc).__name__, exc),
+                directive=name, line=line, file=self.path_info,
+                traceback=traceback.format_exc(),
+            )
+        )
 
     def directive_factory(self, parsed_type, parsed_name, parsed_args):
         klass = self._get_directive_class(parsed_type, parsed_name)
@@ -264,6 +318,30 @@ class NginxParser(object):
             return klass(parsed_name, args)
 
     def _get_directive_class(self, parsed_type, parsed_name):
+        # A name used with the wrong shape is invalid config. Rejecting it here
+        # keeps plugins from receiving a directive whose shape contradicts its
+        # name, which would otherwise surface as an internal error.
+        if (
+            parsed_type == "directive"
+            and parsed_name in self.directives["block"]
+            and parsed_name not in BLOCK_NAMES_VALID_AS_DIRECTIVES
+        ):
+            raise MalformedDirective(
+                "'{0}' is a block and cannot be used as a simple directive.".format(
+                    parsed_name
+                )
+            )
+        if (
+            parsed_type == "block"
+            and parsed_name in self.directives["directive"]
+            and parsed_name not in self.directives["block"]
+        ):
+            raise MalformedDirective(
+                "'{0}' is a simple directive and cannot be used as a block.".format(
+                    parsed_name
+                )
+            )
+
         if (
             parsed_type in self.directives
             and parsed_name in self.directives[parsed_type]

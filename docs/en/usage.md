@@ -166,6 +166,26 @@ gixy -f text -o gixy-report.txt
 gixy -f json -o gixy-report.json
 ```
 
+## Exit codes
+
+`gixy` reports the outcome of a run through its exit code:
+
+| Code | Meaning                                                                 |
+| ---- | ----------------------------------------------------------------------- |
+| `0`  | The config was analyzed and no issues were found.                       |
+| `1`  | One or more issues were reported.                                       |
+| `2`  | The input is not valid NGINX config, so it could not be fully analyzed. |
+| `3`  | An unexpected error occurred inside `gixy` — most likely a bug.         |
+
+When several files are scanned, the highest code wins.
+
+Codes `2` and `3` are reported on stderr, leaving the report itself on stdout. `gixy` is a security linter rather than a configuration validator, so use `nginx -t` to check your config for syntax errors. If you hit a `3`, please [open an issue](https://github.com/MegaManSec/gixy-next/issues) — re-run with `--debug` to include the full traceback.
+
+```shell-session
+# Treat "issues found" as a soft failure in CI, but still fail hard on a broken config
+gixy nginx.conf; [ "$?" -le 1 ] || exit 1
+```
+
 ## Debug mode
 
 If something looks off (missing includes, weird parsing, unexpected results), debug mode is your friend:

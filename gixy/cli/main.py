@@ -5,16 +5,104 @@ import copy
 import logging
 import os
 import sys
+import traceback
 
 import gixy
 from gixy.cli.argparser import create_parser
 from gixy.core.config import Config
+from gixy.core.diagnostics import Diagnostic
 from gixy.core.exceptions import InvalidConfiguration
 from gixy.core.manager import Manager as Gixy
 from gixy.core.plugins_manager import PluginsManager
 from gixy.formatters import get_all as formatters
 
 LOG = logging.getLogger()
+
+# Exit codes (documented contract; see --help epilog). max() precedence:
+# a more severe outcome across multiple files / diagnostics wins.
+EXIT_OK = 0  # parsed and audited cleanly, no issues found
+EXIT_FINDINGS = 1  # one or more issues were reported
+EXIT_INVALID_CONFIG = 2  # input is not valid nginx; could not be fully analyzed
+EXIT_INTERNAL_ERROR = 3  # an unexpected error in Gixy-Next (likely a bug)
+
+# Exit code for each diagnostic kind.
+_KIND_EXIT = {"malformed": EXIT_INVALID_CONFIG, "internal": EXIT_INTERNAL_ERROR}
+
+ISSUE_TRACKER = "https://github.com/MegaManSec/gixy-next/issues"
+
+
+def _diag_location(rec, path):
+    """Human-readable "(directive 'x', line N)" suffix for a diagnostic, if any.
+
+    When the directive lives in a different file than the one being analyzed
+    (i.e. it came from an `include`), the originating file is shown too.
+    """
+    bits = []
+    if rec.directive:
+        bits.append("directive '{0}'".format(rec.directive))
+    if rec.file and rec.file != path and rec.line:
+        bits.append("at {0}:{1}".format(rec.file, rec.line))
+    elif rec.file and rec.file != path:
+        bits.append("in {0}".format(rec.file))
+    elif rec.line:
+        bits.append("line {0}".format(rec.line))
+    return " ({0})".format(", ".join(bits)) if bits else ""
+
+
+def _emit_diagnostics(diagnostics, debug=False):
+    """Print malformed-input and internal-error diagnostics to stderr.
+
+    The formatted report stays on stdout; these go to stderr so consumers can
+    parse the report cleanly. Malformed input is framed as an input problem
+    (not a Gixy-Next bug); internal errors point at the issue tracker and show
+    full tracebacks only under --debug.
+    """
+    if not diagnostics:
+        return
+
+    # The same malformed directive can be reported by several plugins (each
+    # hits the missing argument independently); collapse identical entries.
+    seen = set()
+    unique = []
+    for path, rec in diagnostics:
+        key = (path, rec.kind, rec.directive, rec.line, rec.message)
+        if key not in seen:
+            seen.add(key)
+            unique.append((path, rec))
+
+    malformed = [(p, r) for p, r in unique if r.kind == "malformed"]
+    internal = [(p, r) for p, r in unique if r.kind == "internal"]
+
+    for path, rec in malformed:
+        sys.stderr.write(
+            "gixy: could not fully analyze {path}{loc}: {msg}\n".format(
+                path=path, loc=_diag_location(rec, path), msg=rec.message
+            )
+        )
+    if malformed:
+        sys.stderr.write(
+            "gixy is a security linter, not a configuration validator; "
+            "verify syntax with `nginx -t`.\n"
+        )
+
+    for path, rec in internal:
+        plugin = " in plugin '{0}'".format(rec.plugin) if rec.plugin else ""
+        sys.stderr.write(
+            "gixy: internal error analyzing {path}{plugin}{loc}: {msg}\n".format(
+                path=path, plugin=plugin, loc=_diag_location(rec, path), msg=rec.message
+            )
+        )
+        if debug and rec.traceback:
+            sys.stderr.write(rec.traceback)
+            if not rec.traceback.endswith("\n"):
+                sys.stderr.write("\n")
+    if internal:
+        sys.stderr.write(
+            "The above is likely a bug in gixy. Please report it at {url}{hint}.\n".format(
+                url=ISSUE_TRACKER,
+                hint="" if debug else " (re-run with --debug for full tracebacks)",
+            )
+        )
 
 
 def _init_logger(debug=False):
@@ -80,6 +168,10 @@ def _create_plugin_help(plugin_cls, opt_key, option):
 
 def _get_cli_parser():
     parser = create_parser()
+    parser.epilog = (
+        "exit codes: 0 = clean (no issues); 1 = issues found; "
+        "2 = invalid/unparsable nginx config; 3 = internal error (likely a bug)."
+    )
     parser.add_argument(
         "nginx_files",
         nargs="*",
@@ -295,9 +387,12 @@ def main():
         config.set_for(name, options)
 
     formatter = formatters()[config.output_format]()
-    failed = False
+    exit_code = EXIT_OK
+    diagnostics = []  # (path, Diagnostic) pairs, emitted to stderr at the end
     for path in nginx_files:
+        display_path = gixy.STDIN_NAME if path == gixy.STDIN_ARG else path
         with Gixy(config=config) as yoda:
+            file_diags = []
             try:
                 if path == gixy.STDIN_ARG:
                     with os.fdopen(sys.stdin.fileno(), "rb") as fdata:
@@ -305,21 +400,43 @@ def main():
                 else:
                     with open(path, mode="rb") as fdata:
                         yoda.audit(path, fdata, is_stdin=False)
-            except InvalidConfiguration:
-                failed = True
-            formatter.feed(path, yoda)
-            failed = failed or sum(yoda.stats.values()) > 0
+            except InvalidConfiguration as e:
+                # The config could not be parsed at all (e.g. a syntax error);
+                # auditing never started, so yoda.errors is empty.
+                file_diags.append(
+                    Diagnostic("malformed", "parse", str(e), file=display_path)
+                )
+            except Exception as e:
+                # Last-resort safety net for an unexpected failure that escaped
+                # the per-directive (parser) and per-plugin (dispatcher) guards.
+                # Never dump a raw traceback at the user.
+                file_diags.append(
+                    Diagnostic(
+                        "internal", "audit", "{0}: {1}".format(type(e).__name__, e),
+                        file=display_path, traceback=traceback.format_exc(),
+                    )
+                )
 
+            # Directives skipped during parsing + per-plugin audit failures.
+            file_diags.extend(yoda.errors)
+            for rec in file_diags:
+                exit_code = max(exit_code, _KIND_EXIT[rec.kind])
+                diagnostics.append((display_path, rec))
+
+            formatter.feed(path, yoda)
+            if sum(yoda.stats.values()) > 0:
+                exit_code = max(exit_code, EXIT_FINDINGS)
+
+    report = formatter.flush()
     if args.output_file:
         with open(config.output_file, "w") as f:
-            f.write(formatter.flush())
+            f.write(report)
     else:
-        print(formatter.flush())
+        print(report)
 
-    if failed:
-        # If something found - exit code must be 1, otherwise 0
-        sys.exit(1)
-    sys.exit(0)
+    _emit_diagnostics(diagnostics, debug=args.debug)
+
+    sys.exit(exit_code)
 
 
 if (
