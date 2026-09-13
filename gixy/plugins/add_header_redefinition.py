@@ -29,13 +29,23 @@ class add_header_redefinition(Plugin):
 
     summary = 'Nested "add_header" drops parent headers.'
     severity = gixy.severity.LOW
-    description = '"add_header" and "add_trailer" at a nested level replace inherited fields unless `add_header_inherit merge` / `add_trailer_inherit merge` is in effect (nginx 1.29.3+).'
+    description = (
+        '"add_header" and "add_trailer" at a nested level replace inherited fields '
+        "unless `add_header_inherit merge` / `add_trailer_inherit merge` is in effect "
+        "(nginx 1.29.3+)."
+    )
     help_url = "https://gixy.io/plugins/add_header_redefinition/"
     directives = ["server", "location", "if"]
     options = {"headers": set(), "merge_reported_headers": True}
     options_help = {
-        "headers": 'Only report dropped fields from this allowlist. Case-insensitive. Comma-separated list, e.g. "x-frame-options,content-security-policy".',
-        "merge_reported_headers": "Report fields declared in higher scopes that are not inherited (but were dropped at an intermediate level).",
+        "headers": (
+            "Only report dropped fields from this allowlist. Case-insensitive. "
+            'Comma-separated list, e.g. "x-frame-options,content-security-policy".'
+        ),
+        "merge_reported_headers": (
+            "Report fields declared in higher scopes that are not inherited "
+            "(but were dropped at an intermediate level)."
+        ),
     }
 
     def __init__(self, config):

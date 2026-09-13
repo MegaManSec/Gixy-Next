@@ -20,5 +20,8 @@ class valid_referers(Plugin):
 
     def audit(self, directive):
         if any(a.lower() in ("none", "blocked") for a in directive.args):
-            reason = "`valid_referers` includes `none` or `blocked`, treating requests without a legitimate Referer as trusted."
+            reason = (
+                "`valid_referers` includes `none` or `blocked`, treating requests "
+                "without a legitimate Referer as trusted."
+            )
             self.add_issue(directive=directive, reason=reason)

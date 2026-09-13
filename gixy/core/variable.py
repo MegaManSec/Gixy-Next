@@ -159,7 +159,9 @@ class Variable(object):
 
                 compiled_val = compile_script(
                     var.provider.dest_val, ctx=var.provider.src_val
-                )  # Doesn't work for 'map $document_uri $v { ~*^[^\r\n]+$ $document_uri; }' but nothing we can do about that.
+                )
+                # Doesn't work for 'map $document_uri $v { ~*^[^\r\n]+$ $document_uri; }'
+                # but nothing we can do about that.
                 for dep in compiled_val:
                     if dep.can_contain(char):
                         return True

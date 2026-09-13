@@ -29,7 +29,11 @@ class host_spoofing(Plugin):
             reason = "Upstream Host is set from `$http_host`, which can be attacker-controlled. Prefer `$host`."
             self.add_issue(directive=directive, reason=reason)
         elif "http_x_forwarded_host" in variables:
-            reason = "Upstream Host is set from `$http_x_forwarded_host` (X-Forwarded-Host request header), which is attacker-controlled. Prefer `$host`."
+            reason = (
+                "Upstream Host is set from `$http_x_forwarded_host` "
+                "(X-Forwarded-Host request header), which is attacker-controlled. "
+                "Prefer `$host`."
+            )
             self.add_issue(directive=directive, reason=reason)
         elif arg:
             reason = f"Upstream Host is set from query-string variable `${arg}`, which is attacker-controlled."

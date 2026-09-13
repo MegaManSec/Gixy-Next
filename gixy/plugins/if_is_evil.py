@@ -47,5 +47,8 @@ class if_is_evil(Plugin):
                 directive=directive.name
             )
             if directive.name == "rewrite":
-                reason = "Directive `rewrite` is only considered safe in `if` within `location` when the flag is `last`, `redirect`, or `permanent`."
+                reason = (
+                    "Directive `rewrite` is only considered safe in `if` within "
+                    "`location` when the flag is `last`, `redirect`, or `permanent`."
+                )
             self.add_issue(directive=directive, reason=reason)
