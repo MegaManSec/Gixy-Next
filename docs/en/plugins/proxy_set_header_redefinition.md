@@ -40,7 +40,7 @@ server {
 }
 ```
 
-Requests to `/internal` reach the backend with only `X-Forwarded-Port`, and the backend sees no client address at all.
+Requests to `/internal` reach the backend with `Host` reverted to the upstream address and `X-Forwarded-For` taken straight from the request, so the backend's account of the client is now whatever the client sent.
 
 ## Better configuration
 
@@ -143,6 +143,8 @@ merge_reported_headers = false
 ### The built-in defaults still apply
 
 NGINX always merges its own default header list on top of whatever is in effect, so `Host` and `Connection` are never left unset. Dropping `proxy_set_header Host $host;` does not remove the `Host` header, it reverts it to the default `$proxy_host`, which is the upstream address rather than the name the client asked for.
+
+Every other dropped header is not removed either. NGINX forwards the client's request headers to the upstream unless a `proxy_set_header` overrides them, so dropping `proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;` does not leave the upstream without an `X-Forwarded-For` — it hands the upstream the one the client sent. That is why a dropped header is usually worse than a missing one.
 
 ### What counts as a finding
 
