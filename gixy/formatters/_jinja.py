@@ -12,12 +12,5 @@ def load_template(name):
         lstrip_blocks=True,
         autoescape=False,
     )
-    env.filters["to_text"] = to_text_filter
+    env.filters["to_text"] = to_text
     return env.get_template(name)
-
-
-def to_text_filter(text):
-    try:
-        return text.encode("latin1").decode("utf-8")
-    except UnicodeEncodeError:
-        return to_text(text)
