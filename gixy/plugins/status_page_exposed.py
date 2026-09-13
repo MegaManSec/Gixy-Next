@@ -15,6 +15,8 @@ class status_page_exposed(Plugin):
     directives = ["stub_status"]
     help_url = "https://gixy.io/plugins/status_page_exposed/"
 
+    UNIVERSAL_ADDRESSES = ("all", "0.0.0.0/0", "::/0")
+
     def _server_uses_only_unix_sockets(self, directive):
         """True if the enclosing server listens only on unix: sockets."""
         for parent in directive.parents:
@@ -37,23 +39,45 @@ class status_page_exposed(Plugin):
         return False
 
     @staticmethod
-    def _satisfy_any_allows_all(directive):
+    def _access_rules(directive):
+        """The allow/deny rules that apply to this scope, in declaration order.
+
+        allow/deny are inherited from the nearest ancestor scope that declares
+        any of them, all-or-nothing (ngx_http_access_module): once a scope sets
+        its own allow/deny, the parent's are not inherited. So we take the
+        closest scope that declares either and stop there.
+        """
+        scope = directive.parent
+        while scope:
+            rules = [
+                c
+                for c in scope.children
+                if (c.name or "").lower() in ("allow", "deny") and c.args
+            ]
+            if rules:
+                return rules
+            scope = scope.parent
+        return []
+
+    @classmethod
+    def _first_universal_rule(cls, rules):
+        """"allow"/"deny" of the first rule matching every address, else None.
+
+        ngx_http_access_inet() stops at the first matching rule, so this one
+        decides the fate of every address no earlier rule matched.
+        """
+        for rule in rules:
+            if rule.args[0].lower() in cls.UNIVERSAL_ADDRESSES:
+                return (rule.name or "").lower()
+        return None
+
+    @classmethod
+    def _satisfy_any_allows_all(cls, directive):
         """True if `satisfy any` applies and the first universal access rule is an allow."""
         satisfy = resolve_inherited_single(directive.parent, "satisfy")
         if satisfy is None or satisfy.args[0].lower() != "any":
             return False
-        scope = directive.parent
-        while scope:
-            allow_deny = [
-                c for c in scope.children if (c.name or "").lower() in ("allow", "deny")
-            ]
-            if allow_deny:
-                for c in allow_deny:
-                    if c.args and c.args[0].lower() in ("all", "0.0.0.0/0", "::/0"):
-                        return (c.name or "").lower() == "allow"
-                return False
-            scope = scope.parent
-        return False
+        return cls._first_universal_rule(cls._access_rules(directive)) == "allow"
 
     @staticmethod
     def _location_is_internal_only(directive):
@@ -63,36 +87,16 @@ class status_page_exposed(Plugin):
                 return bool(getattr(parent, "is_internal", False))
         return False
 
-    @staticmethod
-    def _effective_access(directive):
-        """Resolve effective (has_allow, has_deny_all) for this scope.
-
-        allow/deny are inherited from the nearest ancestor scope that declares
-        any of them, all-or-nothing (ngx_http_access_module): once a scope sets
-        its own allow/deny, the parent's are not inherited. So we evaluate the
-        closest scope that declares either and stop there.
-        """
-        scope = directive.parent
-        while scope:
-            allow_deny = [
-                c for c in scope.children if (c.name or "").lower() in ("allow", "deny")
-            ]
-            if allow_deny:
-                has_allow = any(
-                    (c.name or "").lower() == "allow"
-                    and c.args
-                    and c.args[0].lower() != "all"  # "allow all" is not a whitelist
-                    for c in allow_deny
-                )
-                has_deny_all = any(
-                    (c.name or "").lower() == "deny"
-                    and c.args
-                    and c.args[0].lower() == "all"
-                    for c in allow_deny
-                )
-                return has_allow, has_deny_all
-            scope = scope.parent
-        return False, False
+    @classmethod
+    def _effective_access(cls, directive):
+        """Resolve effective (has_allow, has_deny_all) for this scope."""
+        rules = cls._access_rules(directive)
+        has_allow = any(
+            (c.name or "").lower() == "allow"
+            and c.args[0].lower() not in cls.UNIVERSAL_ADDRESSES
+            for c in rules
+        )
+        return has_allow, cls._first_universal_rule(rules) == "deny"
 
     def audit(self, directive):
         if self._server_uses_only_unix_sockets(directive):
