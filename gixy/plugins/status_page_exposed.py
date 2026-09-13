@@ -1,5 +1,5 @@
 import gixy
-from gixy.core.utils import resolve_inherited_single
+from gixy.core.utils import AUTH_DIRECTIVES, resolve_inherited_single
 from gixy.plugins.plugin import Plugin
 
 
@@ -31,8 +31,8 @@ class status_page_exposed(Plugin):
         return False
 
     def _has_inherited_auth(self, directive):
-        """True if auth_request or auth_basic is enabled at or above this scope."""
-        for name in ("auth_request", "auth_basic"):
+        """True if an authentication module is enabled at or above this scope."""
+        for name in AUTH_DIRECTIVES:
             match = resolve_inherited_single(directive.parent, name)
             if match is not None and match.args[0].lower() != "off":
                 return True
