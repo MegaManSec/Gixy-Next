@@ -41,7 +41,7 @@ Now the access policy is unambiguous: allow the private range, deny everyone els
 
 If you apply `deny all;` at a higher level (for example at `server`), and then selectively allow in a child location, that can also be valid. The important part is that the final effective policy is "allow some, deny the rest", not just "allow some".
 
-This plugin does not warn when the effective configuration is `satisfy any;` combined with an auth module (`auth_basic`, `auth_request`, or `auth_jwt`):
+This plugin does not warn when the effective configuration is `satisfy any;` combined with an auth module (`auth_basic`, `auth_request`, `auth_jwt`, or `auth_oidc`):
 
 ```nginx
 location /admin/ {

@@ -1,5 +1,5 @@
 import gixy
-from gixy.core.utils import resolve_inherited_single
+from gixy.core.utils import AUTH_DIRECTIVES, resolve_inherited_single
 from gixy.plugins.plugin import Plugin
 
 
@@ -14,8 +14,6 @@ class allow_without_deny(Plugin):
     description = "Allow directives should typically be paired with a restrictive deny rule (for example, deny all;) in the same context."
     help_url = "https://gixy.io/plugins/allow_without_deny/"
     directives = ["allow"]
-
-    AUTH_DIRECTIVES = ("auth_basic", "auth_request", "auth_jwt")
 
     def __init__(self, config):
         super(allow_without_deny, self).__init__(config)
@@ -33,7 +31,7 @@ class allow_without_deny(Plugin):
         satisfy = resolve_inherited_single(scope, "satisfy")
         if satisfy is None or satisfy.args[0].lower() != "any":
             return False
-        for name in self.AUTH_DIRECTIVES:
+        for name in AUTH_DIRECTIVES:
             auth = resolve_inherited_single(scope, name)
             if auth is not None and auth.args[0].lower() != "off":
                 return True
