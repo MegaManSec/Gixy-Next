@@ -105,7 +105,12 @@ class default_server_flag(Plugin):
         if address is None:
             return None, is_default
 
-        return f"{address}:{port}", is_default
+        key = f"{address}:{port}"
+        for datagram in ("udp", "quic"):
+            if datagram in params:
+                key = f"{key} {datagram}"
+                break
+        return key, is_default
 
     def _split_address_port(self, socket):
         """
