@@ -105,9 +105,9 @@ class status_page_exposed(Plugin):
         if self._location_is_internal_only(directive):
             return
 
-        if self._has_inherited_auth(directive) and not self._satisfy_any_allows_all(
-            directive
-        ):
+        has_auth = self._has_inherited_auth(directive)
+
+        if has_auth and not self._satisfy_any_allows_all(directive):
             return
 
         if not directive.parent:
@@ -117,6 +117,11 @@ class status_page_exposed(Plugin):
 
         if not has_allow or not has_deny_all:
             reasons = []
+            if has_auth:
+                reasons.append(
+                    "under `satisfy any` an `allow` covering every address lets "
+                    "clients through before the configured authentication runs"
+                )
             if not has_allow:
                 reasons.append("no allow directive to whitelist trusted IPs")
             if not has_deny_all:
