@@ -253,6 +253,108 @@ def test_include_transitive_cycle_is_broken(tmp_path):
     assert len(root.children) < 10
 
 
+def test_dump_include_self_cycle_is_broken():
+    """A dump file that includes itself must not recurse forever."""
+    config = '''
+# configuration file /etc/nginx/nginx.conf:
+worker_processes 1;
+include /etc/nginx/nginx.conf;
+    '''
+
+    tree = _parse(config)
+    assert isinstance(tree, Root)
+    assert len(tree.children) < 10
+    names = [c.name for c in tree.children]
+    assert 'worker_processes' in names
+
+
+def test_dump_include_mutual_cycle_is_broken():
+    """An A <-> B mutual include cycle between dump files is broken."""
+    config = '''
+# configuration file /etc/nginx/nginx.conf:
+worker_processes 1;
+include /etc/nginx/a.conf;
+
+# configuration file /etc/nginx/a.conf:
+include /etc/nginx/b.conf;
+
+# configuration file /etc/nginx/b.conf:
+internal;
+include /etc/nginx/a.conf;
+    '''
+
+    tree = _parse(config)
+    assert isinstance(tree, Root)
+    assert len(tree.children) < 10
+    names = [c.name for c in tree.children]
+    assert 'worker_processes' in names
+    assert 'internal' in names
+
+
+def test_dump_include_diamond_is_not_suppressed():
+    """A dump file included from two places is expanded at both of them."""
+    config = '''
+# configuration file /etc/nginx/nginx.conf:
+events {}
+http {
+    include /etc/nginx/conf.d/a.conf;
+    include /etc/nginx/conf.d/b.conf;
+}
+
+# configuration file /etc/nginx/conf.d/a.conf:
+server {
+    listen 8081;
+    include /etc/nginx/conf.d/common.conf;
+}
+
+# configuration file /etc/nginx/conf.d/common.conf:
+location /diamond {
+    alias /var/www/diamond/;
+}
+
+# configuration file /etc/nginx/conf.d/b.conf:
+server {
+    listen 8082;
+    include /etc/nginx/conf.d/common.conf;
+}
+    '''
+
+    tree = _parse(config)
+    http = [c for c in tree.children if c.name == 'http'][0]
+    servers = [c for c in http.children if c.name == 'server']
+    assert len(servers) == 2
+    for server in servers:
+        locations = [c for c in server.children if c.name == 'location']
+        assert [loc.args for loc in locations] == [['/diamond']]
+
+
+def test_dump_include_glob_cycle_is_broken():
+    """A glob include matching its own dump file skips only that file."""
+    config = '''
+# configuration file /etc/nginx/nginx.conf:
+events {}
+http {
+    include /etc/nginx/conf.d/*.conf;
+}
+
+# configuration file /etc/nginx/conf.d/a.conf:
+server {
+    listen 8081;
+    include /etc/nginx/conf.d/*.conf;
+}
+
+# configuration file /etc/nginx/conf.d/b.conf:
+internal;
+    '''
+
+    tree = _parse(config)
+    http = [c for c in tree.children if c.name == 'http'][0]
+    servers = [c for c in http.children if c.name == 'server']
+    assert len(servers) == 1
+    assert [c.name for c in servers[0].children] == ['listen', 'internal']
+    assert [c.name for c in http.children] == ['server', 'internal']
+
+
 def assert_config(config, expected):
     tree = _parse(config)
     assert isinstance(tree, Directive)
