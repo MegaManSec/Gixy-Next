@@ -83,6 +83,12 @@ location /1/ {
 
 A request made to `/1/2` will be the the backend server as `/special/location/1/2/folder`.
 
+## What counts as a mitigation
+
+The `rewrite ^ $request_uri;` above only protects the request if it always runs, so a rewrite nested in an `if` block does not count: when the condition is false the URI reaches `proxy_pass` normalized, and the finding still stands.
+
+The rewritten path must also carry the raw URI forward. `$uri` and `$document_uri` (the same request field) and the numbered captures `$1` to `$9` do; an unrelated variable, such as one built with `set`, does not, even where its name resembles them.
+
 ## Additional notes
 
 Be careful combining `rewrite` with a `proxy_pass` that already has a path. If you are changing the URI, keep it explicit, test with encoded input, and verify what the upstream actually receives. More information can be found in [this post](https://joshua.hu/proxy-pass-nginx-decoding-normalizing-url-path-dangerous).
