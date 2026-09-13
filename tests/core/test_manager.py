@@ -43,7 +43,7 @@ def test_map_after_server_is_visible(caplog):
 http {
     server {
         location = /.well-known/security.txt {
-            return 200 "Canonical: https://$canonical_host/security.txt";
+            add_header X-Test "Canonical: https://$canonical_host/security.txt";
         }
     }
     map $ssl_server_name $canonical_host {
@@ -58,7 +58,7 @@ def test_geo_after_server_is_visible(caplog):
     _audit("""
 http {
     server {
-        location / { return 200 $country_code; }
+        location / { add_header X-Test $country_code; }
     }
     geo $country_code {
         default ZZ;
@@ -73,7 +73,7 @@ http {
 def test_set_in_if_block_is_visible_to_sibling_location(caplog):
     _audit("""
 http { server {
-    location / { return 200 $mode; }
+    location / { add_header X-Test $mode; }
     if ($request_method = POST) { set $mode write; }
 } }
 """, caplog)
@@ -85,7 +85,7 @@ def test_chained_set_forward_ref_does_not_log(caplog):
 http { server {
     set $X "$Y/sub";
     set $Y /base;
-    location / { return 200 $X; }
+    location / { add_header X-Test $X; }
 } }
 """, caplog)
     assert _missing(caplog) == []
@@ -97,7 +97,7 @@ def test_map_status_to_error_code_after_server_is_visible(caplog):
 http {
     server {
         location = /50x.html {
-            return 200 "Error: $error_code - $request_id";
+            add_header X-Test "Error: $error_code - $request_id";
         }
     }
     map $status $error_code {
@@ -116,7 +116,7 @@ def test_set_in_one_location_does_not_leak_to_sibling(caplog):
     _audit("""
 http { server {
     location /a { set $LocalOnly x; }
-    location /b { return 200 $LocalOnly; }
+    location /b { add_header X-Test $LocalOnly; }
 } }
 """, caplog)
     assert any('LocalOnly' in r.getMessage() for r in _missing(caplog))

@@ -45,9 +45,28 @@ class http_splitting(Plugin):
             self.add_issue(directive=[directive] + var.providers, reason=reason)
 
 
+# nginx only accepts a lone `return` argument as a redirect URL when it starts
+# with one of these; its prefix check is case-sensitive (ngx_http_rewrite_return).
+REDIRECT_PREFIXES = ("http://", "https://", "$scheme")
+# ngx_http_send_response() puts the value in Location for these statuses only;
+# for every other status it is the response body.
+REDIRECT_STATUSES = ("301", "302", "303", "307", "308")
+
+
 def _get_value(directive):
     if directive.name == "proxy_pass" and len(directive.args) >= 1:
         return directive.args[0]
+    elif directive.name == "return":
+        return _get_return_location(directive)
     elif len(directive.args) >= 2:
         return directive.args[1]
+    return None
+
+
+def _get_return_location(directive):
+    args = directive.args
+    if len(args) == 1:
+        return args[0] if args[0].startswith(REDIRECT_PREFIXES) else None
+    if len(args) >= 2 and args[0] in REDIRECT_STATUSES:
+        return args[1]
     return None
