@@ -16,8 +16,9 @@ class return_bypasses_allow_deny(Plugin):
     severity = gixy.severity.HIGH
     description = (
         "The return directive is executed before allow/deny take effect in the same "
-        "context. Consider using a named location and try_files, or restructure "
-        "access control."
+        "context. Serve the response from the content phase instead (try_files, "
+        "proxy_pass, root/index); moving the return into a named location does not "
+        "help."
     )
     help_url = "https://gixy.io/plugins/return_bypasses_allow_deny/"
     directives = ["allow", "deny"]
