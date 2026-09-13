@@ -36,8 +36,14 @@ class proxy_set_header_redefinition(Plugin):
     directives = ["server", "location"]
     options = {"headers": set(), "merge_reported_headers": True}
     options_help = {
-        "headers": 'Only report dropped headers from this allowlist. Case-insensitive. Comma-separated list, e.g. "host,x-forwarded-for".',
-        "merge_reported_headers": "Report headers declared in higher scopes that are no longer sent to the upstream (but were dropped at an intermediate level).",
+        "headers": (
+            "Only report dropped headers from this allowlist. Case-insensitive. "
+            'Comma-separated list, e.g. "host,x-forwarded-for".'
+        ),
+        "merge_reported_headers": (
+            "Report headers declared in higher scopes that are no longer sent to the "
+            "upstream (but were dropped at an intermediate level)."
+        ),
     }
 
     def __init__(self, config):
