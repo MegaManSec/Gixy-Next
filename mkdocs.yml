@@ -105,6 +105,7 @@ nav:
       - plugins/overlapping_captures.md
       - plugins/proxy_buffering_off.md
       - plugins/proxy_pass_normalized.md
+      - plugins/proxy_set_header_redefinition.md
       - plugins/quic_bpf_reuseport.md
       - plugins/regex_redos.md
       - plugins/resolver_external.md
