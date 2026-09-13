@@ -45,10 +45,19 @@ class http_splitting(Plugin):
             self.add_issue(directive=[directive] + var.providers, reason=reason)
 
 
+# nginx only accepts a lone `return` argument as a redirect URL when it starts
+# with one of these; its prefix check is case-sensitive (ngx_http_rewrite_return).
+REDIRECT_PREFIXES = ("http://", "https://", "$scheme")
+
+
 def _get_value(directive):
     if directive.name == "proxy_pass" and len(directive.args) >= 1:
         return directive.args[0]
-    elif directive.name == "return" and len(directive.args) == 1 and not directive.args[0].isdigit():
+    elif (
+        directive.name == "return"
+        and len(directive.args) == 1
+        and directive.args[0].startswith(REDIRECT_PREFIXES)
+    ):
         return directive.args[0]
     elif len(directive.args) >= 2:
         return directive.args[1]
