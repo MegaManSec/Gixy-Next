@@ -205,6 +205,7 @@ If you need to tune a specific plugin, start with its documentation:
 
 - [add_header_redefinition](https://gixy.io/plugins/add_header_redefinition/)
 - [origins](https://gixy.io/plugins/origins/)
+- [proxy_set_header_redefinition](https://gixy.io/plugins/proxy_set_header_redefinition/)
 - [regex_redos](https://gixy.io/plugins/regex_redos/)
 
 ## Using a config file
