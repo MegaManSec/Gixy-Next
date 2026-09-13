@@ -106,6 +106,8 @@ Gixy-Next can detect a wide range of NGINX security and performance misconfigura
 - [[regex_redos] Regular expression denial of service (ReDoS)](https://gixy.io/plugins/regex_redos/)
 - [[resolver_external] Using external DNS nameservers](https://gixy.io/plugins/resolver_external/)
 - [[return_bypasses_allow_deny] Return directive bypasses allow/deny restrictions](https://gixy.io/plugins/return_bypasses_allow_deny/)
+- [[ssl_ecdh_curve] Post-quantum groups stop NGINX from starting on older OpenSSL](https://gixy.io/plugins/ssl_ecdh_curve/)
+- [[ssl_stapling_letsencrypt] OCSP stapling does nothing for a Let's Encrypt certificate](https://gixy.io/plugins/ssl_stapling_letsencrypt/)
 - [[ssl_stapling_without_resolver] OCSP stapling silently fails without a resolver](https://gixy.io/plugins/ssl_stapling_without_resolver/)
 - [[ssrf] Server Side Request Forgery](https://gixy.io/plugins/ssrf/)
 - [[stale_dns_cache] Outdated/stale cached DNS records used in proxy_pass](https://gixy.io/plugins/stale_dns_cache/)

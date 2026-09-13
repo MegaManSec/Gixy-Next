@@ -55,11 +55,11 @@ http {
 
 ## Better configuration
 
-Put the resolver at `http` level so every SSL server inherits it:
+Put the resolver at `http` level so every SSL server inherits it, pointing at a local or provider-internal caching resolver:
 
 ```nginx
 http {
-    resolver 1.1.1.1 8.8.8.8 valid=300s ipv6=off;
+    resolver 127.0.0.1 valid=300s ipv6=off;
     resolver_timeout 5s;
 
     ssl_stapling on;
@@ -77,6 +77,7 @@ http {
 
 ## Additional notes
 
+- Point `resolver` at a local caching resolver (`127.0.0.1`, `[::1]`) or one inside your network, not at a public DNS service. A public resolver is reachable off-path by an attacker who can spoof replies, which is what [resolver_external](resolver_external.md) reports — at HIGH severity.
 - A `resolver` declared in the same server block is also sufficient; http-level is just the most common pattern.
 - If you pre-load the stapled response via `ssl_stapling_file`, nginx uses that file directly and does not need a resolver.
 - If `ssl_stapling_responder` is set to an IP-literal URL (for example `http://192.0.2.1/ocsp`), no DNS resolution happens, so the server is not flagged. A hostname responder — or none at all, where nginx falls back to the certificate's AIA URL — still requires a resolver.
