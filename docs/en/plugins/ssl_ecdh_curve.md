@@ -31,11 +31,11 @@ This is a startup failure, not a graceful downgrade to a classical curve.
 
 Post-quantum hybrid groups arrived in **OpenSSL 3.5**. The distributions most production NGINX runs on ship older:
 
-| Distribution | OpenSSL | `X25519MLKEM768` |
-|---|---|---|
-| Debian 12 (bookworm) | 3.0 | NGINX will not start |
-| Ubuntu 24.04 LTS | 3.0 | NGINX will not start |
-| RHEL / AlmaLinux / Rocky 9 | 3.2 | NGINX will not start |
+| Distribution               | OpenSSL | `X25519MLKEM768`     |
+| -------------------------- | ------- | -------------------- |
+| Debian 12 (bookworm)       | 3.0     | NGINX will not start |
+| Ubuntu 24.04 LTS           | 3.0     | NGINX will not start |
+| RHEL / AlmaLinux / Rocky 9 | 3.2     | NGINX will not start |
 
 Check what you actually have with `openssl version`; `openssl list -tls-groups` shows the exact set the linked library accepts.
 
