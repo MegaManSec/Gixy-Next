@@ -1,0 +1,149 @@
+{% extends "base.html" %}
+
+{% block htmltitle %}
+  {% if page %}
+    {% if page.meta and page.meta.title and not page.is_homepage %}
+      <title>{{ page.meta.title }} | {{ config.site_name }}</title>
+    {% else %}
+      <title>{{ config.site_name }}</title>
+    {% endif %}
+  {% else %}
+    <title>Page Not Found | {{ config.site_name }}</title>
+  {% endif %}
+{% endblock %}
+
+{% block extrahead %}
+  {{ super() }}
+
+  {% if page %}
+  <script type="application/ld+json">
+  {% if page.is_homepage %}
+  {
+    "@context": "https://schema.org",
+    "@graph": [
+      {
+        "@type": "SoftwareApplication",
+        "@id": "{{ config.site_url }}#software",
+        "name": "Gixy-Next",
+        "alternateName": [
+          "Gixy",
+          "gixy-next"
+        ],
+        "operatingSystem": "Linux, macOS",
+        "applicationCategory": "SecurityApplication",
+        "description": "{{ config.site_description }}",
+        "url": "{{ config.site_url }}",
+        "downloadUrl": "https://pypi.org/project/Gixy-Next/",
+        "installUrl": "{{ config.site_url }}usage/",
+        "releaseNotes": "https://github.com/MegaManSec/Gixy-Next/releases",
+        "softwareVersion": "{{ config.extra.gixy_version }}",
+        "softwareRequirements": "Python 3.6 or later",
+        "programmingLanguage": "Python",
+        "isAccessibleForFree": true,
+        "license": "https://www.mozilla.org/en-US/MPL/2.0/",
+        "sameAs": [
+          "https://github.com/MegaManSec/Gixy-Next",
+          "https://pypi.org/project/Gixy-Next/"
+        ],
+        "author": { "@id": "{{ config.site_url }}#author" },
+        "offers": {
+          "@type": "Offer",
+          "price": "0.00",
+          "priceCurrency": "USD"
+        }
+      },
+      {
+        "@type": "WebSite",
+        "@id": "{{ config.site_url }}#website",
+        "name": "Gixy-Next",
+        "url": "{{ config.site_url }}",
+        "description": "{{ config.site_description }}",
+        "about": { "@id": "{{ config.site_url }}#software" },
+        "publisher": { "@id": "{{ config.site_url }}#author" }
+      },
+      {
+        "@type": "Person",
+        "@id": "{{ config.site_url }}#author",
+        "name": "Joshua Rogers",
+        "url": "https://joshua.hu/",
+        "sameAs": [
+          "https://github.com/MegaManSec",
+          "https://www.linkedin.com/in/joshua-alexander-rogers/"
+        ]
+      }
+    ]
+  }
+  {% else %}
+  {
+    "@context": "https://schema.org",
+    "@type": "TechArticle",
+    "headline": "{{ page.title }} | Gixy Documentation",
+    "description": "{% if page.meta and page.meta.description %}{{ page.meta.description }}{% else %}Documentation and security hardening guide for Gixy-Next / Gixy NGINX scanner.{% endif %}",
+    "articleSection": "Documentation",
+    "url": "{{ page.canonical_url }}",
+    "author": {
+      "@type": "Person",
+      "name": "Joshua Rogers",
+      "url": "https://joshua.hu/"
+    },
+    "isPartOf": {
+      "@type": "WebSite",
+      "@id": "{{ config.site_url }}#website",
+      "name": "Gixy-Next",
+      "url": "{{ config.site_url }}"
+    }
+  }
+  {% endif %}
+  </script>
+  {% endif %}
+
+  <meta property="og:site_name" content="Gixy-Next">
+  <meta property="og:type" content="website">
+  <meta property="og:image" content="https://gixy.io/imgs/gixy-social.jpg" />
+  <meta property="og:image:width" content="1200" />
+  <meta property="og:image:height" content="630" />
+  <meta property="og:image:type" content="image/jpeg" />
+  <meta property="og:image:alt" content="Gixy-Next: NGINX Security Scanner & Configuration Hardening" />
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:image" content="https://gixy.io/imgs/gixy-social.jpg">
+
+
+
+  {% if page %}
+    {% if page.title and not page.is_homepage %}
+      <meta property="og:title" content="{{ page.title }} | {{ config.site_name }}">
+    {% else %}
+      <meta property="og:title" content="{{ config.site_name }}">
+    {% endif %}
+
+    {% if page.canonical_url %}
+      <meta property="og:url" content="{{ page.canonical_url }}">
+    {% else %}
+      <meta property="og:url" content="{{ config.site_url }}{{ page.url }}">
+    {% endif %}
+
+    {% if page.meta and page.meta.description %}
+      <meta property="og:description" content="{{ page.meta.description }}">
+    {% else %}
+      <meta property="og:description" content="{{ config.site_description }}">
+    {% endif %}
+
+  {% else %}
+    <meta property="og:title" content="Page Not Found | {{ config.site_name }}">
+    <meta property="og:description" content="The page you are looking for does not exist.">
+  {% endif %}
+
+  <meta name="robots" content="index, follow">
+  <meta name="apple-mobile-web-app-title" content="Gixy-Next" />
+
+  <link rel="icon" href="https://gixy.io/favicon.ico" sizes="any">
+  <link rel="icon" type="image/png" href="https://gixy.io/favicon-32x32.png" sizes="32x32">
+  <link rel="icon" type="image/png" href="https://gixy.io/favicon-16x16.png" sizes="16x16">
+  <link rel="icon" type="image/png" href="https://gixy.io/favicon-96x96.png" sizes="96x96">
+  <link rel="icon" type="image/svg+xml" href="https://gixy.io/favicon.svg">
+  <link rel="apple-touch-icon" sizes="180x180" href="https://gixy.io/apple-touch-icon.png">
+  <link rel="manifest" href="https://gixy.io/site.webmanifest">
+  <link rel="icon" type="image/png" sizes="192x192" href="https://gixy.io/web-app-manifest-192x192.png">
+  <link rel="icon" type="image/png" sizes="512x512" href="https://gixy.io/web-app-manifest-512x512.png">
+
+{% endblock %}
