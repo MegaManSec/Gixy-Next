@@ -87,6 +87,7 @@ Gixy-Next can detect a wide range of NGINX security and performance misconfigura
 - [[allow_without_deny] Allow specified without deny](https://gixy.io/plugins/allow_without_deny/)
 - [[default_server_flag] Missing default_server flag](https://gixy.io/plugins/default_server_flag/)
 - [[error_log_off] `error_log` set to `off`](https://gixy.io/plugins/error_log_off/)
+- [[filesystem_root_exposure] Filesystem root used as a document root](https://gixy.io/plugins/filesystem_root_exposure/)
 - [[hash_without_default] Missing default in hash blocks](https://gixy.io/plugins/hash_without_default/)
 - [[host_spoofing] Request's Host header forgery](https://gixy.io/plugins/host_spoofing/)
 - [[http2_misdirected_request] Missing HTTP/2 misdirected-request safeguard](https://gixy.io/plugins/http2_misdirected_request/)
