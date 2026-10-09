@@ -92,6 +92,7 @@ nav:
       - plugins/allow_without_deny.md
       - plugins/default_server_flag.md
       - plugins/error_log_off.md
+      - plugins/filesystem_root_exposure.md
       - plugins/hash_without_default.md
       - plugins/host_spoofing.md
       - plugins/http2_misdirected_request.md
