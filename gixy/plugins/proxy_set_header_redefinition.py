@@ -68,6 +68,16 @@ class proxy_set_header_redefinition(Plugin):
             "x-forwarded-proto",
             "x-real-ip",
         ]
+        # Values nginx itself uses for these headers (Connection since 1.29.7);
+        # an empty value means the header is not sent
+        self.nginx_default_headers = {
+            "connection": "",
+            "expect": "",
+            "host": "$proxy_host",
+            "keep-alive": "",
+            "te": "",
+            "upgrade": "",
+        }
         self.merge_reported_headers = self.config.get("merge_reported_headers")
 
     def audit(self, directive):
@@ -96,7 +106,9 @@ class proxy_set_header_redefinition(Plugin):
         parent = directive.parent
         while parent is not None:
             dropped_directives.extend(
-                d for d in self.find_headers(parent) if self.header_name(d) in dropped
+                d
+                for d in self.find_headers(parent)
+                if self.header_name(d) in dropped and not self.is_nginx_default(d)
             )
             parent = parent.parent
 
@@ -129,7 +141,7 @@ class proxy_set_header_redefinition(Plugin):
         headers = set()
         parent = directive.parent
         while parent is not None:
-            headers |= self.get_headers(parent)
+            headers |= self.get_headers(parent, skip_nginx_defaults=True)
             parent = parent.parent
         return headers
 
@@ -140,9 +152,8 @@ class proxy_set_header_redefinition(Plugin):
         """
         parent = directive.parent
         while parent is not None:
-            headers = self.get_headers(parent)
-            if headers:
-                return headers
+            if self.get_headers(parent):
+                return self.get_headers(parent, skip_nginx_defaults=True)
             parent = parent.parent
         return set()
 
@@ -158,5 +169,13 @@ class proxy_set_header_redefinition(Plugin):
     def is_blanked(directive):
         return len(directive.args) > 1 and not directive.args[1]
 
-    def get_headers(self, block):
-        return {self.header_name(d) for d in self.find_headers(block) if d.args}
+    def is_nginx_default(self, directive):
+        default = self.nginx_default_headers.get(self.header_name(directive))
+        return len(directive.args) > 1 and directive.args[1].lower() == default
+
+    def get_headers(self, block, skip_nginx_defaults=False):
+        return {
+            self.header_name(d)
+            for d in self.find_headers(block)
+            if d.args and not (skip_nginx_defaults and self.is_nginx_default(d))
+        }
