@@ -41,8 +41,8 @@ class proxy_set_header_redefinition(Plugin):
             'Comma-separated list, e.g. "host,x-forwarded-for".'
         ),
         "merge_reported_headers": (
-            "Report headers declared in higher scopes that are no longer sent to the "
-            "upstream (but were dropped at an intermediate level)."
+            "Report headers declared in higher scopes that are not inherited "
+            "(but were dropped at an intermediate level)."
         ),
     }
 
@@ -111,7 +111,7 @@ class proxy_set_header_redefinition(Plugin):
         )
 
         if self.merge_reported_headers:
-            reason = "Headers declared in higher scopes `{headers}` are not sent to the upstream here.".format(
+            reason = "Headers declared in higher scopes `{headers}` are not effective here.".format(
                 headers="`, `".join(sorted(dropped))
             )
         else:
