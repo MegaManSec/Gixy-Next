@@ -1,34 +1,65 @@
 from urllib.parse import urlparse
 
 import gixy
-from gixy.core.variable import EXTRACT_RE
+from gixy.core.variable import compile_script
 from gixy.plugins.plugin import Plugin
 
-MITIGATION_VARS = frozenset(
-    {"uri", "document_uri", "1", "2", "3", "4", "5", "6", "7", "8", "9"}
-)
+DECODED_PATH_VARS = frozenset({"uri", "document_uri"})
 
 
 class proxy_pass_normalized(Plugin):
     r"""
-    This plugin detects if there is any path component (slash or more)
-    after the host in a proxy_pass directive.
-    Example flagged directives:
-        proxy_pass http://backend/;
-        proxy_pass http://backend/foo/bar;
+    Insecure examples:
+        location /api {
+            proxy_pass http://backend/v1/;
+        }
+
+        location ~ ^/img/(.*\.png)$ {
+            proxy_pass http://backend/$1;
+        }
+
+        location /1/ {
+            rewrite ^ $request_uri;
+            rewrite ^/1(/.*) $1 break;
+            return 400;
+            proxy_pass http://backend;
+        }
     """
 
-    summary = "proxy_pass path normalization issues."
+    summary = "proxy_pass can send an unintended path upstream."
     severity = gixy.severity.MEDIUM
-    description = "A path (beginning with a slash) after the host in proxy_pass leads to unexpected encoding."
+    description = (
+        "The path `proxy_pass` sends upstream can differ from the one NGINX matched when the location and "
+        "the `proxy_pass` URI disagree on a trailing slash, when `$uri` or a regex capture is sent decoded "
+        "and unescaped, or when a raw path from `rewrite ^ $request_uri` is escaped twice."
+    )
     help_url = "https://gixy.io/plugins/proxy_pass_normalized/"
     directives = ["proxy_pass"]
 
-    @staticmethod
-    def _has_mitigation_variable(script):
-        return any(
-            name.strip("{}").lower() in MITIGATION_VARS
-            for name in EXTRACT_RE.findall(script)
+    @classmethod
+    def _carries_decoded_path(cls, var):
+        provider = var.provider
+        if provider is None:
+            return var.name in DECODED_PATH_VARS
+        if provider.name in ("location", "rewrite"):
+            return True
+        if provider.name == "if":
+            return provider.variable.lstrip("$") in DECODED_PATH_VARS
+        if provider.name == "map":
+            return provider.source.lstrip("$") in DECODED_PATH_VARS
+        if provider.name == "set":
+            # nginx re-escapes numbered captures copied by `set`, but not named ones
+            return any(
+                cls._carries_decoded_path(dep)
+                for dep in var.depends or ()
+                if not isinstance(dep.name, int)
+            )
+        return False
+
+    @classmethod
+    def _sends_decoded_path(cls, var):
+        return cls._carries_decoded_path(var) and any(
+            var.can_contain(c) for c in "?#%"
         )
 
     @staticmethod
@@ -83,6 +114,12 @@ class proxy_pass_normalized(Plugin):
             host = path_parts[0]
             path = path_parts[1] if len(path_parts) > 1 else ""
 
+        path_vars = [v for v in compile_script(path) if v.name]
+        host_vars = [v for v in compile_script(host) if v.name]
+        decoded = any(self._sends_decoded_path(v) for v in path_vars) or any(
+            self._sends_decoded_path(v) and v.can_contain("/") for v in host_vars
+        )
+
         rewritten = None
 
         for rewrite in directive.find_declarative_directives_in_scope("rewrite"):
@@ -90,20 +127,57 @@ class proxy_pass_normalized(Plugin):
                 if self._is_conditional(rewrite, directive):
                     rewritten = rewritten or rewrite
                     continue
-                # Check for $uri or any numbered variable in the path.
-                if self._has_mitigation_variable(path if path else host):
+                if decoded:
                     return
                 rewritten = rewrite
                 break
 
-        if not path and not rewritten:
+        self._report(directive, effective_location, path, host_vars, decoded, rewritten)
+
+    def _report(self, directive, location, path, host_vars, decoded, rewritten):
+        issue_directives = [directive] + ([rewritten] if rewritten is not None else [])
+        if decoded:
+            self.add_issue(
+                directive=issue_directives,
+                severity=gixy.severity.MEDIUM,
+                reason=(
+                    "The `proxy_pass` URI is built from the decoded request path, which is sent "
+                    "without being escaped again, so `%3F` reaches the upstream as `?`."
+                ),
+            )
+        elif rewritten is not None:
+            if "$" not in path and not any(v.can_contain("/") for v in host_vars):
+                self.add_issue(
+                    directive=issue_directives,
+                    severity=gixy.severity.LOW,
+                    reason=(
+                        "`rewrite ^ $request_uri` sets the URI to the raw request path, which "
+                        "`proxy_pass` escapes again, so `%2F` reaches the upstream as `%252F`."
+                    ),
+                )
+        elif path and "$" not in directive.arg(0) and directive.parent is location:
+            self._audit_uri_part(directive, location, path)
+
+    def _audit_uri_part(self, directive, location, uri):
+        if location.modifier not in (None, "^~") or location.path.startswith("@"):
+            return
+        if location.path.endswith("/") == uri.endswith("/"):
             return
 
+        if uri.endswith("/"):
+            severity = gixy.severity.MEDIUM
+            reason = (
+                "Location `{loc}` has no trailing slash but the `proxy_pass` URI `{uri}` does, "
+                "so `{loc}../x` is sent upstream as `{uri}../x`."
+            )
+        else:
+            severity = gixy.severity.LOW
+            reason = (
+                "Location `{loc}` ends with a slash but the `proxy_pass` URI `{uri}` does not, "
+                "so `{loc}x` is sent upstream as `{uri}x`."
+            )
         self.add_issue(
-            directive=[directive] + ([rewritten] if rewritten is not None else []),
-            reason=(
-                "A path is present after the host in `proxy_pass` without using "
-                "`$request_uri` and a variable (for example, `$1` or `$uri`). "
-                "This can lead to path decoding or double-encoding issues."
-            ),
+            directive=directive,
+            severity=severity,
+            reason=reason.format(loc=location.path, uri=uri),
         )
