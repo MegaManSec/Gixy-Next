@@ -97,3 +97,25 @@ def test_root():
     assert directive.provide_variables
 
     assert directive.path == '/var/www/html'
+
+
+def test_str_quotes_args():
+    config = 'add_header Content-Security-Policy "default-src \'self\'";'
+
+    directive = _get_parsed(config)
+    assert str(directive) == 'add_header Content-Security-Policy "default-src \'self\'";'
+
+    directive = _get_parsed('proxy_set_header Connection "";')
+    assert str(directive) == 'proxy_set_header Connection "";'
+
+    directive = _get_parsed(r'''add_header X-Foo "it's \"a\" b";''')
+    assert str(directive) == r'''add_header X-Foo "it's \"a\" b";'''
+
+    directive = _get_parsed(r'''return 200 "a\\\"b c";''')
+    assert str(directive) == r'''return 200 "a\\\"b c";'''
+
+    directive = _get_parsed('add_header X-Foo "#fff";')
+    assert str(directive) == 'add_header X-Foo "#fff";'
+
+    directive = _get_parsed('proxy_pass http://${backend};')
+    assert str(directive) == 'proxy_pass http://${backend};'

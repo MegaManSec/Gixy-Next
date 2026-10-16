@@ -6,7 +6,7 @@ except ImportError:
 from gixy.core.exceptions import MalformedDirective
 from gixy.core.regexp import Regexp
 from gixy.core.variable import Variable, compile_script
-from gixy.directives.directive import Directive, MapDirective
+from gixy.directives.directive import Directive, MapDirective, quote_arg
 
 
 def get_overrides():
@@ -90,7 +90,9 @@ class Block(Directive):
                 yield from child.find_all_contexts_of_type(context_type)
 
     def __str__(self):
-        return "{name} {args} {{".format(name=self.name, args=" ".join(self.args))
+        return "{name} {args} {{".format(
+            name=self.name, args=" ".join(quote_arg(a) for a in self.args)
+        )
 
 
 class Root(Block):
@@ -199,7 +201,9 @@ class IfBlock(Block):
         return self.operand in ("~", "~*", "!~", "!~*") and bool(self.value)
 
     def __str__(self):
-        return "{name} ({args}) {{".format(name=self.name, args=" ".join(self.args))
+        return "{name} ({args}) {{".format(
+            name=self.name, args=" ".join(quote_arg(a) for a in self.args)
+        )
 
     @property
     def is_regex(self):
@@ -239,7 +243,7 @@ class IncludeBlock(Block):
         self.file_path = args[0]
 
     def __str__(self):
-        return "include {0};".format(self.file_path)
+        return "include {0};".format(quote_arg(self.file_path))
 
 
 class MapBlock(Block):
@@ -324,7 +328,9 @@ class MapBlock(Block):
         ]
 
     def __str__(self):
-        return "{0} {1} {2} {{".format(self.nginx_name, self.args[0], self.args[1])
+        return "{0} {1} {2} {{".format(
+            self.nginx_name, quote_arg(self.args[0]), quote_arg(self.args[1])
+        )
 
 
 class GeoBlock(Block):
@@ -389,4 +395,6 @@ class GeoBlock(Block):
         ]
 
     def __str__(self):
-        return "{0} {1} {{".format(self.nginx_name, " ".join(self.args))
+        return "{0} {1} {{".format(
+            self.nginx_name, " ".join(quote_arg(a) for a in self.args)
+        )

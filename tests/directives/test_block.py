@@ -327,3 +327,38 @@ def test_content_by_lua_block_preserves_raw():
     assert getattr(lua_block, 'raw', None) is not None
     assert len(lua_block.raw) == 1
     assert 'ngx.say("hi")' in lua_block.raw[0]
+
+
+def test_block_str_quotes_args():
+    config = '''
+if ($http_some = "") {
+}
+    '''
+
+    directive = _get_parsed(config)
+    assert str(directive) == 'if ($http_some = "") {'
+
+    config = '''
+map $some_var $some_other_var {
+    default "";
+}
+    '''
+
+    directive = _get_parsed(config)
+    assert str(directive.children[0]) == 'default "";'
+
+    config = '''
+location ~ "^/a{2}$" {
+}
+    '''
+
+    directive = _get_parsed(config)
+    assert str(directive) == 'location ~ "^/a{2}$" {'
+
+    config = '''
+map "$request_method $uri" $some_var {
+}
+    '''
+
+    directive = _get_parsed(config)
+    assert str(directive) == 'map "$request_method $uri" $some_var {'

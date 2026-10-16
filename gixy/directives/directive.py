@@ -4,6 +4,7 @@ except ImportError:
     from functools import cached_property
 
 import ipaddress
+import re
 
 import tldextract
 
@@ -18,6 +19,8 @@ _TLD = tldextract.TLDExtract(include_psl_private_domains=False, suffix_list_urls
 _NO_DEFAULT = object()
 _MISSING = object()
 
+_BRACED_VARIABLE_RE = re.compile(r"\$\{\w+\}")
+
 
 def get_overrides():
     """Get a list of all directives that override the default behavior"""
@@ -31,6 +34,18 @@ def get_overrides():
 
         result[klass.nginx_name] = klass
     return result
+
+
+def quote_arg(arg):
+    """Quote an argument that nginx would not read back as the same single token."""
+    unbraced = _BRACED_VARIABLE_RE.sub("", arg)
+    if (
+        arg
+        and arg[0] not in "#'\""
+        and not any(c.isspace() or c in ";{}" for c in unbraced)
+    ):
+        return arg
+    return '"' + re.sub(r'(\\*)"', lambda m: m.group(1) * 2 + '\\"', arg) + '"'
 
 
 def is_ipv6(host, strip_brackets=True, is_local=False):
@@ -183,7 +198,7 @@ class Directive:
         return None
 
     def __str__(self):
-        return f"{self.name} {' '.join(self.args)};"
+        return f"{self.name} {' '.join(quote_arg(a) for a in self.args)};"
 
 
 class AddHeaderDirective(Directive):
@@ -439,9 +454,9 @@ class MapDirective(Directive):
             self.regex = Regexp(pattern, case_sensitive=cs)
 
     def __str__(self):
-        map_str = self.src_val
-        if self.dest_val:
-            map_str += f" {self.dest_val}"
+        map_str = quote_arg(self.src_val)
+        if self.dest_val is not None:
+            map_str += f" {quote_arg(self.dest_val)}"
         map_str += ";"
         return map_str
 
