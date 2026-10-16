@@ -7,13 +7,13 @@ description: "Detects proxy_set_header usage that unintentionally drops request 
 
 ## What this check looks for
 
-This plugin looks for nested contexts where `proxy_set_header` is used at a lower level and headers declared at higher levels are no longer sent to the upstream.
+This plugin looks for nested contexts where `proxy_set_header` is used at a lower level and headers declared at higher levels are no longer effective.
 
 ## Why this is a problem
 
 `proxy_set_header` follows an all-or-nothing inheritance rule: the header list is inherited from the previous level only if there are no `proxy_set_header` directives at the current level. As soon as you set any header in a nested block, every header defined above it is dropped.
 
-This is the same trap as [`add_header`](https://gixy.io/plugins/add_header_redefinition/), but the consequences land on the upstream instead of the client. The headers that usually end up missing are the ones a backend relies on for correctness and security: `Host`, `X-Forwarded-For`, `X-Forwarded-Proto`, or an `Authorization` header for an internal API.
+This is the same trap as [`add_header`](https://gixy.io/plugins/add_header_redefinition/), but the consequences land on the upstream instead of the client. The headers that usually end up dropped are the ones a backend relies on for correctness and security: `Host`, `X-Forwarded-For`, `X-Forwarded-Proto`, or an `Authorization` header for an internal API.
 
 It also silently re-opens header spoofing. A common hardening pattern is to blank out a header so that a client cannot forge it:
 
@@ -115,7 +115,7 @@ headers = host,x-forwarded-for
 
 ### merge_reported_headers
 
-By default, the plugin reports headers declared in higher scopes that are not sent to the upstream from the flagged block. This can include headers that were dropped at an intermediate scope (and remain missing further down).
+By default, the plugin reports headers declared in higher scopes that are not effective at the flagged block. This can include headers that were dropped at an intermediate scope (and remain dropped further down).
 
 If you prefer stricter "dropped at this level" reporting, you can disable this behavior so the plugin only compares against the header list inherited from the nearest ancestor that declares one.
 
@@ -152,11 +152,11 @@ The plugin only reports a block when something was actually inherited and is act
 
 ### What "dropped" means in reports
 
-By default, this plugin reports headers that were declared in higher scopes but are not sent to the upstream from the flagged block.
+By default, this plugin reports headers that were declared in higher scopes but are not effective at the flagged block.
 
-In practice, that usually means the headers were dropped by the `proxy_set_header` directives inside the flagged block. However, in some configurations a header can be dropped earlier (at an intermediate scope) and remain missing further down.
+In practice, that usually means the headers were dropped by the `proxy_set_header` directives inside the flagged block. However, in some configurations a header can be dropped earlier (at an intermediate scope) and remain dropped further down.
 
-If you see a report where the flagged block never inherited a header in the first place, that is expected with the default behavior: the plugin is telling you "this header is declared somewhere above, but it is not sent to the upstream here".
+If you see a report where the flagged block never inherited a header in the first place, that is expected with the default behavior: the plugin is telling you "this header is declared somewhere above, but it is not effective here".
 
 ### How severity is determined
 
