@@ -9,6 +9,8 @@ description: "Detects return (and redirecting rewrite directives) placed alongsi
 
 This plugin warns when `return` — or a `rewrite` that emits a redirect — appears in the same context as `allow`/`deny`. A `rewrite` emits a redirect when it carries a `permanent` (301) or `redirect` (302) flag, and also — regardless of flag — when its replacement is an absolute URL starting with `http://`, `https://`, or `$scheme`.
 
+A `return` with an error status (`400` or above) and no body text is not reported unless an `error_page` lists that status, since on its own it only produces NGINX's error page.
+
 ## Why this is a problem
 
 `return` — and a redirecting `rewrite` — run in the rewrite phase and emit a response immediately. Access controls (`allow`/`deny`) are evaluated later, in the access phase. That means such a directive placed next to access rules can effectively ignore them, even if the config looks like it should be restricted. (A `rewrite ... last` or `rewrite ... break` whose replacement is a plain URI keeps processing toward the access phase, so it is *not* flagged. With an absolute-URL replacement, however, NGINX redirects immediately even under `last` or `break`.)
