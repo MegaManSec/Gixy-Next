@@ -142,13 +142,15 @@ merge_reported_headers = false
 
 ### The built-in defaults still apply
 
-NGINX always merges its own default header list on top of whatever is in effect, so `Host` and `Connection` are never left unset. Dropping `proxy_set_header Host $host;` does not remove the `Host` header, it reverts it to the default `$proxy_host`, which is the upstream address rather than the name the client asked for.
+NGINX always merges its own default header list on top of whatever is in effect, so `Host` is never left unset. Dropping `proxy_set_header Host $host;` does not remove the `Host` header, it reverts it to the default `$proxy_host`, which is the upstream address rather than the name the client asked for.
 
 Every other dropped header is not removed either. NGINX forwards the client's request headers to the upstream unless a `proxy_set_header` overrides them, so dropping `proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;` does not leave the upstream without an `X-Forwarded-For` — it hands the upstream the one the client sent. That is why a dropped header is usually worse than a missing one.
 
 ### What counts as a finding
 
 The plugin only reports a block when something was actually inherited and is actually lost. A nested block that re-declares every inherited header is correct and is not reported, even when the values differ. A nested block whose parents declare no `proxy_set_header` at all has nothing to drop and is not reported either.
+
+A header declared with the value NGINX uses anyway is not reported when dropped, since dropping it changes nothing: `Host $proxy_host`, or an empty `Connection`, `Upgrade`, `Keep-Alive`, `TE` or `Expect`. Before NGINX 1.29.7 a dropped `Connection ""` reverts to `Connection: close`, which only disables upstream keepalive.
 
 ### What "dropped" means in reports
 
