@@ -59,6 +59,21 @@ class return_bypasses_allow_deny(Plugin):
             return True
         return len(args) >= 2 and args[1].startswith(cls.REDIRECT_PREFIXES)
 
+    @staticmethod
+    def _returns_unhandled_error(directive):
+        """True for a `return` of an error status, without a body, that no
+        `error_page` in its scope chain lists."""
+        if not directive.args or any(directive.args[1:]):
+            return False
+        code = directive.args[0]
+        if not code.isdigit() or int(code) < 400:
+            return False
+        return not any(
+            code in error_page.args[:-1]
+            for parent in directive.parents
+            for error_page in parent.find("error_page", flat=True)
+        )
+
     def _find_descendants_excluding_internal_locations(self, node, name):
         result = []
         for child in node.children:
@@ -87,9 +102,13 @@ class return_bypasses_allow_deny(Plugin):
         # rewrite phase, before the access phase where allow/deny run.
         # (`rewrite ... last|break` with a plain URI replacement keeps
         # processing, so it does not bypass.)
-        bypassing = self._find_descendants_excluding_internal_locations(
-            parent, "return"
-        )
+        bypassing = [
+            d
+            for d in self._find_descendants_excluding_internal_locations(
+                parent, "return"
+            )
+            if not self._returns_unhandled_error(d)
+        ]
         bypassing += [
             d
             for d in self._find_descendants_excluding_internal_locations(
