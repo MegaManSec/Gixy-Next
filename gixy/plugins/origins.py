@@ -135,22 +135,16 @@ class origins(Plugin):
             # from a fully-optional pattern like '^(http://mysite.com)?$').
             self.invalid_set.add(url)
 
-    def _analyze_and_report(self, pattern, case_sensitive, name, directive):
+    def _analyze(self, pattern, case_sensitive, name):
         self.insecure_set = set()
         self.invalid_set = set()
-
-        severity = (
-            self.severity_insecure_origin
-            if name == "origin"
-            else self.severity_insecure_referer
-        )
 
         try:
             regexp = Regexp(pattern, case_sensitive=case_sensitive)
             candidates = list(regexp.generate("`", anchored=True, max_repeat=5))
         except sre_parse.error as e:
             LOG.warning("Failed to parse regex: %s (%s)", pattern, str(e))
-            return
+            return False
         for candidate_match in candidates:
             try:
                 candidate_match = candidate_match.encode("idna").decode()
@@ -314,12 +308,24 @@ class origins(Plugin):
                             self.insecure_set.remove(url)
                 except (TypeError, ValueError):
                     continue
-            if self.insecure_set:
-                invalids = ", ".join(sorted(self.insecure_set)).replace("`", "a")
-                reason = "Regex matches insecure `{value}` as a valid {name}.".format(
-                    value=invalids, name=name
-                )
-                self.add_issue(directive=directive, reason=reason, severity=severity)
+        return True
+
+    def _analyze_and_report(self, pattern, case_sensitive, name, directive):
+        if not self._analyze(pattern, case_sensitive, name):
+            return
+
+        severity = (
+            self.severity_insecure_origin
+            if name == "origin"
+            else self.severity_insecure_referer
+        )
+
+        if self.insecure_set:
+            invalids = ", ".join(sorted(self.insecure_set)).replace("`", "a")
+            reason = "Regex matches insecure `{value}` as a valid {name}.".format(
+                value=invalids, name=name
+            )
+            self.add_issue(directive=directive, reason=reason, severity=severity)
 
         if self.invalid_set:
             invalids = '", "'.join(sorted(self.invalid_set)).replace("`", "a")
@@ -385,10 +391,12 @@ class origins(Plugin):
         for parent in directive.parents:
             if parent.name != "if" or not self._is_origin_reflection(parent.variable or ""):
                 continue
-            # Positive regex guards are checked by audit(); negative matches
-            # and unrelated conditions do not restrict reflection to an allowlist.
+            # Positive regex guards that pass audit()'s checks restrict reflection
+            # to an allowlist; negative matches and unrelated conditions do not.
             if parent.operand in ("~", "~*"):
-                return True
+                analyzed = self._analyze(parent.value, parent.operand == "~", "origin")
+                if analyzed and not (self.insecure_set or self.invalid_set):
+                    return True
             if (
                 parent.operand == "="
                 and parent.value.startswith(("http://", "https://"))
