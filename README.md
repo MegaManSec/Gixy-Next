@@ -51,9 +51,9 @@ Scan a local config file by mounting it into the container:
 
 ```shell-session
 # Use Github Registry
-docker run --pull=always --rm -v "$PWD/nginx.conf:/nginx.conf:ro" ghcr.io/megamansec/gixy-next /nginx.conf
+docker run --pull=always --rm -v "$PWD/nginx.conf:/nginx.conf:ro" ghcr.io/megamansec/gixy-next gixy /nginx.conf
 # Or Docker Hub
-docker run --pull=always --rm -v "$PWD/nginx.conf:/nginx.conf:ro" megamansec/gixy-next /nginx.conf
+docker run --pull=always --rm -v "$PWD/nginx.conf:/nginx.conf:ro" megamansec/gixy-next gixy /nginx.conf
 ```
 
 Scan an NGINX live configuration dump:
@@ -62,9 +62,9 @@ Scan an NGINX live configuration dump:
 # Dumps the full NGINX configuration into a single file (including all includes)
 nginx -T > ./nginx-dump.conf
 # Use Github Registry
-docker run --pull=always --rm -v "$PWD/nginx-dump.conf:/nginx-dump.conf:ro" ghcr.io/megamansec/gixy-next /nginx-dump.conf
+docker run --pull=always --rm -v "$PWD/nginx-dump.conf:/nginx-dump.conf:ro" ghcr.io/megamansec/gixy-next gixy /nginx-dump.conf
 # Or Docker Hub
-docker run --pull=always --rm -v "$PWD/nginx-dump.conf:/nginx-dump.conf:ro" megamansec/gixy-next /nginx-dump.conf
+docker run --pull=always --rm -v "$PWD/nginx-dump.conf:/nginx-dump.conf:ro" megamansec/gixy-next gixy /nginx-dump.conf
 ```
 
 Scan from stdin:
