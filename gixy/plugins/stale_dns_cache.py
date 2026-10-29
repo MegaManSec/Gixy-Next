@@ -35,6 +35,13 @@ class stale_dns_cache(Plugin):
             r"^(?P<scheme>[a-z][a-z0-9+.-]*://)?(?P<host>\[[0-9a-fA-F:.]+\]|[^/?#:]+)(?::(?P<port>[0-9]+))?"
         )
 
+    @staticmethod
+    def _needs_dns(host):
+        if is_ipv6(host) or is_ipv4(host, False):
+            return False
+        host = host.lower().rstrip(".")
+        return host not in ("localhost", "ip6-localhost") and not host.endswith(".localhost")
+
     def audit(self, directive):
         if not getattr(directive, "args", None):
             return
@@ -55,22 +62,20 @@ class stale_dns_cache(Plugin):
         parsed_host_compiled = compile_script(
             raw_host
         )  # proxy_pass $var <- $var may be a variable to an upstream (ugly, but valid).
-        parsed_host = ""  # this is fine, just ugly; parsed_host is only really used for upstream anyways
+        parsed_hosts = [""]  # this is fine, just ugly; parsed_hosts are only really used for upstream anyways
         upstream_name_candidates = set()
         for var in parsed_host_compiled:
             if var.name and builtins.is_builtin(var.name):
                 break
-            if isinstance(var.final_value, str):
-                upstream_name_candidates.add(var.final_value)
-                parsed_host += var.final_value
-            else:
+            values = [option.final_value for option in var.options]
+            if not all(isinstance(value, str) for value in values):
+                break
+            upstream_name_candidates.update(values)
+            parsed_hosts = [host + value for host in parsed_hosts for value in values]
+            if len(values) > 1:
                 break
 
-        if is_ipv6(parsed_host) or is_ipv4(parsed_host, False):
-            return
-
-        h = parsed_host.lower().rstrip(".")
-        if h in ("localhost", "ip6-localhost") or h.endswith(".localhost"):
+        if not any(self._needs_dns(host) for host in parsed_hosts):
             return
 
         severity = self.severity
@@ -86,7 +91,7 @@ class stale_dns_cache(Plugin):
                 upstream_args[0] if upstream_args and len(upstream_args) == 1 else None
             )
             if upstream_name and (
-                upstream_name == parsed_host
+                upstream_name in parsed_hosts
                 or upstream_name in upstream_name_candidates
             ):
                 found_upstream = True
@@ -153,8 +158,8 @@ class stale_dns_cache(Plugin):
             return
 
         if not found_upstream:
-            if (
-                parsed_host and self.extract(parsed_host).suffix
+            if any(
+                host and self.extract(host).suffix for host in parsed_hosts
             ):  # Registerable suffix (one way or another)
                 severity = gixy.severity.MEDIUM
 
