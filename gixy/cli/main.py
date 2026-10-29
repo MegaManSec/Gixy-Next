@@ -337,12 +337,12 @@ def main():
         sys.exit(EXIT_USAGE)
 
     if args.tests:
-        tests = [x.strip() for x in args.tests.split(",")]
+        tests = [x.strip() for x in args.tests.split(",") if x.strip()]
     else:
         tests = None
 
     if args.skips:
-        skips = [x.strip() for x in args.skips.split(",")]
+        skips = [x.strip() for x in args.skips.split(",") if x.strip()]
     else:
         skips = None
 

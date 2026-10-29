@@ -140,6 +140,13 @@ def test_unknown_plugin_is_a_usage_error(conf, option):
     assert "alias_travresal" in result.stderr
 
 
+@pytest.mark.parametrize("option,expected", [("--tests", EXIT_FINDINGS), ("--skips", EXIT_OK)])
+def test_empty_plugin_names_are_ignored(conf, option, expected):
+    result = run(option, "alias_traversal, ,", conf("location /img { alias /data/; }"))
+    assert result.returncode == expected
+    assert "Unknown plugin(s)" not in result.stderr
+
+
 def test_too_high_severity_level_is_a_usage_error(conf):
     result = run("-lllllll", conf(CLEAN))
     assert result.returncode == EXIT_USAGE
