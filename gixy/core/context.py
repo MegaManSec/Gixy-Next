@@ -57,6 +57,23 @@ class Context(object):
         self.variables[var_type][key] = var
         return self
 
+    def merge(self, other):
+        """Retain both possible values after a conditional branch."""
+        from gixy.core.variable import Variable
+
+        for kind, values in self.variables.items():
+            previous = other.variables[kind]
+            for key in values.keys() | previous.keys():
+                current, before = values.get(key), previous.get(key)
+                if current is before:
+                    continue
+                var = current or before
+                empty = Variable(name=var.name, value="", have_script=False)
+                values[key] = Variable(
+                    name=var.name, ctx=var.ctx,
+                    alternatives=(before or empty, current or empty),
+                )
+
     def get_var(self, name, ctx=None):
         if is_indexed_name(name):
             var_type = "index"

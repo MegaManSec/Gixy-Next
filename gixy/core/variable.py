@@ -80,6 +80,7 @@ class Variable(object):
         provider=None,
         have_script=True,
         ctx=None,
+        alternatives=None,
     ):
         """
         Gixy Nginx variable class - parse and provide helpers to work with it.
@@ -90,6 +91,7 @@ class Variable(object):
         :param Directive provider: directive that provide variable (e.g. if, location, rewrite, etc.).
         :param bool have_script: may variable have nginx script or not (mostly used to indicate a string literal).
         :param str ctx: used for MapBlock/GeoBlock and MapDirective encapsulation
+        :param tuple[Variable] alternatives: possible values after conditional assignments.
         """
 
         self.name = name
@@ -100,9 +102,10 @@ class Variable(object):
         self.provider = provider
         self.final_value = value
         self.ctx = ctx
+        self.alternatives = alternatives
         if isinstance(value, Regexp):
             self.regexp = value
-        elif have_script:
+        elif have_script and not alternatives:
             self.depends = compile_script(
                 value, ctx
             )  # XXX: Do we want to append new_depends below?
@@ -112,9 +115,10 @@ class Variable(object):
                 new_depends = compile_script(self.final_value, ctx)
                 if len(new_depends) == 0:
                     break
-                if (
-                    type(new_depends[0].value) is list
-                ):  # MapBlock, GeoBlock cannot be infinitely resolved
+                if any(isinstance(dep.value, list) or dep.alternatives for dep in new_depends):
+                    # Hash values and conditional alternatives cannot be
+                    # flattened into a single string.
+                    self.depends = new_depends
                     self.final_value = self.value
                     break
                 if len(new_depends) == 1 and self.final_value == new_depends[0].value:
@@ -138,6 +142,9 @@ class Variable(object):
         # Then regexp
         if self.regexp:
             return self.regexp.can_contain(char, skip_literal=True)
+
+        if self.alternatives:
+            return any(var.can_contain(char) for var in self.alternatives)
 
         # Then dependencies
         if self.depends:
@@ -185,6 +192,9 @@ class Variable(object):
         if self.regexp:
             return self.regexp.can_startswith(char)
 
+        if self.alternatives:
+            return any(var.can_startswith(char) for var in self.alternatives)
+
         # Then dependencies
         if self.depends:
             return self.depends[0].can_startswith(char)
@@ -226,6 +236,9 @@ class Variable(object):
         # Then regexp
         if self.regexp:
             return self.regexp.must_contain(char)
+
+        if self.alternatives:
+            return all(var.must_contain(char) for var in self.alternatives)
 
         # Then dependencies
         if self.depends:
@@ -271,6 +284,9 @@ class Variable(object):
         if self.regexp:
             return self.regexp.must_startswith(char)
 
+        if self.alternatives:
+            return all(var.must_startswith(char) for var in self.alternatives)
+
         # Then dependencies
         if self.depends:
             return self.depends[0].must_startswith(char)
@@ -303,7 +319,6 @@ class Variable(object):
         result = []
         if self.provider:
             result.append(self.provider)
-        if self.depends:
-            for dep in self.depends:
-                result += dep.providers
+        for dep in self.depends or self.alternatives or ():
+            result += dep.providers
         return result

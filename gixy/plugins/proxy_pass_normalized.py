@@ -38,6 +38,8 @@ class proxy_pass_normalized(Plugin):
 
     @classmethod
     def _carries_decoded_path(cls, var):
+        if var.alternatives:
+            return any(cls._carries_decoded_path(option) for option in var.alternatives)
         provider = var.provider
         if provider is None:
             return var.name in DECODED_PATH_VARS

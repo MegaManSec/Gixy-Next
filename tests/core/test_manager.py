@@ -415,3 +415,34 @@ def test_map_regex_capture_taint_is_independent_of_source_order(map_first, captu
     assert any(plugin.name == "http_splitting" for plugin in manager.results)
     assert not manager.errors
     assert not _missing(caplog)
+
+
+@pytest.mark.parametrize("initial,conditional,final,expected", [
+    ("$uri", "safe", "", True),
+    ("safe", "$uri", "", True),
+    ("safe", "also_safe", "", False),
+    ("$uri", "safe", "set $value safe;", False),
+])
+@pytest.mark.parametrize("sink_first", [False, True])
+def test_conditional_assignment_preserves_both_paths(initial, conditional, final, expected, sink_first):
+    assignments = """
+        set $value %s;
+        if ($arg_safe) { set $value %s; }
+        %s
+    """ % (initial, conditional, final)
+    sink = 'location / { set $copy "prefix:$value"; add_header X $copy; }'
+    parts = [sink, assignments] if sink_first else [assignments, sink]
+    manager = _audit("http { server { " + " ".join(parts) + " } }")
+    assert any(plugin.name == "http_splitting" for plugin in manager.results) == expected
+    assert not manager.errors
+
+
+def test_conditional_assignment_is_definite_inside_the_branch():
+    manager = _audit("""
+        server {
+            set $value $uri;
+            if ($arg_safe) { set $value safe; return 301 http://example.com/$value; }
+        }
+    """)
+    assert not any(plugin.name == "http_splitting" for plugin in manager.results)
+    assert not manager.errors

@@ -64,6 +64,36 @@ def test_script():
     assert not var.must_startswith('a')
 
 
+@pytest.mark.parametrize("reverse", [False, True])
+def test_conditional_values_keep_possible_and_required_characters_distinct(reverse):
+    options = [
+        Variable("path", value=Regexp(r"/[\s\S]*", strict=True)),
+        Variable("path", value="safe", have_script=False),
+    ]
+    if reverse:
+        options.reverse()
+    var = Variable("path", alternatives=options)
+    assert var.can_contain("\n")
+    assert var.can_startswith("/")
+    assert not var.must_contain("/")
+    assert not var.must_startswith("/")
+
+    get_context().add_var("path", var)
+    copied = Variable("copied", value="prefix:$path")
+    assert copied.can_contain("\n")
+    assert copied.must_startswith("p")
+    assert not copied.must_contain("/")
+
+
+def test_conditional_values_retain_common_requirements():
+    var = Variable("path", alternatives=[
+        Variable("path", value=Regexp(r"/[\s\S]*", strict=True)),
+        Variable("path", value="/safe", have_script=False),
+    ])
+    assert var.must_contain("/")
+    assert var.must_startswith("/")
+
+
 def test_regexp_boundary():
     var = Variable(name='simple', value=Regexp('.*'), boundary=Regexp('/[a-z]', strict=True))
     assert not var.depends

@@ -1,3 +1,4 @@
+import copy
 import logging
 import os
 
@@ -6,7 +7,7 @@ from gixy.core import builtin_variables as builtins
 from gixy.core.config import Config
 from gixy.core.context import get_context, pop_context, purge_context, push_context
 from gixy.core.plugins_manager import PluginsManager
-from gixy.directives.block import GeoBlock, MapBlock
+from gixy.directives.block import GeoBlock, IfBlock, MapBlock
 from gixy.directives.directive import (
     AuthRequestSetDirective,
     MapDirective,
@@ -103,10 +104,13 @@ class Manager(object):
             own_context = directive.is_block and directive.self_context
             if own_context:
                 push_context(directive)
+            before = copy.deepcopy(get_context()) if isinstance(directive, IfBlock) else None
             self._update_variables(directive)
             self.auditor.audit(directive)
             if directive.is_block:
                 self._audit_recursive(directive.children)
+            if before is not None:
+                get_context().merge(before)
             if own_context:
                 pop_context()
 
@@ -172,10 +176,13 @@ class Manager(object):
                 for var in self._provided_variables(directive):
                     context.add_var(var.name, var)
             elif directive.is_block and not directive.self_context:
+                before = copy.deepcopy(context) if isinstance(directive, IfBlock) else None
                 if directive.provide_variables:
                     for var in self._provided_variables(directive):
                         context.add_var(var.name, var)
                 self._prepopulate_scope_var_values(directive.children)
+                if before is not None:
+                    context.merge(before)
 
     def _update_variables(self, directive):
         # TODO(buglloc): finish him!
