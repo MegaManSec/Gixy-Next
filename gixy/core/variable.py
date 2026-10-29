@@ -334,6 +334,27 @@ class Variable(object):
         return self.value and self.value[0] == char
 
     @property
+    def options(self):
+        """
+        Returns the values variable may take after conditional assignments.
+
+        :return Variable[]: variables without alternatives.
+        """
+        result, seen = [], set()
+
+        def collect(var):
+            if var in seen:
+                return
+            seen.add(var)
+            if not var.alternatives:
+                result.append(var)
+            for option in var.alternatives or ():
+                collect(option)
+
+        collect(self)
+        return result
+
+    @property
     def providers(self):
         """
         Returns list of variable provides.

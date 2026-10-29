@@ -94,6 +94,15 @@ def test_conditional_values_retain_common_requirements():
     assert var.must_startswith("/")
 
 
+def test_conditional_values_are_flattened_once():
+    first = Variable("path", value="a", have_script=False)
+    second = Variable("path", value="b", have_script=False)
+    nested = Variable("path", alternatives=(first, second))
+    var = Variable("path", alternatives=(first, nested))
+    assert var.options == [first, second]
+    assert first.options == [first]
+
+
 def test_regexp_boundary():
     var = Variable(name='simple', value=Regexp('.*'), boundary=Regexp('/[a-z]', strict=True))
     assert not var.depends
