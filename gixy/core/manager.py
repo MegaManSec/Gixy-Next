@@ -190,10 +190,11 @@ class Manager(object):
             return
 
         context = get_context()
-        for var in self._provided_variables(directive):
-            if var.name == 0 and not isinstance(directive, MapDirective):
-                # All regexps must clean indexed variables
-                context.clear_index_vars()
+        variables = self._provided_variables(directive)
+        has_captures = any(var.name == 1 for var in variables)
+        if has_captures and not isinstance(directive, MapDirective):
+            context.clear_index_vars()
+        for var in variables:
             context.add_var(var.name, var)
 
     def __enter__(self):
