@@ -14,6 +14,13 @@ def _parse_via_compat_parse(config):
     return NginxParser(cwd="", allow_includes=False).parse(config)
 
 
+def test_quoted_whitespace_is_significant():
+    root = _parse('location "/path " { add_header X " value\\n"; }')
+    location = root.children[0]
+    assert location.path == "/path "
+    assert location.children[0].value == " value\n"
+
+
 @pytest.mark.parametrize('config,expected', zip(
     [
         'access_log syslog:server=127.0.0.1,tag=nginx_sentry toolsformat;',
