@@ -7,6 +7,7 @@ class Plugin(object):
     description = ""
     help_url = ""
     severity = gixy.severity.INFORMATION
+    minimum_severity = gixy.severity.INFORMATION
     directives = []
     options = {}
 
@@ -26,6 +27,8 @@ class Plugin(object):
         reason=None,
         help_url=None,
     ):
+        if not gixy.severity.is_acceptable(severity or self.severity, self.minimum_severity):
+            return
         self._issues.append(
             Issue(
                 self,

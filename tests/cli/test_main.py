@@ -11,6 +11,7 @@ failure must not be silently swallowed as bad input.
 """
 
 import os
+import json
 import subprocess
 import sys
 
@@ -72,6 +73,19 @@ def test_clean_config_exits_zero(conf):
     assert result.returncode == EXIT_OK
     assert "could not fully analyze" not in result.stderr
     assert "internal error" not in result.stderr
+
+
+@pytest.mark.parametrize("plugin,config,level,expected", [
+    ("resolver_external", "resolver 8.8.8.8;", "-lll", ["HIGH"]),
+    ("origins", 'server { if ($http_origin ~ "^https://example.com$") { return 200; } }',
+     "-lll", ["HIGH"]),
+    ("alias_traversal", "location /img { alias /data/images; }", "-lll", []),
+    ("alias_traversal", "location /img { alias /data/images; }", "-ll", ["MEDIUM"]),
+])
+def test_filter_uses_finding_severity(conf, plugin, config, level, expected):
+    result = run("--tests", plugin, level, "-f", "json", conf(config))
+    assert result.returncode == (EXIT_FINDINGS if expected else EXIT_OK)
+    assert [issue["severity"] for issue in json.loads(result.stdout)] == expected
 
 
 def test_findings_exit_one(conf):
