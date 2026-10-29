@@ -381,6 +381,22 @@ class origins(Plugin):
             severity=self.severity_insecure_origin,
         )
 
+    def _has_origin_allowlist(self, directive):
+        for parent in directive.parents:
+            if parent.name != "if" or not self._is_origin_reflection(parent.variable or ""):
+                continue
+            # Positive regex guards are checked by audit(); negative matches
+            # and unrelated conditions do not restrict reflection to an allowlist.
+            if parent.operand in ("~", "~*"):
+                return True
+            if (
+                parent.operand == "="
+                and parent.value.startswith(("http://", "https://"))
+                and "$" not in parent.value
+            ):
+                return True
+        return False
+
     def post_audit(self, root):
         """Analyze map-based CORS allowlists: map $http_origin $var; add_header Access-Control-Allow-Origin $var"""
         # Find add_header directives that set Access-Control-Allow-Origin to a variable
@@ -388,6 +404,8 @@ class origins(Plugin):
             if not isinstance(node, AddHeaderDirective):
                 continue
             if node.header != "access-control-allow-origin":
+                continue
+            if self._has_origin_allowlist(node):
                 continue
             value = node.value.strip().strip("\"'")
             if not value.startswith("$"):
