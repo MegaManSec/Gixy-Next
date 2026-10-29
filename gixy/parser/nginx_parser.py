@@ -177,6 +177,7 @@ class NginxParser(object):
             self.is_dump = True
             self.cwd = os.path.dirname(root_filename)
             parsed_block = self.configs[root_filename]
+            current_path = root_filename
 
         # Parse into the provided root/parent context and keep attribution
         old_stack = self._path_stack
@@ -445,15 +446,25 @@ class NginxParser(object):
                 LOG.warning("File not found: {0}".format(path))
 
     def _prepare_dump(self, parsed_block):
+        def relative_lines(node, offset):
+            if node.get("line") is not None:
+                node["line"] -= offset
+            for child in node.get("children", []):
+                relative_lines(child, offset)
+
         filename = ""
         root_filename = ""
+        offset = 0
         for node in parsed_block:
             if isinstance(node, dict) and node.get("kind") == "file_delimiter":
                 if not filename:
                     root_filename = node.get("file")
                 filename = node.get("file")
+                # Synthetic delimiters already have file-relative lines.
+                offset = node.get("line") or 0
                 self.configs[filename] = []
                 continue
+            relative_lines(node, offset)
             self.configs[filename].append(node)
         return root_filename
 
