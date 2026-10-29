@@ -199,10 +199,8 @@ class NginxParser(object):
                 path_info = self.path_info
                 try:
                     self._resolve_include(node["args"], parent)
-                except (
-                    InvalidConfiguration
-                ):  # We can continue after error in parsed include file, I guess.
-                    pass
+                except InvalidConfiguration as e:
+                    self._record_malformed("include", node.get("line"), e)
                 except IndexError as e:
                     # `include;` with no path is malformed input, not a crash.
                     self._record_malformed("include", node.get("line"), e)
@@ -392,6 +390,10 @@ class NginxParser(object):
             try:
                 # parse the include into current context
                 self.parse_file(file_path, parent)
+            except InvalidConfiguration as e:
+                self.malformed.append(Diagnostic(
+                    "malformed", "parse", str(e), file=file_path,
+                ))
             finally:
                 self._active_includes.discard(canonical)
 

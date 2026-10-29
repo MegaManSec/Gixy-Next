@@ -107,6 +107,18 @@ def test_unparsable_config_exits_two(conf):
     assert "could not fully analyze" in result.stderr
 
 
+def test_bad_include_does_not_skip_other_glob_matches(conf, tmp_path):
+    includes = tmp_path / "includes"
+    includes.mkdir()
+    (includes / "a.conf").write_text("server {")
+    (includes / "b.conf").write_text("location /img { alias /data/; }")
+    result = run("--tests", "alias_traversal", conf("include includes/*.conf;"))
+    assert result.returncode == EXIT_INVALID_CONFIG
+    assert "could not fully analyze" in result.stderr
+    assert "a.conf" in result.stderr
+    assert "alias_traversal" in result.stdout
+
+
 def test_missing_file_is_a_usage_error():
     result = run("/nonexistent/nginx.conf")
     assert result.returncode == EXIT_USAGE
