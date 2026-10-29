@@ -1,6 +1,8 @@
 import io
 import logging
 
+import pytest
+
 from gixy.core.context import purge_context
 from gixy.core.manager import Manager
 
@@ -400,3 +402,16 @@ http {
 """
     m = _audit(config)
     assert any(type(p).__name__ == 'http_splitting' for p in m.results)
+
+
+@pytest.mark.parametrize("map_first", [True, False])
+@pytest.mark.parametrize("capture", ["$1", "$path"])
+def test_map_regex_capture_taint_is_independent_of_source_order(map_first, capture, caplog):
+    mapping = 'map $uri $target { ~^/(?<path>.*)$ ' + capture + '; default ""; }'
+    server = 'server { location / { add_header X $target; } }'
+    parts = [mapping, server] if map_first else [server, mapping]
+    manager = _audit('http { ' + ' '.join(parts) + ' }', caplog)
+    # A dot excludes LF but permits CR, so splitting is still possible.
+    assert any(plugin.name == "http_splitting" for plugin in manager.results)
+    assert not manager.errors
+    assert not _missing(caplog)

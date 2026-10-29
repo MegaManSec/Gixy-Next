@@ -117,6 +117,11 @@ class Manager(object):
                 name = directive.variable
                 if name not in context.variables["name"]:
                     context.add_var(name, builtins.fake_var(name))
+                if isinstance(directive, MapBlock):
+                    # Map values are evaluated lazily, including their regex
+                    # captures, even when the map follows its consumer.
+                    for entry in directive.gather_map_directives(directive.children):
+                        self._update_variables(entry)
             elif isinstance(directive, RootDirective):
                 if "document_root" not in context.variables["name"]:
                     context.add_var("document_root", builtins.fake_var("document_root"))
