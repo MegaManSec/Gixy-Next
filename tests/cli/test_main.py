@@ -132,6 +132,14 @@ def test_unknown_flag_is_a_usage_error():
     assert result.returncode == EXIT_USAGE
 
 
+@pytest.mark.parametrize("option", ["--tests", "--skips"])
+def test_unknown_plugin_is_a_usage_error(conf, option):
+    result = run(option, "alias_travresal", conf("location /img { alias /data/; }"))
+    assert result.returncode == EXIT_USAGE
+    assert "Unknown plugin(s)" in result.stderr
+    assert "alias_travresal" in result.stderr
+
+
 def test_too_high_severity_level_is_a_usage_error(conf):
     result = run("-lllllll", conf(CLEAN))
     assert result.returncode == EXIT_USAGE

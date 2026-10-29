@@ -346,6 +346,12 @@ def main():
     else:
         skips = None
 
+    available = {plugin.__name__ for plugin in PluginsManager().plugins_classes}
+    for option, names in (("--tests", tests), ("--skips", skips)):
+        unknown = set(names or ()) - available
+        if unknown:
+            parser.error("Unknown plugin(s) in {0}: {1}".format(option, ", ".join(sorted(unknown))))
+
     config = Config(
         severity=severity,
         output_format=args.output_format,
