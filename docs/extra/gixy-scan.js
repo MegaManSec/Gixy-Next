@@ -21,6 +21,7 @@
     initPromise: null,
     pyodide: null,
     findings: [],
+    diagnostics: "",
     filters: {
       severities: new Set(), // empty = all
     },
@@ -191,6 +192,13 @@ server {
 
     findingsEl.replaceChildren();
 
+    if (state.diagnostics) {
+      const pre = document.createElement("pre");
+      pre.className = "gixy-code";
+      pre.textContent = state.diagnostics;
+      findingsEl.appendChild(pre);
+    }
+
     if (filtered.length === 0) {
       const p = document.createElement("p");
       p.className = "gixy-meta";
@@ -309,10 +317,11 @@ json.dumps({"report": buf.getvalue(), "diagnostics": errors.getvalue(), "exit_co
       `);
 
       const outcome = JSON.parse(out);
-      if (outcome.exit_code !== 0 && outcome.exit_code !== 1) {
+      const failed = outcome.exit_code !== 0 && outcome.exit_code !== 1;
+      const parsed = safeParseJson(outcome.report);
+      if (!parsed && failed) {
         throw new Error(outcome.diagnostics || "The configuration could not be analyzed.");
       }
-      const parsed = safeParseJson(outcome.report);
       if (!parsed) {
         const pre = document.createElement("pre");
         pre.className = "gixy-code";
@@ -321,6 +330,7 @@ json.dumps({"report": buf.getvalue(), "diagnostics": errors.getvalue(), "exit_co
         return;
       }
 
+      state.diagnostics = failed ? outcome.diagnostics || "The configuration could not be fully analyzed." : "";
       const arr = Array.isArray(parsed) ? parsed : [];
       state.findings = arr
         .map((f) => {

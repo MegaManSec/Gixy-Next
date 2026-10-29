@@ -8,13 +8,14 @@ from pathlib import Path
 import pytest
 
 
-@pytest.mark.parametrize("config,exit_code", [
-    ("worker_processes auto;", 0),
-    ("resolver 8.8.8.8;", 1),
-    ("server {", 2),
-    ("add_header X;", 2),
+@pytest.mark.parametrize("config,exit_code,findings", [
+    ("worker_processes auto;", 0, False),
+    ("resolver 8.8.8.8;", 1, True),
+    ("server {", 2, False),
+    ("add_header X;", 2, False),
+    ("resolver 8.8.8.8;\nadd_header X;", 2, True),
 ])
-def test_browser_preserves_cli_outcome(tmp_path, monkeypatch, config, exit_code):
+def test_browser_preserves_cli_outcome(tmp_path, monkeypatch, config, exit_code, findings):
     import sys
 
     path = tmp_path / "nginx.conf"
@@ -30,6 +31,6 @@ def test_browser_preserves_cli_outcome(tmp_path, monkeypatch, config, exit_code)
     exec(compile(parsed, "<browser>", "exec"), namespace)
     outcome = json.loads(eval(compile(expression, "<browser>", "eval"), namespace))
     assert outcome["exit_code"] == exit_code
-    assert bool(json.loads(outcome["report"])) == (exit_code == 1)
+    assert bool(json.loads(outcome["report"])) == findings
     if exit_code == 2:
         assert "could not fully analyze" in outcome["diagnostics"]
