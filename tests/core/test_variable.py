@@ -103,6 +103,14 @@ def test_conditional_values_are_flattened_once():
     assert first.options == [first]
 
 
+def test_copied_conditional_values_keep_their_options():
+    first = Variable("path", value="a", have_script=False)
+    second = Variable("path", value="b", have_script=False)
+    get_context().add_var("path", Variable("path", alternatives=(first, second)))
+    assert Variable("copy", value="$path").options == [first, second]
+    assert len(Variable("joined", value="x$path").options) == 1
+
+
 def test_regexp_boundary():
     var = Variable(name='simple', value=Regexp('.*'), boundary=Regexp('/[a-z]', strict=True))
     assert not var.depends

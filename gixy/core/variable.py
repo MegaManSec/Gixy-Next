@@ -346,9 +346,11 @@ class Variable(object):
             if var in seen:
                 return
             seen.add(var)
-            if not var.alternatives:
+            copied = var.depends[0] if var.depends and len(var.depends) == 1 else None
+            alternatives = var.alternatives or (copied.alternatives if copied else None)
+            if not alternatives:
                 result.append(var)
-            for option in var.alternatives or ():
+            for option in alternatives or ():
                 collect(option)
 
         collect(self)
