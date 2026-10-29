@@ -95,7 +95,11 @@ class stale_dns_cache(Plugin):
                         continue
 
                     if "resolve" in child.args:
-                        if not resolver:
+                        upstream_resolver = (
+                            upstream.some("resolver", flat=False)
+                            or upstream.find_single_directive_in_scope("resolver")
+                        )
+                        if not upstream_resolver:
                             self.add_issue(
                                 severity=gixy.severity.MEDIUM,
                                 directive=[directive, upstream, child],
