@@ -1,3 +1,4 @@
+import functools
 import logging
 import re
 
@@ -11,6 +12,25 @@ EXTRACT_RE = re.compile(r"\$([1-9]|[a-z_][a-z0-9_]*|\{[a-z0-9_]+\})", re.IGNOREC
 GEO_PARAMETERS = frozenset(
     ("delete", "include", "proxy", "proxy_recursive", "ranges", "volatile")
 )
+_query_results = None
+
+
+def memoize_query(method):
+    @functools.wraps(method)
+    def wrapper(*args):
+        global _query_results
+        if _query_results is None:
+            _query_results = {}
+            try:
+                return wrapper(*args)
+            finally:
+                _query_results = None
+        key = (method,) + args
+        if key not in _query_results:
+            _query_results[key] = method(*args)
+        return _query_results[key]
+
+    return wrapper
 
 
 def compile_script(script, ctx=None):
@@ -127,6 +147,7 @@ class Variable(object):
                 all_vars = [str(i.value) for i in new_depends]
                 self.final_value = "".join(all_vars)
 
+    @memoize_query
     def can_contain(self, char):
         """
         Checks if variable can contain the specified char.
@@ -176,6 +197,7 @@ class Variable(object):
         # Otherwise user can't control value of this variable
         return False
 
+    @memoize_query
     def can_startswith(self, char):
         """
         Checks if variable can starts with the specified char.
@@ -221,6 +243,7 @@ class Variable(object):
         # Otherwise user can't control value of this variable
         return False
 
+    @memoize_query
     def must_contain(self, char):
         """
         Checks if variable MUST contain the specified char.
@@ -268,6 +291,7 @@ class Variable(object):
         # Otherwise checks literal
         return self.value and char in self.value
 
+    @memoize_query
     def must_startswith(self, char):
         """
         Checks if variable MUST starts with the specified char.
@@ -316,9 +340,16 @@ class Variable(object):
 
         :return Directive[]: providers.
         """
-        result = []
-        if self.provider:
-            result.append(self.provider)
-        for dep in self.depends or self.alternatives or ():
-            result += dep.providers
+        result, seen = [], set()
+
+        def collect(var):
+            if var in seen:
+                return
+            seen.add(var)
+            if var.provider:
+                result.append(var.provider)
+            for dep in var.depends or var.alternatives or ():
+                collect(dep)
+
+        collect(self)
         return result

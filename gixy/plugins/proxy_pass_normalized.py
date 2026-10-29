@@ -1,7 +1,7 @@
 from urllib.parse import urlparse
 
 import gixy
-from gixy.core.variable import compile_script
+from gixy.core.variable import compile_script, memoize_query
 from gixy.plugins.plugin import Plugin
 
 DECODED_PATH_VARS = frozenset({"uri", "document_uri"})
@@ -37,6 +37,7 @@ class proxy_pass_normalized(Plugin):
     directives = ["proxy_pass"]
 
     @classmethod
+    @memoize_query
     def _carries_decoded_path(cls, var):
         if var.alternatives:
             return any(cls._carries_decoded_path(option) for option in var.alternatives)

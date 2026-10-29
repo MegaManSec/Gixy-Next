@@ -446,3 +446,19 @@ def test_conditional_assignment_is_definite_inside_the_branch():
     """)
     assert not any(plugin.name == "http_splitting" for plugin in manager.results)
     assert not manager.errors
+
+
+@pytest.mark.parametrize("initial,expected", [('""', False), ("$uri", True)])
+def test_chained_conditional_assignments_are_audited_in_linear_time(initial, expected):
+    branches = " ".join('if ($arg_%d) { set $value "${value}%d"; }' % (i, i) for i in range(64))
+    manager = _audit("""
+        server {
+            set $value %s;
+            %s
+            location / { add_header X $value; proxy_pass http://backend/$value; }
+        }
+    """ % (initial, branches))
+    issues = [issue for plugin in manager.results if plugin.name == "http_splitting" for issue in plugin.issues]
+    assert bool(issues) == expected
+    assert all(len(issue.directives) < 200 for issue in issues)
+    assert not manager.errors
