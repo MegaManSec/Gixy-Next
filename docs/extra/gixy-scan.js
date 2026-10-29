@@ -294,24 +294,29 @@ await micropip.install("${WHEEL_URL}")
       const text = raw.endsWith("\n") ? raw : raw + "\n";
       py.FS.writeFile(inputPath, text);
 
-      // Capture stdout so JSON parsing is clean.
+      // Preserve the CLI outcome: an empty report can also mean the scan failed.
       const out = await py.runPythonAsync(`
-import sys, runpy, io, contextlib
-buf = io.StringIO()
-with contextlib.redirect_stdout(buf):
+import sys, runpy, io, contextlib, json
+buf, errors = io.StringIO(), io.StringIO()
+exit_code = 0
+with contextlib.redirect_stdout(buf), contextlib.redirect_stderr(errors):
     sys.argv = ["gixy", "-f", "json", "${inputPath}"]
     try:
         runpy.run_module("gixy.cli", run_name="__main__")
-    except SystemExit:
-        pass
-buf.getvalue()
+    except SystemExit as exc:
+        exit_code = exc.code
+json.dumps({"report": buf.getvalue(), "diagnostics": errors.getvalue(), "exit_code": exit_code})
       `);
 
-      const parsed = safeParseJson(out);
+      const outcome = JSON.parse(out);
+      if (outcome.exit_code !== 0 && outcome.exit_code !== 1) {
+        throw new Error(outcome.diagnostics || "The configuration could not be analyzed.");
+      }
+      const parsed = safeParseJson(outcome.report);
       if (!parsed) {
         const pre = document.createElement("pre");
         pre.className = "gixy-code";
-        pre.textContent = String(out || "(no output)");
+        pre.textContent = String(outcome.report || "(no output)");
         findingsEl.appendChild(pre);
         return;
       }
