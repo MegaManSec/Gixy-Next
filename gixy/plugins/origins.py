@@ -449,6 +449,9 @@ class origins(Plugin):
                         ):
                             self._report_reflection([md, node])
                         continue
+                    # Empty or fixed outputs do not reflect the matching origin.
+                    if "$" not in (md.dest_val or ""):
+                        continue
                     src = md.src_val or ""
                     # Determine case sensitivity and pattern
                     if src.startswith("~*"):
