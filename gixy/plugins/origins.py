@@ -398,7 +398,7 @@ class origins(Plugin):
                 self._report_reflection(node)
                 continue
 
-            dest_var = value.lstrip("$").lower()
+            dest_var = value.lstrip("$").strip("{}").lower()
 
             # set $var $http_origin; add_header ... $var; -> indirect reflection
             for sd in root.find_recursive("set"):
@@ -415,7 +415,7 @@ class origins(Plugin):
                     continue
                 if getattr(mb, "variable", None) != dest_var:
                     continue
-                if getattr(mb, "source", None) != "$http_origin":
+                if not self._is_origin_reflection(mb.source):
                     continue
 
                 # Iterate map entries (including those in includes)
