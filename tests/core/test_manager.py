@@ -372,6 +372,20 @@ http { server {
     assert any("'1'" in r.getMessage() for r in _missing(caplog))
 
 
+def test_location_capture_does_not_leak_to_sibling_location(caplog):
+    manager = _audit("""
+http { server {
+    location ~ ^/a/([^/]*)$ { add_header X $1; }
+    location /b { add_header X $1; }
+} }
+""", caplog)
+    assert any("'1'" in r.getMessage() for r in _missing(caplog))
+    splitting = next(plugin for plugin in manager.results if plugin.name == "http_splitting")
+    assert len(splitting.issues) == 1
+    assert splitting.issues[0].directives[0].parent.path == "^/a/([^/]*)$"
+    assert not manager.errors
+
+
 def test_prepopulated_map_taint_still_fires_security_check():
     # map-after-server routes tainted $uri through $target; http_splitting must still fire
     config = """

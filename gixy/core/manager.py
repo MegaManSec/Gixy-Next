@@ -100,14 +100,15 @@ class Manager(object):
         self._prepopulate_scope_var_names(tree)
         self._prepopulate_scope_var_values(tree)
         for directive in tree:
+            own_context = directive.is_block and directive.self_context
+            if own_context:
+                push_context(directive)
             self._update_variables(directive)
             self.auditor.audit(directive)
             if directive.is_block:
-                if directive.self_context:
-                    push_context(directive)
                 self._audit_recursive(directive.children)
-                if directive.self_context:
-                    pop_context()
+            if own_context:
+                pop_context()
 
     def _prepopulate_scope_var_names(self, tree):
         context = get_context()
