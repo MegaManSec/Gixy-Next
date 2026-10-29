@@ -2,6 +2,22 @@ import pytest
 
 from gixy.core.regexp import Regexp
 
+
+@pytest.mark.parametrize("pattern", [r"(?s)^(.*)$", r"^((?s:.*))$"])
+def test_dotall_capture_preserves_newlines(pattern):
+    group = Regexp(pattern).groups[1]
+    assert group.can_contain("\n")
+    assert group.can_startswith("\n")
+    assert any("\n" in example for example in group.generate("\n"))
+    assert Regexp(str(group)).can_contain("\n")
+
+
+@pytest.mark.parametrize("pattern", [r"^((?s:.*))(.*)$", r"^((?s).*)(.*)$"])
+def test_dotall_does_not_escape_its_group(pattern):
+    groups = Regexp(pattern).groups
+    assert groups[1].can_contain("\n")
+    assert not groups[2].can_contain("\n")
+
 '''
 CATEGORIES:
     sre_parse.CATEGORY_SPACE
