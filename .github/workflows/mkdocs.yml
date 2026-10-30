@@ -8,7 +8,9 @@ on:
       - "docs/**"
       - "mkdocs.yml"
       - "README.md"
-      - "gixy/__init__.py"
+      - "gixy/**"
+      - "setup.py"
+      - "requirements.txt"
 
 permissions:
   contents: write

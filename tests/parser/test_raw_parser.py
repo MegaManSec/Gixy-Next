@@ -1,3 +1,5 @@
+import pytest
+
 from gixy.parser.raw_parser import *
 
 
@@ -120,3 +122,31 @@ def test_env_with_escaped_semicolons():
 def assert_config(config, expected):
     # Deprecated: legacy helper removed as we now test RawParser minimally and rely on AST tests
     pass
+
+
+def test_stray_semicolon_keeps_the_following_statement():
+    parsed = RawParser().parse("events {;\n    worker_connections 1024;\n}\n")
+    assert [(n["kind"], n.get("name"), n["line"]) for n in parsed[0]["children"]] == [
+        ("unexpected", None, 1),
+        ("directive", "worker_connections", 2),
+    ]
+
+
+@pytest.mark.parametrize("config,brace,line", [
+    ("a 1;\n{\nb 2;\n}\nc 3;\n", "{", 2),
+    ("server {\n    listen 80;\n    {\n}\n", "{", 3),
+    ("a 1;\n}\n", "}", 2),
+    ("server {\n    return 200 }\n", "}", 2),
+])
+def test_unexpected_braces(config, brace, line):
+    with pytest.raises(ParseException) as e:
+        RawParser().parse(config)
+    assert e.value.line == line
+    assert e.value.msg.startswith('unexpected "{0}"'.format(brace))
+
+
+def test_braces_nginx_accepts():
+    parsed = RawParser().parse(
+        '# {\nadd_header X "{";\ncontent_by_lua_block {\n    local t = {}\n}\nset $a ${b}c;\nlocation ~ "^/a{2}$" {}\n'
+    )
+    assert [n.get("name") for n in parsed] == [None, "add_header", "content_by_lua_block", "set", "location"]

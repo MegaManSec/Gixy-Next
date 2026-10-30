@@ -18,6 +18,24 @@ LOG = logging.getLogger(__name__)
 # `server host:port;` inside `upstream`, and `include` everywhere.
 BLOCK_NAMES_VALID_AS_DIRECTIVES = frozenset({"server", "include"})
 
+DUMP_FILE_HEADER = re.compile(r"^# configuration file (.+):\s*$")
+
+
+def _dump_location(path, line):
+    """Map a line of an `nginx -T` dump to (dumped file, line within it)."""
+    location = None
+    try:
+        with open(path, encoding="utf-8", errors="replace") as f:
+            for number, text in enumerate(f, 1):
+                if number >= line:
+                    break
+                header = DUMP_FILE_HEADER.match(text)
+                if header:
+                    location = (header.group(1), number)
+    except OSError:
+        return None
+    return (location[0], line - location[1]) if location else None
+
 
 class NginxParser(object):
     def __init__(self, cwd="", allow_includes=True):
@@ -86,6 +104,14 @@ class NginxParser(object):
             if not ends_with_in_path_line:
                 error_msg = "{msg} in {filename}{line}.".format(
                     msg=base_msg, filename=real_path, line=line
+                )
+
+            dumped = _dump_location(path, e.line)
+            if dumped:
+                error_msg = re.sub(
+                    rf"in {re.escape(real_path)} \(line:\d+\)\.$",
+                    lambda m: "in {0} (line:{1}).".format(*dumped),
+                    error_msg,
                 )
 
             LOG.error("{error}".format(error=error_msg))
@@ -192,6 +218,13 @@ class NginxParser(object):
                 continue
             parsed_type = node.get("kind")
             if parsed_type == "comment" or parsed_type is None:
+                continue
+
+            if parsed_type == "unexpected":
+                self.malformed.append(Diagnostic(
+                    "malformed", "parse", 'Unexpected "{0}".'.format(node["text"]),
+                    line=node.get("line"), file=self.path_info,
+                ))
                 continue
 
             if parsed_type == "include":

@@ -45,6 +45,40 @@ class ParseException(Exception):
         self.line = line
 
 
+def scan_tokens(tokens):
+    """Reject the braces nginx rejects: a "{" that opens no directive, and a
+    "}" that closes nothing or ends an unterminated directive. crossplane
+    accepts some of these and silently drops the directives that follow.
+
+    Returns {line of a stray ";": line of the statement after it}, since
+    crossplane only records the line of the stray ";" itself.
+    """
+    depth, pending, stray, after_stray = 0, False, None, {}
+    for token, line, quoted in tokens:
+        if not quoted and token.startswith("#"):
+            continue
+        if stray is not None and (quoted or token not in ";{}"):
+            after_stray.setdefault(stray, line)
+            stray = None
+        if quoted:
+            pending = True
+        elif token == "{":
+            if not pending:
+                raise ParseException('unexpected "{"', line)
+            depth, pending = depth + 1, False
+        elif token == "}":
+            if pending or not depth:
+                raise ParseException('unexpected "}"', line)
+            depth -= 1
+        elif token == ";":
+            if not pending:
+                stray = line
+            pending = False
+        else:
+            pending = True
+    return after_stray
+
+
 def raise_on_crossplane_failure(parsed):
     if not isinstance(parsed, dict) or parsed.get("status") != "failed":
         return
@@ -84,6 +118,8 @@ class RawParser(object):
     A class that parses nginx configuration with crossplane
     """
 
+    _after_stray = {}
+
     def parse(self, data):
         """Parse nginx configuration content and return normalized nodes (list[dict])."""
         if isinstance(data, bytes):
@@ -109,6 +145,7 @@ class RawParser(object):
                     temp_file.write(content)
                     temp_file.flush()
 
+                self._after_stray = scan_tokens(crossplane.lex(temp_filename))
                 # Parse using crossplane with relaxed context checking for standalone configs
                 parsed = crossplane.parse(
                     temp_filename,
@@ -141,6 +178,7 @@ class RawParser(object):
     def parse_path(self, path):
         """Parse nginx configuration by file path and return normalized nodes (list[dict])."""
         try:
+            self._after_stray = scan_tokens(crossplane.lex(path))
             parsed = crossplane.parse(
                 path,
                 single=True,
@@ -169,6 +207,7 @@ class RawParser(object):
             {"kind": "include", "name": "include", "args": list[str]}
             {"kind": "file_delimiter", "file": str}
             {"kind": "comment", "text": str}
+            {"kind": "unexpected", "text": str}
         """
         result = []
 
@@ -218,6 +257,15 @@ class RawParser(object):
         for node in filtered_blocks:
             if not isinstance(node, dict):
                 continue
+
+            # crossplane reads a stray ";" as a directive named ";" whose
+            # arguments are the statement that follows it.
+            if node.get("directive") == ";":
+                result.append({"kind": "unexpected", "text": ";", "line": node.get("line")})
+                if not node.get("args"):
+                    continue
+                line = self._after_stray.get(node.get("line"), node.get("line"))
+                node = dict(node, directive=node["args"][0], args=node["args"][1:], line=line)
 
             directive_name = _process_nginx_string(node.get("directive", ""))
             args = [_process_nginx_string(arg) for arg in node.get("args", [])]
