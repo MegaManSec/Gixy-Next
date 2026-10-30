@@ -337,14 +337,22 @@ def main():
         sys.exit(EXIT_USAGE)
 
     if args.tests:
-        tests = [x.strip() for x in args.tests.split(",")]
+        tests = [x.strip() for x in args.tests.split(",") if x.strip()]
+        if not tests:
+            parser.error("No plugin names in --tests: {0!r}".format(args.tests))
     else:
         tests = None
 
     if args.skips:
-        skips = [x.strip() for x in args.skips.split(",")]
+        skips = [x.strip() for x in args.skips.split(",") if x.strip()]
     else:
         skips = None
+
+    available = {plugin.__name__ for plugin in PluginsManager().plugins_classes}
+    for option, names in (("--tests", tests), ("--skips", skips)):
+        unknown = set(names or ()) - available
+        if unknown:
+            parser.error("Unknown plugin(s) in {0}: {1}".format(option, ", ".join(sorted(unknown))))
 
     config = Config(
         severity=severity,

@@ -538,9 +538,10 @@ def _parse(source, state):
                 subpattern[-1] = (MAX_REPEAT, (min, max, item))
 
         elif this == ".":
-            subpatternappend((ANY, None))
+            subpatternappend((ANY_ALL if state.flags & SRE_FLAG_DOTALL else ANY, None))
 
         elif this == "(":
+            outer_flags = state.flags
             # Check for PCRE-style (*...) extensions
             if source.match("*"):
                 # Skip until we find a closing ')'
@@ -695,6 +696,7 @@ def _parse(source, state):
                 if group is not None:
                     state.closegroup(group)
                 subpatternappend((SUBPATTERN, (group, p)))
+                state.flags = outer_flags
             else:
                 while 1:
                     char = sourceget()

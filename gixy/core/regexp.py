@@ -222,19 +222,21 @@ class AnyToken(Token):
     type = sre_parse.ANY
 
     def can_contain(self, char, skip_literal=True):
-        return char in CATEGORIES["ANY"]
+        return char in CATEGORIES["ANY"] or (
+            char == "\n" and self.token[0] == sre_parse.ANY_ALL
+        )
 
     def must_contain(self, char, skip_literal=True):
         # Char may not be present in ANY token
         return False
 
     def generate(self, context):
-        if context.char in CATEGORIES["ANY"]:
+        if self.can_contain(context.char):
             return context.char
         return "a"
 
     def __str__(self):
-        return "."
+        return r"[\s\S]" if self.token[0] == sre_parse.ANY_ALL else "."
 
 
 class LiteralToken(Token):
@@ -906,7 +908,7 @@ def parse(sre_obj, parent=None, regexp=None):
     for token in sre_obj:
         if not token:
             result.append(EmptyToken(token=token, parent=parent, regexp=regexp))
-        elif token[0] == sre_parse.ANY:
+        elif token[0] in (sre_parse.ANY, sre_parse.ANY_ALL):
             result.append(AnyToken(token=token, parent=parent, regexp=regexp))
         elif token[0] == sre_parse.LITERAL:
             result.append(LiteralToken(token=token, parent=parent, regexp=regexp))

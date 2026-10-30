@@ -49,7 +49,23 @@ map $http_origin $cors {
 add_header Access-Control-Allow-Origin $cors always;
 ```
 
-A literal-key `map` allowlist (for example `https://trusted.example $http_origin;` with a safe `default`) is *not* flagged: only the listed origins are echoed back. Like the `map` analysis below, this detection runs only on a full configuration scan (one that includes an `http { .. }` block).
+A literal-key `map` allowlist (for example `https://trusted.example $http_origin;` with a safe `default`) is *not* flagged: only the listed origins are echoed back. Like the `map` analysis below, this detection runs only on a full configuration scan (one that includes an `http { .. }` block). Regex `map` entries whose value is empty or fixed (for example `~.* "";` or `~.* https://trusted.example;`) are skipped as well, since they never echo the request Origin.
+
+Reflection inside an `if` that checks the Origin first is also exempt, as long as that check is a real allowlist: an exact match such as `if ($http_origin = https://trusted.example)`, or a positive regex (`~`, `~*`) that passes the regex checks above. A guard the plugin reports itself does not restrict anything, so reflection inside it is still flagged:
+
+```nginx
+# Still flagged: any https origin passes the check and is reflected
+if ($http_origin ~* "^https://") {
+    add_header Access-Control-Allow-Origin $http_origin always;
+}
+
+# Not flagged: only https://trusted.example and its www subdomain are reflected
+if ($http_origin ~* "^https://(www\.)?trusted\.example$") {
+    add_header Access-Control-Allow-Origin $http_origin always;
+}
+```
+
+Negative matches (`!~`, `!~*`) and conditions on other variables do not count as guards.
 
 ## Why this is a problem
 

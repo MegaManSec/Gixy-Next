@@ -56,7 +56,7 @@ class ssrf(Plugin):
             if var.must_contain("/"):
                 # Skip variable checks
                 return False
-            if var.can_contain("."):
+            if any(option.can_contain(".") and not option.must_contain("/") for option in var.options):
                 # Yay! Our variable can contain any symbols!
                 reason = "Variable `${var}` can contain untrusted user input.".format(
                     var=var.name

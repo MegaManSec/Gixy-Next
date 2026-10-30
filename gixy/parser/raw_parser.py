@@ -8,14 +8,14 @@ import tempfile
 
 
 def _process_nginx_string(value):
-    """
-    Process nginx string escape sequences to match the old parser behavior.
-    Specifically handles \" -> " conversion.
+    r"""
+    Decode nginx's string escapes while preserving PCRE escapes such as \d.
     """
     if not isinstance(value, str):
         return value
 
-    return re.sub(r"\\(['\"])", r"\1", value)
+    escapes = {"n": "\n", "r": "\r", "t": "\t"}
+    return re.sub(r"""\\([\\'"nrt])""", lambda m: escapes.get(m[1], m[1]), value)
 
 
 def _tokenize_lua_content(content):
@@ -219,7 +219,7 @@ class RawParser(object):
             if not isinstance(node, dict):
                 continue
 
-            directive_name = node.get("directive", "")
+            directive_name = _process_nginx_string(node.get("directive", ""))
             args = [_process_nginx_string(arg) for arg in node.get("args", [])]
 
             if "block" in node:

@@ -1,3 +1,4 @@
+import copy
 import logging
 import os
 
@@ -6,7 +7,7 @@ from gixy.core import builtin_variables as builtins
 from gixy.core.config import Config
 from gixy.core.context import get_context, pop_context, purge_context, push_context
 from gixy.core.plugins_manager import PluginsManager
-from gixy.directives.block import GeoBlock, MapBlock
+from gixy.directives.block import GeoBlock, IfBlock, LocationBlock, MapBlock
 from gixy.directives.directive import (
     AuthRequestSetDirective,
     MapDirective,
@@ -17,6 +18,7 @@ from gixy.directives.directive import (
     SetDirective,
 )
 from gixy.core.regexp import Regexp
+from gixy.core.variable import Variable
 from gixy.parser.nginx_parser import NginxParser
 
 # Directives that register a named variable visible throughout their enclosing
@@ -100,14 +102,20 @@ class Manager(object):
         self._prepopulate_scope_var_names(tree)
         self._prepopulate_scope_var_values(tree)
         for directive in tree:
+            own_context = directive.is_block and directive.self_context
+            if own_context:
+                push_context(directive)
+            if isinstance(directive, LocationBlock) and directive.path.startswith("@"):
+                self._add_location_captures(directive.parent)
+            before = copy.deepcopy(get_context()) if isinstance(directive, IfBlock) else None
             self._update_variables(directive)
             self.auditor.audit(directive)
             if directive.is_block:
-                if directive.self_context:
-                    push_context(directive)
                 self._audit_recursive(directive.children)
-                if directive.self_context:
-                    pop_context()
+            if before is not None:
+                get_context().merge(before)
+            if own_context:
+                pop_context()
 
     def _prepopulate_scope_var_names(self, tree):
         context = get_context()
@@ -116,6 +124,11 @@ class Manager(object):
                 name = directive.variable
                 if name not in context.variables["name"]:
                     context.add_var(name, builtins.fake_var(name))
+                if isinstance(directive, MapBlock):
+                    # Map values are evaluated lazily, including their regex
+                    # captures, even when the map follows its consumer.
+                    for entry in directive.gather_map_directives(directive.children):
+                        self._update_variables(entry)
             elif isinstance(directive, RootDirective):
                 if "document_root" not in context.variables["name"]:
                     context.add_var("document_root", builtins.fake_var("document_root"))
@@ -166,10 +179,25 @@ class Manager(object):
                 for var in self._provided_variables(directive):
                     context.add_var(var.name, var)
             elif directive.is_block and not directive.self_context:
+                before = copy.deepcopy(context) if isinstance(directive, IfBlock) else None
                 if directive.provide_variables:
                     for var in self._provided_variables(directive):
                         context.add_var(var.name, var)
                 self._prepopulate_scope_var_values(directive.children)
+                if before is not None:
+                    context.merge(before)
+
+    def _add_location_captures(self, server):
+        context = get_context()
+        captures = {}
+        for location in server.find_all_contexts_of_type("location"):
+            if location.is_regex:
+                for var in self._provided_variables(location):
+                    captures.setdefault(var.name, []).append(var)
+        for name, options in captures.items():
+            kind = "index" if isinstance(name, int) else "name"
+            before = context.variables[kind].get(name) or Variable(name=name, value="", have_script=False)
+            context.add_var(name, Variable(name=name, alternatives=(before,) + tuple(options)))
 
     def _update_variables(self, directive):
         # TODO(buglloc): finish him!
@@ -177,10 +205,11 @@ class Manager(object):
             return
 
         context = get_context()
-        for var in self._provided_variables(directive):
-            if var.name == 0 and not isinstance(directive, MapDirective):
-                # All regexps must clean indexed variables
-                context.clear_index_vars()
+        variables = self._provided_variables(directive)
+        has_captures = any(var.name == 1 for var in variables)
+        if has_captures and not isinstance(directive, MapDirective):
+            context.clear_index_vars()
+        for var in variables:
             context.add_var(var.name, var)
 
     def __enter__(self):

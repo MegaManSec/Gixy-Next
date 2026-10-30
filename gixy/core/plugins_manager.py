@@ -57,16 +57,13 @@ class PluginsManager(object):
                 except TypeError:
                     # exclude doesn't support membership test, skip this check
                     pass
-            if severity and not gixy.severity.is_acceptable(
-                plugin_cls.severity, severity
-            ):
-                # Skip plugin by severity level
-                continue
             if self.config and self.config.has_for(name):
                 options = self.config.get_for(name)
             else:
                 options = plugin_cls.options
-            self._plugins.append(plugin_cls(options))
+            plugin = plugin_cls(options)
+            plugin.minimum_severity = severity or gixy.severity.INFORMATION
+            self._plugins.append(plugin)
 
     @property
     def plugins(self):

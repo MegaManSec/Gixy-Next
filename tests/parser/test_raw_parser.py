@@ -1,6 +1,21 @@
 from gixy.parser.raw_parser import *
 
 
+def test_nginx_string_escapes():
+    parsed = RawParser().parse(r'''add_header X "one\ntwo\rthree\tfour\\n\"five";''')
+    assert parsed[0]["args"][1] == 'one\ntwo\rthree\tfour\\n"five'
+
+
+def test_regex_escapes_are_preserved():
+    parsed = RawParser().parse(r'''location ~ "^/(\d+)\.\w+$" {}''')
+    assert parsed[0]["args"][1] == r"^/(\d+)\.\w+$"
+
+
+def test_map_key_escapes():
+    parsed = RawParser().parse(r'''map $http_origin $cors { "~^https://a\\.example\\.com$" 1; }''')
+    assert parsed[0]["children"][0]["name"] == r"~^https://a\.example\.com$"
+
+
 def test_directive():
     # Verified at AST level; RawParser covered by minimal tests
     pass

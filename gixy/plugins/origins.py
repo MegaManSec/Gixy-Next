@@ -135,22 +135,16 @@ class origins(Plugin):
             # from a fully-optional pattern like '^(http://mysite.com)?$').
             self.invalid_set.add(url)
 
-    def _analyze_and_report(self, pattern, case_sensitive, name, directive):
+    def _analyze(self, pattern, case_sensitive, name):
         self.insecure_set = set()
         self.invalid_set = set()
-
-        severity = (
-            self.severity_insecure_origin
-            if name == "origin"
-            else self.severity_insecure_referer
-        )
 
         try:
             regexp = Regexp(pattern, case_sensitive=case_sensitive)
             candidates = list(regexp.generate("`", anchored=True, max_repeat=5))
         except sre_parse.error as e:
             LOG.warning("Failed to parse regex: %s (%s)", pattern, str(e))
-            return
+            return False
         for candidate_match in candidates:
             try:
                 candidate_match = candidate_match.encode("idna").decode()
@@ -314,12 +308,24 @@ class origins(Plugin):
                             self.insecure_set.remove(url)
                 except (TypeError, ValueError):
                     continue
-            if self.insecure_set:
-                invalids = ", ".join(sorted(self.insecure_set)).replace("`", "a")
-                reason = "Regex matches insecure `{value}` as a valid {name}.".format(
-                    value=invalids, name=name
-                )
-                self.add_issue(directive=directive, reason=reason, severity=severity)
+        return True
+
+    def _analyze_and_report(self, pattern, case_sensitive, name, directive):
+        if not self._analyze(pattern, case_sensitive, name):
+            return
+
+        severity = (
+            self.severity_insecure_origin
+            if name == "origin"
+            else self.severity_insecure_referer
+        )
+
+        if self.insecure_set:
+            invalids = ", ".join(sorted(self.insecure_set)).replace("`", "a")
+            reason = "Regex matches insecure `{value}` as a valid {name}.".format(
+                value=invalids, name=name
+            )
+            self.add_issue(directive=directive, reason=reason, severity=severity)
 
         if self.invalid_set:
             invalids = '", "'.join(sorted(self.invalid_set)).replace("`", "a")
@@ -381,6 +387,24 @@ class origins(Plugin):
             severity=self.severity_insecure_origin,
         )
 
+    def _has_origin_allowlist(self, directive):
+        for parent in directive.parents:
+            if parent.name != "if" or not self._is_origin_reflection(parent.variable or ""):
+                continue
+            # Positive regex guards that pass audit()'s checks restrict reflection
+            # to an allowlist; negative matches and unrelated conditions do not.
+            if parent.operand in ("~", "~*"):
+                analyzed = self._analyze(parent.value, parent.operand == "~", "origin")
+                if analyzed and not (self.insecure_set or self.invalid_set):
+                    return True
+            if (
+                parent.operand == "="
+                and parent.value.startswith(("http://", "https://"))
+                and "$" not in parent.value
+            ):
+                return True
+        return False
+
     def post_audit(self, root):
         """Analyze map-based CORS allowlists: map $http_origin $var; add_header Access-Control-Allow-Origin $var"""
         # Find add_header directives that set Access-Control-Allow-Origin to a variable
@@ -388,6 +412,8 @@ class origins(Plugin):
             if not isinstance(node, AddHeaderDirective):
                 continue
             if node.header != "access-control-allow-origin":
+                continue
+            if self._has_origin_allowlist(node):
                 continue
             value = node.value.strip().strip("\"'")
             if not value.startswith("$"):
@@ -398,7 +424,7 @@ class origins(Plugin):
                 self._report_reflection(node)
                 continue
 
-            dest_var = value.lstrip("$").lower()
+            dest_var = value.lstrip("$").strip("{}").lower()
 
             # set $var $http_origin; add_header ... $var; -> indirect reflection
             for sd in root.find_recursive("set"):
@@ -415,7 +441,7 @@ class origins(Plugin):
                     continue
                 if getattr(mb, "variable", None) != dest_var:
                     continue
-                if getattr(mb, "source", None) != "$http_origin":
+                if not self._is_origin_reflection(mb.source):
                     continue
 
                 # Iterate map entries (including those in includes)
@@ -430,6 +456,9 @@ class origins(Plugin):
                             (md.dest_val or "").strip().strip("\"'")
                         ):
                             self._report_reflection([md, node])
+                        continue
+                    # Empty or fixed outputs do not reflect the matching origin.
+                    if "$" not in (md.dest_val or ""):
                         continue
                     src = md.src_val or ""
                     # Determine case sensitivity and pattern

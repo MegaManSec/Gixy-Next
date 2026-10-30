@@ -14,6 +14,13 @@ def _parse_via_compat_parse(config):
     return NginxParser(cwd="", allow_includes=False).parse(config)
 
 
+def test_quoted_whitespace_is_significant():
+    root = _parse('location "/path " { add_header X " value\\n"; }')
+    location = root.children[0]
+    assert location.path == "/path "
+    assert location.children[0].value == " value\n"
+
+
 @pytest.mark.parametrize('config,expected', zip(
     [
         'access_log syslog:server=127.0.0.1,tag=nginx_sentry toolsformat;',
@@ -82,6 +89,7 @@ server {
     assert isinstance(http, Directive)
     assert isinstance(http, Block)
     assert isinstance(http, HttpBlock)
+    assert (http.file, http.line) == ("/etc/nginx/nginx.conf", 1)
 
     # After flattening dump includes, server block is directly under http
     assert len(http.children) == 1
@@ -89,12 +97,40 @@ server {
     assert isinstance(server, Directive)
     assert isinstance(server, Block)
     assert isinstance(server, ServerBlock)
+    assert (server.file, server.line) == ("/etc/nginx/sites/default.conf", 1)
 
     # listen directive from included file is now flattened under server
     assert len(server.children) == 1
     listen = server.children[0]
     assert isinstance(listen, Directive)
     assert listen.args == ['80']
+    assert (listen.file, listen.line) == ("/etc/nginx/conf.d/listen", 1)
+
+
+def test_dump_nested_directives_and_diagnostics_use_source_lines():
+    config = """# configuration file /etc/nginx/nginx.conf:
+http {
+    include sites/test.conf;
+}
+
+# configuration file /etc/nginx/sites/test.conf:
+
+server {
+    location / {
+        alias /srv/;
+        alias;
+    }
+}
+"""
+    parser = NginxParser()
+    tree = parser.parse_string(config, path_info="/tmp/dump.conf")
+    location = tree.children[0].children[0].children[0]
+    assert (location.file, location.line) == ("/etc/nginx/sites/test.conf", 3)
+    assert location.children[0].line == 4
+    assert len(parser.malformed) == 1
+    assert (parser.malformed[0].file, parser.malformed[0].line) == (
+        "/etc/nginx/sites/test.conf", 5
+    )
 
 
 def test_encoding():

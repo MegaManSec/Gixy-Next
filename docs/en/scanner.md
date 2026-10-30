@@ -26,6 +26,7 @@ description: "In-browser gixy-next scanner for Nginx configs, powered by WebAsse
     </div>
   </div>
 
+  <div id="gixyNotices" class="gixy-notices"></div>
   <div id="gixySummary" class="gixy-summary" hidden></div>
   <div id="gixyFilters" class="gixy-filters" hidden></div>
   <div id="gixyFindings" class="gixy-findings"></div>

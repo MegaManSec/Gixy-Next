@@ -1,6 +1,8 @@
 import io
 import logging
 
+import pytest
+
 from gixy.core.context import purge_context
 from gixy.core.manager import Manager
 
@@ -372,6 +374,34 @@ http { server {
     assert any("'1'" in r.getMessage() for r in _missing(caplog))
 
 
+def test_location_capture_does_not_leak_to_sibling_location(caplog):
+    manager = _audit("""
+http { server {
+    location ~ ^/a/([^/]*)$ { add_header X $1; }
+    location /b { add_header X $1; }
+} }
+""", caplog)
+    assert any("'1'" in r.getMessage() for r in _missing(caplog))
+    splitting = next(plugin for plugin in manager.results if plugin.name == "http_splitting")
+    assert len(splitting.issues) == 1
+    assert splitting.issues[0].directives[0].parent.path == "^/a/([^/]*)$"
+    assert not manager.errors
+
+
+@pytest.mark.parametrize("named_first", [True, False])
+def test_location_capture_reaches_named_location(named_first, caplog):
+    named = "location @named { add_header X $1; }"
+    regex = "location ~ ^/a/([^/]*)$ { try_files $uri @named; }"
+    sibling = "location /b { add_header X $1; }"
+    parts = [named, sibling, regex] if named_first else [regex, sibling, named]
+    manager = _audit("http { server { " + " ".join(parts) + " } }", caplog)
+    assert [r for r in _missing(caplog) if "'1'" in r.getMessage()]
+    assert all("location /b" in r.getMessage() for r in _missing(caplog))
+    splitting = next(plugin for plugin in manager.results if plugin.name == "http_splitting")
+    assert [issue.directives[0].parent.path for issue in splitting.issues] == ["@named"]
+    assert not manager.errors
+
+
 def test_prepopulated_map_taint_still_fires_security_check():
     # map-after-server routes tainted $uri through $target; http_splitting must still fire
     config = """
@@ -386,3 +416,63 @@ http {
 """
     m = _audit(config)
     assert any(type(p).__name__ == 'http_splitting' for p in m.results)
+
+
+@pytest.mark.parametrize("map_first", [True, False])
+@pytest.mark.parametrize("capture", ["$1", "$path"])
+def test_map_regex_capture_taint_is_independent_of_source_order(map_first, capture, caplog):
+    mapping = 'map $uri $target { ~^/(?<path>.*)$ ' + capture + '; default ""; }'
+    server = 'server { location / { add_header X $target; } }'
+    parts = [mapping, server] if map_first else [server, mapping]
+    manager = _audit('http { ' + ' '.join(parts) + ' }', caplog)
+    # A dot excludes LF but permits CR, so splitting is still possible.
+    assert any(plugin.name == "http_splitting" for plugin in manager.results)
+    assert not manager.errors
+    assert not _missing(caplog)
+
+
+@pytest.mark.parametrize("initial,conditional,final,expected", [
+    ("$uri", "safe", "", True),
+    ("safe", "$uri", "", True),
+    ("safe", "also_safe", "", False),
+    ("$uri", "safe", "set $value safe;", False),
+])
+@pytest.mark.parametrize("sink_first", [False, True])
+def test_conditional_assignment_preserves_both_paths(initial, conditional, final, expected, sink_first):
+    assignments = """
+        set $value %s;
+        if ($arg_safe) { set $value %s; }
+        %s
+    """ % (initial, conditional, final)
+    sink = 'location / { set $copy "prefix:$value"; add_header X $copy; }'
+    parts = [sink, assignments] if sink_first else [assignments, sink]
+    manager = _audit("http { server { " + " ".join(parts) + " } }")
+    assert any(plugin.name == "http_splitting" for plugin in manager.results) == expected
+    assert not manager.errors
+
+
+def test_conditional_assignment_is_definite_inside_the_branch():
+    manager = _audit("""
+        server {
+            set $value $uri;
+            if ($arg_safe) { set $value safe; return 301 http://example.com/$value; }
+        }
+    """)
+    assert not any(plugin.name == "http_splitting" for plugin in manager.results)
+    assert not manager.errors
+
+
+@pytest.mark.parametrize("initial,expected", [('""', False), ("$uri", True)])
+def test_chained_conditional_assignments_are_audited_in_linear_time(initial, expected):
+    branches = " ".join('if ($arg_%d) { set $value "${value}%d"; }' % (i, i) for i in range(64))
+    manager = _audit("""
+        server {
+            set $value %s;
+            %s
+            location / { add_header X $value; proxy_pass http://backend/$value; }
+        }
+    """ % (initial, branches))
+    issues = [issue for plugin in manager.results if plugin.name == "http_splitting" for issue in plugin.issues]
+    assert bool(issues) == expected
+    assert all(len(issue.directives) < 200 for issue in issues)
+    assert not manager.errors

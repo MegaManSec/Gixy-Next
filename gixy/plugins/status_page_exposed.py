@@ -102,19 +102,17 @@ class status_page_exposed(Plugin):
         return {"inet", "inet6"}
 
     @classmethod
-    def _universal_addresses(cls, directive):
-        """Rule addresses that match every client the server can accept.
+    def _universal_addresses(cls, family):
+        """Rule addresses that match every client of one address family.
 
         ngx_http_access_rule() files `0.0.0.0/0` under the IPv4 rule list and
         `::/0` under the IPv6 one, and ngx_http_access_handler() consults only
-        the list matching the client's family, so each is universal only where
-        the server actually accepts that family.
+        the list matching the client's family.
         """
-        families = cls._reachable_families(directive)
         return frozenset(
             address
             for address, covered in cls.UNIVERSAL_ADDRESSES
-            if families.intersection(covered)
+            if family in covered
         )
 
     @staticmethod
@@ -136,8 +134,10 @@ class status_page_exposed(Plugin):
         if satisfy is None or satisfy.args[0].lower() != "any":
             return False
         rules = cls._access_rules(directive)
-        universal = cls._universal_addresses(directive)
-        return cls._first_universal_rule(rules, universal) == "allow"
+        return any(
+            cls._first_universal_rule(rules, cls._universal_addresses(family)) == "allow"
+            for family in cls._reachable_families(directive)
+        )
 
     @staticmethod
     def _location_is_internal_only(directive):
@@ -151,12 +151,16 @@ class status_page_exposed(Plugin):
     def _effective_access(cls, directive):
         """Resolve effective (has_allow, has_deny_all) for this scope."""
         rules = cls._access_rules(directive)
-        universal = cls._universal_addresses(directive)
+        universal = {address for address, _ in cls.UNIVERSAL_ADDRESSES}
         has_allow = any(
             (c.name or "").lower() == "allow" and c.args[0].lower() not in universal
             for c in rules
         )
-        return has_allow, cls._first_universal_rule(rules, universal) == "deny"
+        has_deny_all = all(
+            cls._first_universal_rule(rules, cls._universal_addresses(family)) == "deny"
+            for family in cls._reachable_families(directive)
+        )
+        return has_allow, has_deny_all
 
     def audit(self, directive):
         if self._server_uses_only_unix_sockets(directive):

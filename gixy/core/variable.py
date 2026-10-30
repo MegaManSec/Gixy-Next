@@ -1,3 +1,4 @@
+import functools
 import logging
 import re
 
@@ -11,6 +12,25 @@ EXTRACT_RE = re.compile(r"\$([1-9]|[a-z_][a-z0-9_]*|\{[a-z0-9_]+\})", re.IGNOREC
 GEO_PARAMETERS = frozenset(
     ("delete", "include", "proxy", "proxy_recursive", "ranges", "volatile")
 )
+_query_results = None
+
+
+def memoize_query(method):
+    @functools.wraps(method)
+    def wrapper(*args):
+        global _query_results
+        if _query_results is None:
+            _query_results = {}
+            try:
+                return wrapper(*args)
+            finally:
+                _query_results = None
+        key = (method,) + args
+        if key not in _query_results:
+            _query_results[key] = method(*args)
+        return _query_results[key]
+
+    return wrapper
 
 
 def compile_script(script, ctx=None):
@@ -80,6 +100,7 @@ class Variable(object):
         provider=None,
         have_script=True,
         ctx=None,
+        alternatives=None,
     ):
         """
         Gixy Nginx variable class - parse and provide helpers to work with it.
@@ -90,6 +111,7 @@ class Variable(object):
         :param Directive provider: directive that provide variable (e.g. if, location, rewrite, etc.).
         :param bool have_script: may variable have nginx script or not (mostly used to indicate a string literal).
         :param str ctx: used for MapBlock/GeoBlock and MapDirective encapsulation
+        :param tuple[Variable] alternatives: possible values after conditional assignments.
         """
 
         self.name = name
@@ -100,9 +122,10 @@ class Variable(object):
         self.provider = provider
         self.final_value = value
         self.ctx = ctx
+        self.alternatives = alternatives
         if isinstance(value, Regexp):
             self.regexp = value
-        elif have_script:
+        elif have_script and not alternatives:
             self.depends = compile_script(
                 value, ctx
             )  # XXX: Do we want to append new_depends below?
@@ -112,9 +135,10 @@ class Variable(object):
                 new_depends = compile_script(self.final_value, ctx)
                 if len(new_depends) == 0:
                     break
-                if (
-                    type(new_depends[0].value) is list
-                ):  # MapBlock, GeoBlock cannot be infinitely resolved
+                if any(isinstance(dep.value, list) or dep.alternatives for dep in new_depends):
+                    # Hash values and conditional alternatives cannot be
+                    # flattened into a single string.
+                    self.depends = new_depends
                     self.final_value = self.value
                     break
                 if len(new_depends) == 1 and self.final_value == new_depends[0].value:
@@ -123,6 +147,7 @@ class Variable(object):
                 all_vars = [str(i.value) for i in new_depends]
                 self.final_value = "".join(all_vars)
 
+    @memoize_query
     def can_contain(self, char):
         """
         Checks if variable can contain the specified char.
@@ -138,6 +163,9 @@ class Variable(object):
         # Then regexp
         if self.regexp:
             return self.regexp.can_contain(char, skip_literal=True)
+
+        if self.alternatives:
+            return any(var.can_contain(char) for var in self.alternatives)
 
         # Then dependencies
         if self.depends:
@@ -169,6 +197,7 @@ class Variable(object):
         # Otherwise user can't control value of this variable
         return False
 
+    @memoize_query
     def can_startswith(self, char):
         """
         Checks if variable can starts with the specified char.
@@ -184,6 +213,9 @@ class Variable(object):
         # Then regexp
         if self.regexp:
             return self.regexp.can_startswith(char)
+
+        if self.alternatives:
+            return any(var.can_startswith(char) for var in self.alternatives)
 
         # Then dependencies
         if self.depends:
@@ -211,6 +243,7 @@ class Variable(object):
         # Otherwise user can't control value of this variable
         return False
 
+    @memoize_query
     def must_contain(self, char):
         """
         Checks if variable MUST contain the specified char.
@@ -226,6 +259,9 @@ class Variable(object):
         # Then regexp
         if self.regexp:
             return self.regexp.must_contain(char)
+
+        if self.alternatives:
+            return all(var.must_contain(char) for var in self.alternatives)
 
         # Then dependencies
         if self.depends:
@@ -255,6 +291,7 @@ class Variable(object):
         # Otherwise checks literal
         return self.value and char in self.value
 
+    @memoize_query
     def must_startswith(self, char):
         """
         Checks if variable MUST starts with the specified char.
@@ -270,6 +307,9 @@ class Variable(object):
         # Then regexp
         if self.regexp:
             return self.regexp.must_startswith(char)
+
+        if self.alternatives:
+            return all(var.must_startswith(char) for var in self.alternatives)
 
         # Then dependencies
         if self.depends:
@@ -294,16 +334,45 @@ class Variable(object):
         return self.value and self.value[0] == char
 
     @property
+    def options(self):
+        """
+        Returns the values variable may take after conditional assignments.
+
+        :return Variable[]: variables without alternatives, except stand-ins for variables not assigned yet.
+        """
+        result, seen = [], set()
+
+        def collect(var):
+            if var in seen:
+                return
+            seen.add(var)
+            copied = var.depends[0] if var.depends and len(var.depends) == 1 else None
+            alternatives = var.alternatives or (copied.alternatives if copied else None)
+            if not alternatives and not (var.provider is None and var.value == var.name):
+                result.append(var)
+            for option in alternatives or ():
+                collect(option)
+
+        collect(self)
+        return result
+
+    @property
     def providers(self):
         """
         Returns list of variable provides.
 
         :return Directive[]: providers.
         """
-        result = []
-        if self.provider:
-            result.append(self.provider)
-        if self.depends:
-            for dep in self.depends:
-                result += dep.providers
+        result, seen = [], set()
+
+        def collect(var):
+            if var in seen:
+                return
+            seen.add(var)
+            if var.provider:
+                result.append(var.provider)
+            for dep in var.depends or var.alternatives or ():
+                collect(dep)
+
+        collect(self)
         return result

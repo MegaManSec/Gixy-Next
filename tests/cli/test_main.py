@@ -11,6 +11,7 @@ failure must not be silently swallowed as bad input.
 """
 
 import os
+import json
 import subprocess
 import sys
 
@@ -74,6 +75,19 @@ def test_clean_config_exits_zero(conf):
     assert "internal error" not in result.stderr
 
 
+@pytest.mark.parametrize("plugin,config,level,expected", [
+    ("resolver_external", "resolver 8.8.8.8;", "-lll", ["HIGH"]),
+    ("origins", 'server { if ($http_origin ~ "^https://example.com$") { return 200; } }',
+     "-lll", ["HIGH"]),
+    ("alias_traversal", "location /img { alias /data/images; }", "-lll", []),
+    ("alias_traversal", "location /img { alias /data/images; }", "-ll", ["MEDIUM"]),
+])
+def test_filter_uses_finding_severity(conf, plugin, config, level, expected):
+    result = run("--tests", plugin, level, "-f", "json", conf(config))
+    assert result.returncode == (EXIT_FINDINGS if expected else EXIT_OK)
+    assert [issue["severity"] for issue in json.loads(result.stdout)] == expected
+
+
 def test_findings_exit_one(conf):
     result = run(conf(WITH_FINDING))
     assert result.returncode == EXIT_FINDINGS
@@ -93,6 +107,18 @@ def test_unparsable_config_exits_two(conf):
     assert "could not fully analyze" in result.stderr
 
 
+def test_bad_include_does_not_skip_other_glob_matches(conf, tmp_path):
+    includes = tmp_path / "includes"
+    includes.mkdir()
+    (includes / "a.conf").write_text("server {")
+    (includes / "b.conf").write_text("location /img { alias /data/; }")
+    result = run("--tests", "alias_traversal", conf("include includes/*.conf;"))
+    assert result.returncode == EXIT_INVALID_CONFIG
+    assert "could not fully analyze" in result.stderr
+    assert "a.conf" in result.stderr
+    assert "alias_traversal" in result.stdout
+
+
 def test_missing_file_is_a_usage_error():
     result = run("/nonexistent/nginx.conf")
     assert result.returncode == EXIT_USAGE
@@ -104,6 +130,35 @@ def test_unknown_flag_is_a_usage_error():
     unparsable config."""
     result = run("--no-such-flag")
     assert result.returncode == EXIT_USAGE
+
+
+@pytest.mark.parametrize("option", ["--tests", "--skips"])
+def test_unknown_plugin_is_a_usage_error(conf, option):
+    result = run(option, "alias_travresal", conf("location /img { alias /data/; }"))
+    assert result.returncode == EXIT_USAGE
+    assert "Unknown plugin(s)" in result.stderr
+    assert "alias_travresal" in result.stderr
+
+
+@pytest.mark.parametrize("option,expected", [("--tests", EXIT_FINDINGS), ("--skips", EXIT_OK)])
+def test_empty_plugin_names_are_ignored(conf, option, expected):
+    result = run(option, "alias_traversal, ,", conf("location /img { alias /data/; }"))
+    assert result.returncode == expected
+    assert "Unknown plugin(s)" not in result.stderr
+
+
+@pytest.mark.parametrize("names", [",", " , "])
+def test_tests_without_plugin_names_is_a_usage_error(conf, names):
+    result = run("--tests", names, conf("location /img { alias /data/; }"))
+    assert result.returncode == EXIT_USAGE
+    assert "No plugin names in --tests" in result.stderr
+
+
+@pytest.mark.parametrize("names", [",", " , "])
+def test_skips_without_plugin_names_skips_nothing(conf, names):
+    result = run("--skips", names, conf("location /img { alias /data/; }"))
+    assert result.returncode == EXIT_FINDINGS
+    assert "alias_traversal" in result.stdout
 
 
 def test_too_high_severity_level_is_a_usage_error(conf):
