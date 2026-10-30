@@ -209,13 +209,6 @@ class IfBlock(Block):
     def is_regex(self):
         return self.operand and self.operand in ("~", "~*", "!~", "!~*")
 
-    @property
-    def always_returns(self):
-        stops = self.find("break", flat=True) + [
-            rewrite for rewrite in self.find("rewrite", flat=True) if rewrite.flag == "break"
-        ]
-        return bool(self.some("return", flat=False)) and not stops
-
     @cached_property
     def variables(self):
         if not self.is_regex or not self.value:

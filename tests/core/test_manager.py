@@ -462,32 +462,3 @@ def test_chained_conditional_assignments_are_audited_in_linear_time(initial, exp
     assert bool(issues) == expected
     assert all(len(issue.directives) < 200 for issue in issues)
     assert not manager.errors
-
-
-@pytest.mark.parametrize("body,expected", [
-    ("set $value $uri; return 403;", False),
-    ("set $value $uri; break; return 403;", True),
-    ("set $value $uri; rewrite ^ /blocked break; return 403;", True),
-    ("if ($arg_y) { break; } set $value $uri; return 403;", True),
-])
-def test_branch_ending_in_return_does_not_reach_later_directives(body, expected):
-    manager = _audit("""
-        server {
-            set $value safe;
-            if ($arg_x) { %s }
-            location / { add_header X $value; }
-        }
-    """ % body)
-    assert any(plugin.name == "http_splitting" for plugin in manager.results) == expected
-    assert not manager.errors
-
-
-@pytest.mark.parametrize("operand,expected", [("~", False), ("!~", True)])
-def test_returning_branch_keeps_captures_only_when_its_regex_matched(operand, expected):
-    manager = _audit("""
-        location / {
-            if ($uri %s "^/(.*)$") { return 403; }
-            add_header X $1;
-        }
-    """ % operand)
-    assert any(plugin.name == "http_splitting" for plugin in manager.results) == expected

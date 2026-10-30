@@ -110,7 +110,7 @@ class Manager(object):
             if directive.is_block:
                 self._audit_recursive(directive.children)
             if before is not None:
-                self._leave_branch(directive, before)
+                get_context().merge(before)
             if own_context:
                 pop_context()
 
@@ -182,15 +182,7 @@ class Manager(object):
                         context.add_var(var.name, var)
                 self._prepopulate_scope_var_values(directive.children)
                 if before is not None:
-                    self._leave_branch(directive, before)
-
-    @staticmethod
-    def _leave_branch(branch, before):
-        context = get_context()
-        if branch.always_returns and branch.operand not in ("!~", "!~*"):
-            context.variables = before.variables
-        else:
-            context.merge(before)
+                    context.merge(before)
 
     def _update_variables(self, directive):
         # TODO(buglloc): finish him!
