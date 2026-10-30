@@ -2,7 +2,7 @@
 .md-header__button.md-logo svg {
     height: 2.2rem !important;
     width: auto !important;
-    margin-left: 2.5rem;
+    margin-left: 0;
     margin-right: 2.5rem;
 }
 .md-nav__title[for="__drawer"] {
@@ -34,6 +34,10 @@
   max-width: none !important;
   padding: 0 !important;
   margin-top: 0 !important
+}
+
+.md-header__inner {
+  max-width: none;
 }
 
 .website-index-title { display: none; }
