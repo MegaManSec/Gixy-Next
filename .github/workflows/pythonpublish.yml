@@ -5,7 +5,11 @@ on:
     types: [published]
 
 jobs:
+  check:
+    uses: ./.github/workflows/release-check.yml
+
   build:
+    needs: check
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -52,4 +56,4 @@ jobs:
           path: dist
 
       - name: Publish to PyPI (OIDC Trusted Publishing)
-        uses: pypa/gh-action-pypi-publish@cef221092ed1bacb1cc03d23a2d87d1d172e277b  # v1.14.0
+        uses: pypa/gh-action-pypi-publish@7245906fb61fa33a13554f9d5fb856fe61758086  # v1.14.3
