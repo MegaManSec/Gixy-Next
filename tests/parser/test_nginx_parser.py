@@ -2,6 +2,7 @@ import pytest
 
 from gixy.directives.block import *
 from gixy.directives.directive import *
+from gixy.core.exceptions import InvalidConfiguration
 from gixy.parser.nginx_parser import NginxParser
 
 
@@ -400,3 +401,21 @@ def assert_config(config, expected):
     child = tree.children[0]
     for ex in expected:
         assert isinstance(child, ex)
+
+
+def test_stray_semicolons_are_reported_and_skipped():
+    parser = NginxParser(cwd="", allow_includes=False)
+    tree = parser.parse_string("gzip on;;\ngzip_comp_level 5;\nevents {;\n    worker_connections 1024;\n}\n")
+    assert [d.name for d in tree.children] == ["gzip", "gzip_comp_level", "events"]
+    assert [d.name for d in tree.children[2].children] == ["worker_connections"]
+    assert [(m.line, m.message) for m in parser.malformed] == [(1, 'Unexpected ";".'), (3, 'Unexpected ";".')]
+
+
+def test_dump_parse_errors_name_the_dumped_file(tmp_path):
+    path = tmp_path / "dump.conf"
+    path.write_text(
+        "# configuration file /etc/nginx/nginx.conf:\nevents {}\n\n"
+        "# configuration file /etc/nginx/conf.d/app.conf:\nserver {\n    {\n}\n"
+    )
+    with pytest.raises(InvalidConfiguration, match=r'Unexpected "\{" in /etc/nginx/conf\.d/app\.conf \(line:2\)\.'):
+        NginxParser(cwd="", allow_includes=False).parse_file(str(path))

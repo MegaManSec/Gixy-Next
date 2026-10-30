@@ -101,6 +101,12 @@ def test_malformed_directive_exits_two(conf):
     assert "add_header" in result.stderr
 
 
+def test_stray_brace_exits_two(conf):
+    result = run(conf("server {\n    {\n}\n"))
+    assert result.returncode == EXIT_INVALID_CONFIG
+    assert 'Unexpected "{"' in result.stderr
+
+
 def test_unparsable_config_exits_two(conf):
     result = run(conf(UNPARSABLE))
     assert result.returncode == EXIT_INVALID_CONFIG
