@@ -111,6 +111,12 @@ def test_copied_conditional_values_keep_their_options():
     assert len(Variable("joined", value="x$path").options) == 1
 
 
+def test_unassigned_stand_in_is_not_an_option():
+    assigned = Variable("backend", value="10.0.0.2", have_script=False)
+    var = Variable("backend", alternatives=(builtins.fake_var("backend"), assigned))
+    assert var.options == [assigned]
+
+
 def test_regexp_boundary():
     var = Variable(name='simple', value=Regexp('.*'), boundary=Regexp('/[a-z]', strict=True))
     assert not var.depends

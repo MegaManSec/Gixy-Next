@@ -338,7 +338,7 @@ class Variable(object):
         """
         Returns the values variable may take after conditional assignments.
 
-        :return Variable[]: variables without alternatives.
+        :return Variable[]: variables without alternatives, except stand-ins for variables not assigned yet.
         """
         result, seen = [], set()
 
@@ -348,7 +348,7 @@ class Variable(object):
             seen.add(var)
             copied = var.depends[0] if var.depends and len(var.depends) == 1 else None
             alternatives = var.alternatives or (copied.alternatives if copied else None)
-            if not alternatives:
+            if not alternatives and not (var.provider is None and var.value == var.name):
                 result.append(var)
             for option in alternatives or ():
                 collect(option)
