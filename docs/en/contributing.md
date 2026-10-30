@@ -52,6 +52,8 @@ Submitting obviously broken or careless changes will be treated as careless work
 
 `requirements.txt` pins every runtime dependency for CI, tox and the Docker image. After changing `install_requires` in `setup.py`, regenerate it on Python 3.11 with `pip-compile --strip-extras --output-file=requirements.txt setup.py`.
 
+The browser scanner pins the packages Pyodide does not provide in `docs/extra/gixy-scan.js`, and a test keeps them equal to `requirements.txt`. `docs/requirements.txt` locks the docs build with hashes; after changing `docs/requirements.in`, regenerate it with the command in its header.
+
 ## AI / LLM Tooling Usage Policy
 
 AI tools may be used when contributing to this repository, but they do not change contributor responsibility. If your code AI tool creates low quality code that you attempt to contribute, it means you produce low quality code.

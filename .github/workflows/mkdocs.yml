@@ -24,18 +24,15 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405  # v6.2.0
         with:
-          python-version: "3.x"
+          python-version: "3.13"
 
       - name: Install mkdocs deps + build tool
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r docs/requirements.txt
-          pip install build
+        run: pip install --require-hashes -r docs/requirements.txt
 
       - name: Build wheel and place into docs/extra/
         shell: bash
         run: |
-          python -m build --wheel
+          python -m build --wheel --no-isolation
 
           wheel="$(ls -1 dist/*.whl | head -n 1)"
           fname="$(basename "$wheel" .whl)"
@@ -64,7 +61,6 @@ jobs:
           sudo apt update
           sudo apt-get -y install pngquant
           sudo apt-get -y install libcairo2-dev libfreetype6-dev libffi-dev libjpeg-dev libpng-dev libz-dev
-          pip install "mkdocs-material[imaging]"
 
       - name: Deploy with MkDocs
         run: mkdocs gh-deploy --force

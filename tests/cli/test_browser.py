@@ -3,6 +3,7 @@
 import ast
 import json
 import logging
+import re
 import sys
 from pathlib import Path
 
@@ -11,11 +12,13 @@ import pytest
 import gixy.cli.main as cli
 from gixy.plugins.resolver_external import resolver_external
 
+ROOT = Path(__file__).parents[2]
+
 
 def run_bridge(tmp_path, monkeypatch, config):
     path = tmp_path / "nginx.conf"
     path.write_text(config)
-    source = (Path(__file__).parents[2] / "docs/extra/gixy-scan.js").read_text()
+    source = (ROOT / "docs/extra/gixy-scan.js").read_text()
     bridge = source.split("const out = await py.runPythonAsync(`", 1)[1].split("`);", 1)[0]
     bridge = bridge.replace("${inputPath}", str(path))
     parsed = ast.parse(bridge)
@@ -67,3 +70,11 @@ def test_browser_reports_internal_errors(tmp_path, monkeypatch):
     assert [(p["kind"], p["plugin"], p["message"]) for p in outcome["problems"]] == [
         ("internal", "resolver_external", "RuntimeError: boom"),
     ]
+
+
+def test_browser_pins_match_requirements():
+    source = (ROOT / "docs/extra/gixy-scan.js").read_text()
+    pins = re.findall(r'"([^"]+==[^"]+)"', source.split("const PYPI_PINS = [", 1)[1].split("];", 1)[0])
+    locked = set(re.findall(r"^\S+==\S+", (ROOT / "requirements.txt").read_text(), re.M))
+    assert pins
+    assert set(pins) <= locked
