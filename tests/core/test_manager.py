@@ -388,6 +388,20 @@ http { server {
     assert not manager.errors
 
 
+@pytest.mark.parametrize("named_first", [True, False])
+def test_location_capture_reaches_named_location(named_first, caplog):
+    named = "location @named { add_header X $1; }"
+    regex = "location ~ ^/a/([^/]*)$ { try_files $uri @named; }"
+    sibling = "location /b { add_header X $1; }"
+    parts = [named, sibling, regex] if named_first else [regex, sibling, named]
+    manager = _audit("http { server { " + " ".join(parts) + " } }", caplog)
+    assert [r for r in _missing(caplog) if "'1'" in r.getMessage()]
+    assert all("location /b" in r.getMessage() for r in _missing(caplog))
+    splitting = next(plugin for plugin in manager.results if plugin.name == "http_splitting")
+    assert [issue.directives[0].parent.path for issue in splitting.issues] == ["@named"]
+    assert not manager.errors
+
+
 def test_prepopulated_map_taint_still_fires_security_check():
     # map-after-server routes tainted $uri through $target; http_splitting must still fire
     config = """

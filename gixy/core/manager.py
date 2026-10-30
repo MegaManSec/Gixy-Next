@@ -7,7 +7,7 @@ from gixy.core import builtin_variables as builtins
 from gixy.core.config import Config
 from gixy.core.context import get_context, pop_context, purge_context, push_context
 from gixy.core.plugins_manager import PluginsManager
-from gixy.directives.block import GeoBlock, IfBlock, MapBlock
+from gixy.directives.block import GeoBlock, IfBlock, LocationBlock, MapBlock
 from gixy.directives.directive import (
     AuthRequestSetDirective,
     MapDirective,
@@ -18,6 +18,7 @@ from gixy.directives.directive import (
     SetDirective,
 )
 from gixy.core.regexp import Regexp
+from gixy.core.variable import Variable
 from gixy.parser.nginx_parser import NginxParser
 
 # Directives that register a named variable visible throughout their enclosing
@@ -104,6 +105,8 @@ class Manager(object):
             own_context = directive.is_block and directive.self_context
             if own_context:
                 push_context(directive)
+            if isinstance(directive, LocationBlock) and directive.path.startswith("@"):
+                self._add_location_captures(directive.parent)
             before = copy.deepcopy(get_context()) if isinstance(directive, IfBlock) else None
             self._update_variables(directive)
             self.auditor.audit(directive)
@@ -183,6 +186,18 @@ class Manager(object):
                 self._prepopulate_scope_var_values(directive.children)
                 if before is not None:
                     context.merge(before)
+
+    def _add_location_captures(self, server):
+        context = get_context()
+        captures = {}
+        for location in server.find_all_contexts_of_type("location"):
+            if location.is_regex:
+                for var in self._provided_variables(location):
+                    captures.setdefault(var.name, []).append(var)
+        for name, options in captures.items():
+            kind = "index" if isinstance(name, int) else "name"
+            before = context.variables[kind].get(name) or Variable(name=name, value="", have_script=False)
+            context.add_var(name, Variable(name=name, alternatives=(before,) + tuple(options)))
 
     def _update_variables(self, directive):
         # TODO(buglloc): finish him!
