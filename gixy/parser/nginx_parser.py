@@ -21,6 +21,27 @@ BLOCK_NAMES_VALID_AS_DIRECTIVES = frozenset({"server", "include"})
 DUMP_FILE_HEADER = re.compile(r"^# configuration file (.+):\s*$")
 
 
+def _without_nginx_t_status(path):
+    """Return the file with the "nginx: ..." status lines that `nginx -T 2>&1`
+    prints before its dump blanked out, or None if there are none."""
+    try:
+        with open(path, "rb") as f:
+            data = f.read()
+    except OSError:
+        return None
+    if not data.startswith(b"nginx: "):
+        return None
+    lines = data.split(b"\n")
+    for number, line in enumerate(lines):
+        if not line.startswith(b"nginx: ") and line.strip():
+            break
+    else:
+        return None
+    if not DUMP_FILE_HEADER.match(lines[number].decode("utf-8", "replace")):
+        return None
+    return b"\n".join([b""] * number + lines[number:])
+
+
 def _dump_location(path, line):
     """Map a line of an `nginx -T` dump to (dumped file, line within it)."""
     location = None
@@ -70,6 +91,9 @@ class NginxParser(object):
         real_path = display_path if display_path else path
         LOG.debug("Parse file: {0}".format(real_path))
         root = self._ensure_root(root)
+        without_status = _without_nginx_t_status(path)
+        if without_status is not None:
+            return self.parse_string(without_status, root=root, path_info=real_path)
         try:
             parsed = self.parser.parse_path(path)
         except ParseException as e:

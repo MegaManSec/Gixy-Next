@@ -419,3 +419,27 @@ def test_dump_parse_errors_name_the_dumped_file(tmp_path):
     )
     with pytest.raises(InvalidConfiguration, match=r'Unexpected "\{" in /etc/nginx/conf\.d/app\.conf \(line:2\)\.'):
         NginxParser(cwd="", allow_includes=False).parse_file(str(path))
+
+
+def test_dump_with_nginx_t_status_lines(tmp_path):
+    dump = (
+        "# configuration file /etc/nginx/nginx.conf:\nhttp {\n    include /etc/nginx/conf.d/app.conf;\n}\n\n"
+        "# configuration file /etc/nginx/conf.d/app.conf:\nserver {\n    listen 80;\n}\n"
+    )
+    path = tmp_path / "dump.conf"
+    path.write_text(
+        "nginx: the configuration file /etc/nginx/nginx.conf syntax is ok\n"
+        "nginx: configuration file /etc/nginx/nginx.conf test is successful\n" + dump
+    )
+    parser = NginxParser(cwd="", allow_includes=True)
+    tree = parser.parse_file(str(path))
+    assert parser.is_dump
+    server = tree.children[0].children[0]
+    assert (server.name, server.file, server.line) == ("server", "/etc/nginx/conf.d/app.conf", 1)
+
+
+def test_nginx_status_lines_outside_a_dump_are_left_alone(tmp_path):
+    path = tmp_path / "nginx.conf"
+    path.write_text("nginx: x;\nworker_processes 1;\n")
+    tree = NginxParser(cwd="", allow_includes=False).parse_file(str(path))
+    assert [d.name for d in tree.children] == ["nginx:", "worker_processes"]
