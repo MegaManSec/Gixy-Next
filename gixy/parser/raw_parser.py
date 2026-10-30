@@ -219,7 +219,7 @@ class RawParser(object):
             if not isinstance(node, dict):
                 continue
 
-            directive_name = node.get("directive", "")
+            directive_name = _process_nginx_string(node.get("directive", ""))
             args = [_process_nginx_string(arg) for arg in node.get("args", [])]
 
             if "block" in node:

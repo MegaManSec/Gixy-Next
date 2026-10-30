@@ -11,6 +11,11 @@ def test_regex_escapes_are_preserved():
     assert parsed[0]["args"][1] == r"^/(\d+)\.\w+$"
 
 
+def test_map_key_escapes():
+    parsed = RawParser().parse(r'''map $http_origin $cors { "~^https://a\\.example\\.com$" 1; }''')
+    assert parsed[0]["children"][0]["name"] == r"~^https://a\.example\.com$"
+
+
 def test_directive():
     # Verified at AST level; RawParser covered by minimal tests
     pass
