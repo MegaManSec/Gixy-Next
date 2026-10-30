@@ -125,6 +125,16 @@ def test_missing_file_is_a_usage_error():
     assert "was not found" in result.stderr
 
 
+@pytest.mark.skipif(getattr(os, "geteuid", lambda: -1)() == 0, reason="root can read any file")
+def test_unreadable_file_is_a_usage_error(tmp_path):
+    path = tmp_path / "nginx.conf"
+    path.write_text("worker_processes auto;\n")
+    path.chmod(0)
+    result = run(str(path))
+    assert result.returncode == EXIT_USAGE
+    assert "is not readable" in result.stderr
+
+
 def test_unknown_flag_is_a_usage_error():
     """argparse exits 2 by default, which the contract reserves for an
     unparsable config."""

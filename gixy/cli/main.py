@@ -324,6 +324,14 @@ def main():
                 )
                 sys.exit(EXIT_USAGE)
 
+            if not os.access(path, os.R_OK):
+                sys.stderr.write(
+                    "File {path!r} is not readable.\nCheck its permissions, or pass it on stdin.\n".format(
+                        path=path
+                    )
+                )
+                sys.exit(EXIT_USAGE)
+
             nginx_files.append(path)
 
     try:
