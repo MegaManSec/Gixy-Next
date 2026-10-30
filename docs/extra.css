@@ -128,6 +128,10 @@ html, body { overscroll-behavior: none; }
   margin: 0.25rem 0 0.8rem;
 }
 
+.gixy-summary[hidden], .gixy-filters[hidden] {
+  display: none;
+}
+
 .gixy-chip {
   display: inline-flex;
   align-items: center;
@@ -234,11 +238,22 @@ html, body { overscroll-behavior: none; }
 
 .md-typeset .gixy-findings details {
   overflow: hidden;
+  font-size: 0.7rem;
 }
 
 .md-typeset .gixy-findings details > summary {
   box-shadow: none !important;
   margin: -0.55rem -0.7rem 0 -0.7rem;
+  padding: 0.55rem 2rem 0.55rem 0.7rem;
+  font-weight: 400;
+}
+
+.md-typeset .gixy-findings details > summary::before {
+  display: none;
+}
+
+.gixy-findings summary .gixy-meta {
+  font-size: inherit;
 }
 
 .md-typeset a {
@@ -251,4 +266,66 @@ html, body { overscroll-behavior: none; }
 .md-typeset a:hover,
 .md-typeset a:focus-visible {
   text-decoration-color: currentColor;
+}
+
+.gixy-notices .admonition {
+  margin: 0 0 1rem;
+}
+
+.md-typeset ul.gixy-problems {
+  list-style: none;
+  margin: 0.6rem 0;
+}
+
+.md-typeset ul.gixy-problems > li {
+  margin: 0 0 0.5rem;
+}
+
+.md-typeset ul.gixy-problems > li:last-child {
+  margin-bottom: 0;
+}
+
+.gixy-problems .gixy-meta {
+  display: block;
+  font-size: inherit;
+}
+
+.md-typeset .gixy-details {
+  margin: 0.6rem 0;
+  padding: 0;
+  border: 0;
+  box-shadow: none;
+  background: none;
+}
+
+.md-typeset .gixy-details > summary {
+  display: inline-block;
+  margin: 0;
+  padding: 0;
+  background: none;
+  font-weight: 400;
+  color: var(--md-default-fg-color--light);
+}
+
+.md-typeset .gixy-details > summary::before {
+  display: none;
+}
+
+.md-typeset .gixy-details > summary::after {
+  position: static;
+  display: inline-block;
+  width: 1.1em;
+  height: 1.1em;
+  margin-left: 0.1em;
+  vertical-align: -0.25em;
+}
+
+.md-typeset .gixy-details pre {
+  margin: 0.4rem 0 0;
+}
+
+.md-typeset .gixy-details pre > code {
+  max-height: 15rem;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
