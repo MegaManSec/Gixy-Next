@@ -2,8 +2,6 @@
 .md-header__button.md-logo svg {
     height: 2.2rem !important;
     width: auto !important;
-    margin-left: 0;
-    margin-right: 2.5rem;
 }
 .md-nav__title[for="__drawer"] {
     font-size: 0 !important;
