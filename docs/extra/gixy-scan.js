@@ -15,6 +15,13 @@
   const PYODIDE_MOD = PYODIDE_BASE + "pyodide.mjs";
 
   const WHEEL_URL = new URL("/extra/gixy_next-0.0.0-py3-none-any.whl", window.location.origin).href;
+  const PYPI_PINS = [
+    "configargparse==1.9.0",
+    "crossplane==0.5.8",
+    "filelock==4.2.5",
+    "requests-file==3.0.1",
+    "tldextract==5.4.0",
+  ];
   const ISSUES_URL = "https://github.com/MegaManSec/Gixy-Next/issues/new";
 
   const severityOrder = ["CRITICAL", "HIGH", "MEDIUM", "LOW", "INFORMATION", "UNKNOWN"];
@@ -317,7 +324,7 @@ server {
       await pyodide.loadPackage("micropip");
       await pyodide.runPythonAsync(`
 import micropip
-await micropip.install("${WHEEL_URL}")
+await micropip.install("${WHEEL_URL}", constraints=${JSON.stringify(PYPI_PINS)})
       `);
 
       state.pyodide = pyodide;

@@ -15,7 +15,7 @@ jobs:
         with:
           python-version: '3.x'
       - name: Install yamllint
-        run: python -m pip install yamllint
+        run: python -m pip install yamllint==1.38.0
       - name: Run yamllint
         run: yamllint -c .yamllint.yml .github/workflows/ mkdocs.yml
 
