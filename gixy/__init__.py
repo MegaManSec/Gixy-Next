@@ -2,7 +2,7 @@
 
 from gixy.core import severity
 
-version = "0.9.0"
+version = "0.10.0"
 
 STDIN_ARG = "-"
 STDIN_NAME = "<stdin>"
