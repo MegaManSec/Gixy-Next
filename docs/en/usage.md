@@ -85,6 +85,8 @@ nginx -T | docker run --pull=always --rm -i ghcr.io/megamansec/gixy-next gixy-ne
 nginx -T | docker run --pull=always --rm -i megamansec/gixy-next gixy-next -
 ```
 
+The image runs as an unprivileged user, so scan a config file that only root can read from stdin, as above, or add `--user root` to `docker run`.
+
 ## Severity filtering
 
 By default, `gixy` reports everything it finds. If you only care about higher-severity issues, use `-l` repeats:
