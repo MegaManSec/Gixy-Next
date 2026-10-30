@@ -147,6 +147,20 @@ def test_empty_plugin_names_are_ignored(conf, option, expected):
     assert "Unknown plugin(s)" not in result.stderr
 
 
+@pytest.mark.parametrize("names", [",", " , "])
+def test_tests_without_plugin_names_is_a_usage_error(conf, names):
+    result = run("--tests", names, conf("location /img { alias /data/; }"))
+    assert result.returncode == EXIT_USAGE
+    assert "No plugin names in --tests" in result.stderr
+
+
+@pytest.mark.parametrize("names", [",", " , "])
+def test_skips_without_plugin_names_skips_nothing(conf, names):
+    result = run("--skips", names, conf("location /img { alias /data/; }"))
+    assert result.returncode == EXIT_FINDINGS
+    assert "alias_traversal" in result.stdout
+
+
 def test_too_high_severity_level_is_a_usage_error(conf):
     result = run("-lllllll", conf(CLEAN))
     assert result.returncode == EXIT_USAGE

@@ -338,6 +338,8 @@ def main():
 
     if args.tests:
         tests = [x.strip() for x in args.tests.split(",") if x.strip()]
+        if not tests:
+            parser.error("No plugin names in --tests: {0!r}".format(args.tests))
     else:
         tests = None
 
