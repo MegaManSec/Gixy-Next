@@ -24,14 +24,9 @@ if not version:
 
 install_requires = [
     "crossplane>=0.5.8",
-    'cached-property>=1.2.0;python_version<"3.8"',
-    'argparse>=1.4.0;python_version<"3.2"',
     "Jinja2>=2.8",
     "ConfigArgParse>=0.11.0",
-    'tldextract==3.1.2; python_version>="3.6" and python_version<"3.7"',
-    'tldextract==4.0.0; python_version>="3.7" and python_version<"3.8"',
-    'tldextract>=5.1.2,<5.3.0; python_version>="3.8" and python_version<"3.9"',
-    'tldextract>=5.3.0; python_version>="3.9"',
+    "tldextract>=5.3.0",
 ]
 
 tests_requires = [
@@ -159,16 +154,12 @@ setup(
 
         "Programming Language :: Python",
         "Programming Language :: Python :: 3",
-        "Programming Language :: Python :: 3.6",
-        "Programming Language :: Python :: 3.7",
-        "Programming Language :: Python :: 3.8",
-        "Programming Language :: Python :: 3.9",
-        "Programming Language :: Python :: 3.10",
         "Programming Language :: Python :: 3.11",
         "Programming Language :: Python :: 3.12",
+        "Programming Language :: Python :: 3.13",
         "Programming Language :: Python :: 3.14",
         "Programming Language :: Python :: 3.15",
     ],
 
-    python_requires=">=3.6",
+    python_requires=">=3.11",
 )

@@ -1,12 +1,8 @@
 import logging
 import random  # noqa: S311 - used for example generation, not security
 import re
+from functools import cached_property
 from itertools import product
-
-try:
-    from cached_property import cached_property
-except ImportError:
-    from functools import cached_property
 
 import gixy.core.sre_parse.sre_parse as sre_parse
 
