@@ -76,6 +76,8 @@ nginx -T | docker run --pull=always --rm -i ghcr.io/megamansec/gixy-next gixy-ne
 nginx -T | docker run --pull=always --rm -i megamansec/gixy-next gixy-next -
 ```
 
+The image runs as an unprivileged user, so scan a config file that only root can read from stdin, as above, or add `--user root` to `docker run`.
+
 ## What it can do
 
 Gixy-Next can detect a wide range of NGINX security and performance misconfigurations across `nginx.conf` and included configuration files. The following plugins are supported:
