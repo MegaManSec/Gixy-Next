@@ -23,6 +23,16 @@ class if_is_evil(Plugin):
     directives = []
 
     def audit(self, directive):
+        if directive.name == "if" and not directive.children:
+            location = directive.parent
+            if location and location.name == "location" and location.some("try_files", flat=False):
+                self.add_issue(
+                    directive=[directive, location.some("try_files", flat=False)],
+                    reason="An empty `if` within a `location` that uses `try_files` still replaces the location's "
+                    "configuration when it matches, so `try_files` does not run.",
+                )
+            return
+
         parent = directive.parent
         # if immediate parent is not "if" break out
         if not parent or parent.name != "if":
