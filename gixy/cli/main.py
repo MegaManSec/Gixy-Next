@@ -82,10 +82,14 @@ def _emit_diagnostics(diagnostics, debug=False):
                 path=path, loc=_diag_location(rec, path), msg=rec.message
             )
         )
-    if malformed:
+    if any(rec.phase != "read" for _, rec in malformed):
         sys.stderr.write(
             "gixy is a security linter, not a configuration validator; "
             "verify syntax with `nginx -t`.\n"
+        )
+    if any(rec.phase == "read" for _, rec in malformed):
+        sys.stderr.write(
+            "Run gixy as a user that can read the configuration, or scan an `nginx -T` dump instead.\n"
         )
 
     for path, rec in internal:
@@ -324,10 +328,12 @@ def main():
                 )
                 sys.exit(EXIT_USAGE)
 
-            if not os.access(path, os.R_OK):
+            try:
+                open(path, "rb").close()
+            except OSError as e:
                 sys.stderr.write(
-                    "File {path!r} is not readable.\nCheck its permissions, or pass it on stdin.\n".format(
-                        path=path
+                    "File {path!r} is not readable: {error}.\nCheck its permissions, or pass it on stdin.\n".format(
+                        path=path, error=e.strerror
                     )
                 )
                 sys.exit(EXIT_USAGE)
@@ -424,7 +430,7 @@ def main():
                 # The config could not be parsed at all (e.g. a syntax error);
                 # auditing never started, so yoda.errors is empty.
                 file_diags.append(
-                    Diagnostic("malformed", "parse", str(e), file=display_path)
+                    Diagnostic("malformed", e.phase, str(e), file=display_path)
                 )
             except Exception as e:
                 # Last-resort safety net for an unexpected failure that escaped

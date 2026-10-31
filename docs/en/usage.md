@@ -172,13 +172,13 @@ gixy -f json -o gixy-report.json
 
 `gixy` reports the outcome of a run through its exit code:
 
-| Code | Meaning                                                                 |
-| ---- | ----------------------------------------------------------------------- |
-| `0`  | The config was analyzed and no issues were found.                       |
-| `1`  | One or more issues were reported.                                       |
-| `2`  | The input is not valid NGINX config, so it could not be fully analyzed. |
-| `3`  | An unexpected error occurred inside `gixy` — most likely a bug.         |
-| `4`  | `gixy` was invoked incorrectly (bad option, missing file).              |
+| Code | Meaning                                                                                               |
+| ---- | ----------------------------------------------------------------------------------------------------- |
+| `0`  | The config was analyzed and no issues were found.                                                     |
+| `1`  | One or more issues were reported.                                                                     |
+| `2`  | The input could not be fully analyzed: invalid NGINX config, or an included file that cannot be read. |
+| `3`  | An unexpected error occurred inside `gixy` — most likely a bug.                                       |
+| `4`  | `gixy` was invoked incorrectly (bad option, missing or unreadable file).                              |
 
 When several files are scanned, the highest of codes `0`-`3` wins. Code `4` means `gixy` never got as far as analyzing anything, so it is reported on its own.
 

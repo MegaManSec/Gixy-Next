@@ -141,6 +141,25 @@ def test_unreadable_file_is_a_usage_error(tmp_path):
     assert "is not readable" in result.stderr
 
 
+def test_directory_is_a_usage_error(tmp_path):
+    result = run(str(tmp_path))
+    assert result.returncode == EXIT_USAGE
+    assert "is not readable: Is a directory" in result.stderr
+
+
+@pytest.mark.skipif(getattr(os, "geteuid", lambda: -1)() == 0, reason="root can read any file")
+def test_unreadable_include_is_reported_as_unreadable(tmp_path):
+    included = tmp_path / "secret.conf"
+    included.write_text("resolver 8.8.8.8;\n")
+    included.chmod(0)
+    main = tmp_path / "nginx.conf"
+    main.write_text("http {\n    include secret.conf;\n}\n")
+    result = run(str(main))
+    assert result.returncode == EXIT_INVALID_CONFIG
+    assert "Cannot read" in result.stderr
+    assert "nginx -t" not in result.stderr
+
+
 def test_unknown_flag_is_a_usage_error():
     """argparse exits 2 by default, which the contract reserves for an
     unparsable config."""
