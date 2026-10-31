@@ -163,29 +163,13 @@ class NginxParser(object):
             InvalidConfiguration: When parsing fails.
         """
         root = self._ensure_root(root)
-        import tempfile
-
         data = (
             content
             if isinstance(content, (bytes, bytearray))
             else content.encode("utf-8")
         )
-        tmp_filename = None
-        try:
-            with tempfile.NamedTemporaryFile(
-                mode="wb", suffix=".conf", delete=False
-            ) as tmp:
-                tmp.write(data)
-                tmp_filename = tmp.name
+        with raw_parser.config_path(data) as tmp_filename:
             return self.parse_file(tmp_filename, root=root, display_path=path_info)
-        except InvalidConfiguration:
-            raise
-        finally:
-            if tmp_filename:
-                try:
-                    os.unlink(tmp_filename)
-                except Exception:
-                    pass
 
     # Backward-compatible alias (deprecated). Prefer parse_string.
     def parse(self, content, root=None, path_info=None):

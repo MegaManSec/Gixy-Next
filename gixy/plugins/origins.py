@@ -14,7 +14,7 @@ from gixy.plugins.plugin import Plugin
 LOG = logging.getLogger(__name__)
 
 _EXTRACT = tldextract.TLDExtract(
-    include_psl_private_domains=True, suffix_list_urls=()
+    include_psl_private_domains=True, suffix_list_urls=(), cache_dir=None
 )  # include private domains, because we only care about origin; not domain ownership
 
 

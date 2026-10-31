@@ -1,3 +1,6 @@
+import os
+import tempfile
+
 import pytest
 
 from gixy.parser.raw_parser import *
@@ -150,3 +153,12 @@ def test_braces_nginx_accepts():
         '# {\nadd_header X "{";\ncontent_by_lua_block {\n    local t = {}\n}\nset $a ${b}c;\nlocation ~ "^/a{2}$" {}\n'
     )
     assert [n.get("name") for n in parsed] == [None, "add_header", "content_by_lua_block", "set", "location"]
+
+
+@pytest.mark.skipif(not hasattr(os, "memfd_create"), reason="in-memory files need Linux")
+def test_parses_without_a_writable_temp_dir(monkeypatch):
+    def unavailable(*args, **kwargs):
+        raise FileNotFoundError("No usable temporary directory found")
+
+    monkeypatch.setattr(tempfile, "NamedTemporaryFile", unavailable)
+    assert RawParser().parse("worker_processes 1;\n")[0]["name"] == "worker_processes"

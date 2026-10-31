@@ -1,3 +1,4 @@
+import contextlib
 import re
 
 import crossplane
@@ -5,6 +6,32 @@ from crossplane.errors import NgxParserBaseException
 
 import os
 import tempfile
+
+
+@contextlib.contextmanager
+def config_path(data):
+    """Yield a filesystem path holding ``data`` for crossplane, which only
+    parses files: a temporary file, or on Linux an anonymous in-memory file
+    when no temporary directory is writable (e.g. ``docker run --read-only``)."""
+    try:
+        tmp = tempfile.NamedTemporaryFile(mode="wb", suffix=".conf", delete=False)
+    except OSError:
+        if not hasattr(os, "memfd_create"):
+            raise
+        fd = os.memfd_create("gixy.conf")
+        try:
+            with open(fd, "wb", closefd=False) as memfile:
+                memfile.write(data)
+            yield "/proc/self/fd/{0}".format(fd)
+        finally:
+            os.close(fd)
+        return
+    try:
+        with tmp:
+            tmp.write(data)
+        yield tmp.name
+    finally:
+        os.unlink(tmp.name)
 
 
 def _process_nginx_string(value):
@@ -135,16 +162,7 @@ class RawParser(object):
             return []
 
         try:
-            temp_filename = None
-            try:
-                # Create a temporary file with the content
-                with tempfile.NamedTemporaryFile(
-                    mode="w", suffix=".conf", delete=False, encoding="utf-8", newline=""
-                ) as temp_file:
-                    temp_filename = temp_file.name
-                    temp_file.write(content)
-                    temp_file.flush()
-
+            with config_path(content.encode("utf-8")) as temp_filename:
                 self._after_stray = scan_tokens(crossplane.lex(temp_filename))
                 # Parse using crossplane with relaxed context checking for standalone configs
                 parsed = crossplane.parse(
@@ -158,13 +176,6 @@ class RawParser(object):
 
                 raise_on_crossplane_failure(parsed)
                 return self._normalize_crossplane(parsed)
-            finally:
-                # Clean up temporary file
-                if temp_filename:
-                    try:
-                        os.unlink(temp_filename)
-                    except FileNotFoundError:
-                        pass
 
         except NgxParserBaseException as e:
             # Convert crossplane exception to ParseException format

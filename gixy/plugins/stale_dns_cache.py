@@ -8,7 +8,7 @@ from gixy.core.variable import compile_script
 from gixy.directives.directive import is_ipv4, is_ipv6
 from gixy.plugins.plugin import Plugin
 
-_EXTRACT = tldextract.TLDExtract(include_psl_private_domains=True, suffix_list_urls=())
+_EXTRACT = tldextract.TLDExtract(include_psl_private_domains=True, suffix_list_urls=(), cache_dir=None)
 
 
 class stale_dns_cache(Plugin):

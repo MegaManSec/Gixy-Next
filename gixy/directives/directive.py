@@ -8,7 +8,7 @@ from gixy.core.exceptions import MalformedDirective
 from gixy.core.regexp import Regexp
 from gixy.core.variable import Variable
 
-_TLD = tldextract.TLDExtract(include_psl_private_domains=False, suffix_list_urls=())
+_TLD = tldextract.TLDExtract(include_psl_private_domains=False, suffix_list_urls=(), cache_dir=None)
 
 # Sentinel distinguishing "no default supplied" from an explicit default of None
 # in Directive.arg().
