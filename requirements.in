@@ -1,0 +1,7 @@
+build
+mkdocs
+mkdocs-llmstxt
+mkdocs-material[imaging]
+mkdocs-static-i18n
+pymdown-extensions
+setuptools
