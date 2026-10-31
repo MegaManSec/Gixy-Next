@@ -30,7 +30,11 @@ jobs:
             echo "::error::$TAG is a prerelease; only X.Y.Z releases are published."
             exit 1
           fi
-          previous=$(git tag --list 'v*' --sort=-v:refname | awk -v tag="$TAG" '$0 != tag && !p { p = $0 } END { print p }')
+          previous=
+          for tag in $(git tag --list 'v*' --sort=v:refname); do
+            [ "$tag" = "$TAG" ] && break
+            [[ "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] && previous=$tag
+          done
           if [ -n "$previous" ]; then
             IFS=. read -r major minor patch <<< "${previous#v}"
             allowed="$major.$minor.$((patch + 1)) $major.$((minor + 1)).0 $((major + 1)).0.0"

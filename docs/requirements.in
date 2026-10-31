@@ -1,6 +1,4 @@
 build
-jieba
-markdown-include
 mkdocs
 mkdocs-llmstxt
 mkdocs-material[imaging]

@@ -29,7 +29,8 @@ jobs:
           python-version: "3.13"
 
       - name: Install mkdocs deps + build tool
-        run: pip install --require-hashes -r docs/requirements.txt
+        run: |
+          pip install --require-hashes --only-binary :all: -r docs/requirements.txt
 
       - name: Build wheel and place into docs/extra/
         shell: bash

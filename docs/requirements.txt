@@ -335,9 +335,6 @@ idna==3.20 \
     --hash=sha256:a7db850025b95ded1eae8a46181a1a6c56c92c96f0e2b005d9ff8dc0210cab44 \
     --hash=sha256:ab7ae7122974553370f0bdb919e1a960b2cd1bc1ef0276416d896db81c14582c
     # via requests
-jieba==0.42.1 \
-    --hash=sha256:055ca12f62674fafed09427f176506079bc135638a14e23e25be909131928db2
-    # via -r docs/requirements.in
 jinja2==3.1.6 \
     --hash=sha256:0137fb05990d35f1275a587e9aee6d56da821fc83491a0fb838183be43f66d6d \
     --hash=sha256:85ece4451f492d0c13c5dd7c13a64681a86afae63a5f347908daf103ce6d2f67
@@ -348,14 +345,9 @@ markdown==3.11.2 \
     --hash=sha256:87bf5d90f2d2882e2c02fcda182c2800456b985bff38913867c49706481514b0 \
     --hash=sha256:f80390747a2a0ff2ba54da074ce4f862f72a6685f608cd2637b646a6d83993f5
     # via
-    #   markdown-include
     #   mkdocs
     #   mkdocs-material
     #   pymdown-extensions
-markdown-include==0.8.1 \
-    --hash=sha256:1d0623e0fc2757c38d35df53752768356162284259d259c486b4ab6285cdbbe3 \
-    --hash=sha256:32f0635b9cfef46997b307e2430022852529f7a5b87c0075c504283e7cc7db53
-    # via -r docs/requirements.in
 markdown-it-py==3.0.0 \
     --hash=sha256:355216845c60bd96232cd8d8c40e8f9765cc86f46880e43a8fd22dc1a1a8cab1 \
     --hash=sha256:e3f60a94fa066dc52ec76661e37c851cb232d92f9886b15cb560aaada2df8feb
