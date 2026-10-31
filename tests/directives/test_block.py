@@ -1,3 +1,5 @@
+import pytest
+
 from gixy.directives.block import *
 from gixy.parser.nginx_parser import NginxParser
 
@@ -91,6 +93,19 @@ location = / {
     assert isinstance(directive, LocationBlock)
     assert directive.modifier == '='
     assert directive.path == '/'
+
+
+@pytest.mark.parametrize('arg,modifier,path', [
+    ('=/exact', '=', '/exact'),
+    ('^~/static/', '^~', '/static/'),
+    ('~^/api/', '~', '^/api/'),
+    ('~*\\.php$', '~*', '\\.php$'),
+    ('/plain/', None, '/plain/'),
+    ('@named', None, '@named'),
+])
+def test_location_joined_modifier(arg, modifier, path):
+    directive = _get_parsed('location %s {\n}' % arg)
+    assert (directive.modifier, directive.path) == (modifier, path)
 
 
 def test_if():

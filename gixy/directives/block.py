@@ -131,8 +131,11 @@ class LocationBlock(Block):
         if len(args) == 2:
             self.modifier, self.path = args
         else:
-            self.modifier = None
-            self.path = args[0]
+            self.modifier, self.path = None, args[0]
+            for modifier in ("=", "^~", "~*", "~"):
+                if self.path.startswith(modifier) and len(self.path) > len(modifier):
+                    self.modifier, self.path = modifier, self.path[len(modifier):]
+                    break
 
     @property
     def is_internal(self):
