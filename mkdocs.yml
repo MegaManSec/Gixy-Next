@@ -102,6 +102,7 @@ nav:
       - plugins/low_keepalive_requests.md
       - plugins/missing_worker_processes.md
       - plugins/mixed_case_variable.md
+      - plugins/non_expanding_variable.md
       - plugins/origins.md
       - plugins/overlapping_captures.md
       - plugins/proxy_buffering_off.md

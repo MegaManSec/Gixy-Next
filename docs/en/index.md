@@ -100,6 +100,7 @@ Gixy-Next can detect a wide range of NGINX security and performance misconfigura
 - [[low_keepalive_requests] Low `keepalive_requests`](https://gixy.io/plugins/low_keepalive_requests/)
 - [[missing_worker_processes] Missing `worker_processes`](https://gixy.io/plugins/missing_worker_processes/)
 - [[mixed_case_variable] Mixed-case variable references](https://gixy.io/plugins/mixed_case_variable/)
+- [[non_expanding_variable] Variable used where NGINX does not expand variables](https://gixy.io/plugins/non_expanding_variable/)
 - [[origins] Problems with referer/origin header validation](https://gixy.io/plugins/origins/)
 - [[overlapping_captures] Overlapping captures in rewrite redirect/args context](https://gixy.io/plugins/overlapping_captures/)
 - [[proxy_buffering_off] Disabling `proxy_buffering`](https://gixy.io/plugins/proxy_buffering_off/)
