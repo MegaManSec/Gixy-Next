@@ -408,7 +408,6 @@ json.dumps({
       showOutcome(outcome, inputPath);
       render();
     } catch (e) {
-      state.initPromise = null;
       if (loaded) {
         showNotice(
           "bug",
@@ -417,6 +416,7 @@ json.dumps({
           String(e)
         );
       } else {
+        state.initPromise = null;
         showNotice(
           "failure",
           "Couldn't load the scanner",
