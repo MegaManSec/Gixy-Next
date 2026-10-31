@@ -165,7 +165,7 @@ map $http_origin $allow_origin {
     default "";
 
     # Allow example.com and any subdomain, optional port, https only.
-    ~^https://([A-Za-z0-9-]+\.)?example\.com(?::[0-9]{1,5})?$ $http_origin;
+    "~^https://([a-z0-9-]+\.)?example\.com(?::[0-9]{1,5})?$" $http_origin;
 }
 
 add_header Access-Control-Allow-Origin $allow_origin always;
