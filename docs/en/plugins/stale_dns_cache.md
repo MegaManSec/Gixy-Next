@@ -78,7 +78,7 @@ server {
 }
 ```
 
-Like above, the proxy will not work at all, because there is no `resolver` configured.
+Here NGINX does not even start or reload: `server ... resolve` needs a `resolver`, and without one `nginx -t` fails with "no resolver defined to resolve names at run time".
 
 ## Better configuration
 

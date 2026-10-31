@@ -47,3 +47,5 @@ location /events/ {
     proxy_read_timeout 60s;
 }
 ```
+
+The plugin still reports this location. If the streaming endpoint is intentional, skip the check with `--skips proxy_buffering_off`.

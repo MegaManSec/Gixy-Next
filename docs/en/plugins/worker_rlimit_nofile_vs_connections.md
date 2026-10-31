@@ -11,7 +11,7 @@ This plugin checks the relationship between `worker_connections` and `worker_rli
 
 If `worker_connections` is unset, the default is used: 512.
 
-If `worker_rlimit_nofile` is unset, an estimate of the default (most likely for major Linux distributions) is used: 512.
+If `worker_rlimit_nofile` is unset, an estimate of the default (most likely for major Linux distributions) is used: 1024.
 
 ## Why this is a problem
 
@@ -28,15 +28,20 @@ If the FD limit is too low, workers will start failing with "Too many open files
 ## Bad configuration
 
 ```nginx
-worker_connections 4096;
 # Missing or too-low worker_rlimit_nofile
+events {
+    worker_connections 4096;
+}
 ```
 
 or:
 
 ```nginx
-worker_connections 4096;
 worker_rlimit_nofile 4096;
+
+events {
+    worker_connections 4096;
+}
 ```
 
 A 1:1 ratio is often not enough once you account for upstream sockets and files.
@@ -46,8 +51,11 @@ A 1:1 ratio is often not enough once you account for upstream sockets and files.
 A practical baseline is at least 2x worker_connections:
 
 ```nginx
-worker_connections 4096;
 worker_rlimit_nofile 8192;
+
+events {
+    worker_connections 4096;
+}
 ```
 
 Adjust upward if you are proxying heavily, caching, or serving lots of static assets.
@@ -56,6 +64,6 @@ Adjust upward if you are proxying heavily, caching, or serving lots of static as
 
 Also check the OS-level limits (ulimit, systemd unit limits, container limits). Setting `worker_rlimit_nofile` higher than the process is allowed to use will not help. The common idiom is:
 
-```nginx
+```text
 max clients = worker_processes * worker_connections
 ```

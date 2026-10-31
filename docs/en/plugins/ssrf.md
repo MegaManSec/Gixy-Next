@@ -23,15 +23,15 @@ This is especially dangerous when the proxy location is intended to be "internal
 ## Bad configuration
 
 ```nginx
-location ~* ^/internal-proxy/(?<proxy_proto>https?)/(?<proxy_host>.*?)/(?<proxy_path>.*)$ {
-    internal;
-
+location ~* ^/proxy/(?<proxy_proto>https?)/(?<proxy_host>.*?)/(?<proxy_path>.*)$ {
     proxy_pass $proxy_proto://$proxy_host/$proxy_path;
     proxy_set_header Host $proxy_host;
 }
 ```
 
-Marking a location `internal` helps, but it does not automatically make the whole setup safe if other directives can route a request into it.
+Any client can make NGINX request any host, for example `/proxy/http/169.254.169.254/latest/meta-data/`.
+
+Marking such a location `internal` stops clients from requesting it directly, so the plugin does not report an `internal` location on its own. It does not make the setup safe if other directives can route a request into it.
 
 A common mistake is combining an unsafe rewrite with the internal proxy:
 
@@ -46,27 +46,38 @@ location ~* ^/internal-proxy/(?<proxy_proto>https?)/(?<proxy_host>.*?)/(?<proxy_
 
 ## Better configuration
 
-If the set of upstream hosts is small, hardcode them and select with a `map`:
+If the set of upstream hosts is small, define them as `upstream` blocks and select one with a `map`:
 
 ```nginx
-map $arg_target $upstream_host {
+upstream backend1 {
+    server 10.0.0.11:8080;
+}
+
+upstream backend2 {
+    server 10.0.0.12:8080;
+}
+
+map $arg_target $upstream_name {
     default "";
-    one "backend1.internal";
-    two "backend2.internal";
+    one backend1;
+    two backend2;
 }
 
 server {
     location /proxy/ {
-        if ($upstream_host = "") { return 400; }
+        if ($upstream_name = "") { return 400; }
 
-        proxy_pass http://$upstream_host;
-        proxy_set_header Host $upstream_host;
+        proxy_pass http://$upstream_name;
     }
 }
 ```
+
+Because the variable always names an `upstream` block, NGINX needs no `resolver` to look it up.
 
 If you cannot enumerate hosts, treat the upstream address as a signed token (HMAC) rather than raw client input, and verify it before proxying.
 
 ## Additional notes
 
 Variable-based proxying is not inherently insecure, but the moment the variable is derived from user input, you need a tight allowlist and a plan for internal redirect paths (`rewrite`, `error_page`, `try_files`, X-Accel-Redirect, and subrequests).
+
+The plugin checks an `internal` location when a `rewrite` in the same `server` can send a request there: one whose replacement is built from variables, that searches the locations again (`last` or no flag), and whose fixed start can match the location.

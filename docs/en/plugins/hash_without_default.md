@@ -36,7 +36,7 @@ map $request_uri $is_admin {
 
 # Later:
 if ($is_admin) {
-    allow 10.0.0.0/8;
+    return 403;
 }
 ```
 
