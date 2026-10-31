@@ -3,12 +3,6 @@ import re
 
 from setuptools import find_packages, setup
 
-# FileNotFoundError is not there in Python 2, define it:
-try:
-    FileNotFoundError
-except NameError:
-    FileNotFoundError = IOError
-
 here = pathlib.Path(__file__).parent
 
 # Extract version from gixy/__init__.py
