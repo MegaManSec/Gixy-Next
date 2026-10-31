@@ -13,6 +13,7 @@ import gixy.cli.main as cli
 from gixy.plugins.resolver_external import resolver_external
 
 ROOT = Path(__file__).parents[2]
+PYODIDE_PACKAGES = {"certifi", "charset-normalizer", "idna", "jinja2", "markupsafe", "requests", "urllib3"}
 
 
 def run_bridge(tmp_path, monkeypatch, config):
@@ -72,9 +73,8 @@ def test_browser_reports_internal_errors(tmp_path, monkeypatch):
     ]
 
 
-def test_browser_pins_match_requirements():
+def test_browser_pins_the_locked_packages_pyodide_does_not_provide():
     source = (ROOT / "docs/extra/gixy-scan.js").read_text()
     pins = re.findall(r'"([^"]+==[^"]+)"', source.split("const PYPI_PINS = [", 1)[1].split("];", 1)[0])
-    locked = set(re.findall(r"^\S+==\S+", (ROOT / "requirements.txt").read_text(), re.M))
-    assert pins
-    assert set(pins) <= locked
+    locked = re.findall(r"^\S+==\S+", (ROOT / "requirements.txt").read_text(), re.M)
+    assert set(pins) == {pin for pin in locked if pin.split("==")[0] not in PYODIDE_PACKAGES}
