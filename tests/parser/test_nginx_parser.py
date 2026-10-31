@@ -443,3 +443,16 @@ def test_nginx_status_lines_outside_a_dump_are_left_alone(tmp_path):
     path.write_text("nginx: x;\nworker_processes 1;\n")
     tree = NginxParser(cwd="", allow_includes=False).parse_file(str(path))
     assert [d.name for d in tree.children] == ["nginx:", "worker_processes"]
+
+
+def test_dump_with_nginx_log_lines(tmp_path):
+    path = tmp_path / "dump.conf"
+    path.write_text(
+        '2026/10/31 00:19:19 [warn] 1#1: conflicting server name "a" on 0.0.0.0:80, ignored\n'
+        "nginx: the configuration file /etc/nginx/nginx.conf syntax is ok\n"
+        "# configuration file /etc/nginx/nginx.conf:\nevents {}\n"
+    )
+    parser = NginxParser(cwd="", allow_includes=True)
+    tree = parser.parse_file(str(path))
+    assert parser.is_dump
+    assert [d.name for d in tree.children] == ["events"]

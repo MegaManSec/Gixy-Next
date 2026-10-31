@@ -140,6 +140,9 @@ def test_stray_semicolon_keeps_the_following_statement():
     ("server {\n    listen 80;\n    {\n}\n", "{", 3),
     ("a 1;\n}\n", "}", 2),
     ("server {\n    return 200 }\n", "}", 2),
+    ("events {;}\nhttp {}\n", ";", 1),
+    ("events {}\nhttp {}\n;\n", ";", 3),
+    ("server {\n    listen 80;;\n}\n", ";", 2),
 ])
 def test_unexpected_braces(config, brace, line):
     with pytest.raises(ParseException) as e:
@@ -162,3 +165,25 @@ def test_parses_without_a_writable_temp_dir(monkeypatch):
 
     monkeypatch.setattr(tempfile, "NamedTemporaryFile", unavailable)
     assert RawParser().parse("worker_processes 1;\n")[0]["name"] == "worker_processes"
+
+
+@pytest.mark.parametrize("name", [
+    "exit_worker_by_lua_block",
+    "server_rewrite_by_lua_block",
+    "ssl_client_hello_by_lua_block",
+    "preread_by_lua_block",
+])
+def test_lua_blocks_crossplane_does_not_register(name):
+    parsed = RawParser().parse(name + ' {\n    print("bye")\n}\nworker_processes 1;\n')
+    assert [(n["name"], "raw" in n) for n in parsed] == [(name, True), ("worker_processes", False)]
+
+
+def test_statements_after_stray_semicolons_keep_their_lines():
+    parsed = RawParser().parse("a 1;; b 2;;\nc 3;\n")
+    assert [(n["name"], n["line"]) for n in parsed if n["kind"] == "directive"] == [("a", 1), ("b", 1), ("c", 2)]
+
+
+def test_recovered_if_loses_its_parentheses():
+    parsed = RawParser().parse("server {;if ($uri ~ ^/x) { return 403; } }\n")
+    recovered = parsed[0]["children"][1]
+    assert (recovered["name"], recovered["args"]) == ("if", ["$uri", "~", "^/x"])

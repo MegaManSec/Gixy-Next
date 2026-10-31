@@ -6,7 +6,7 @@ import re
 import traceback
 
 from gixy.core.diagnostics import Diagnostic
-from gixy.core.exceptions import InvalidConfiguration, MalformedDirective
+from gixy.core.exceptions import InvalidConfiguration, MalformedDirective, UnreadableFile
 from gixy.directives import block, directive
 from gixy.parser import raw_parser
 from gixy.parser.raw_parser import ParseException
@@ -19,21 +19,22 @@ LOG = logging.getLogger(__name__)
 BLOCK_NAMES_VALID_AS_DIRECTIVES = frozenset({"server", "include"})
 
 DUMP_FILE_HEADER = re.compile(r"^# configuration file (.+):\s*$")
+NGINX_STATUS_LINE = re.compile(rb"^(nginx: |\d{4}/\d\d/\d\d \d\d:\d\d:\d\d \[\w+\] )")
 
 
 def _without_nginx_t_status(path):
-    """Return the file with the "nginx: ..." status lines that `nginx -T 2>&1`
+    """Return the file with the status and log lines that `nginx -T 2>&1`
     prints before its dump blanked out, or None if there are none."""
     try:
         with open(path, "rb") as f:
-            data = f.read()
+            if not NGINX_STATUS_LINE.match(f.readline()):
+                return None
+            f.seek(0)
+            lines = f.read().split(b"\n")
     except OSError:
         return None
-    if not data.startswith(b"nginx: "):
-        return None
-    lines = data.split(b"\n")
     for number, line in enumerate(lines):
-        if not line.startswith(b"nginx: ") and line.strip():
+        if not NGINX_STATUS_LINE.match(line) and line.strip():
             break
     else:
         return None
@@ -91,6 +92,10 @@ class NginxParser(object):
         real_path = display_path if display_path else path
         LOG.debug("Parse file: {0}".format(real_path))
         root = self._ensure_root(root)
+        try:
+            open(path, "rb").close()
+        except OSError as e:
+            raise UnreadableFile("Cannot read {0}: {1}.".format(real_path, e.strerror)) from e
         without_status = _without_nginx_t_status(path)
         if without_status is not None:
             return self.parse_string(without_status, root=root, path_info=real_path)
@@ -145,11 +150,8 @@ class NginxParser(object):
         return self._build_tree_from_parsed(parsed, root, current_path)
 
     def parse_string(self, content, root=None, path_info=None):
-        """Parse nginx configuration provided as a string/bytes.
-
-        The content is written to a temporary file so that the underlying
-        crossplane parser consistently receives a filesystem path (ensuring
-        identical behavior to file-based parsing).
+        """Parse nginx configuration provided as a string/bytes, through the
+        same file-based path as parse_file.
 
         Args:
             content (Union[str, bytes]): Nginx configuration text to parse.
@@ -229,10 +231,8 @@ class NginxParser(object):
                 continue
 
             if parsed_type == "unexpected":
-                self.malformed.append(Diagnostic(
-                    "malformed", "parse", 'Unexpected "{0}".'.format(node["text"]),
-                    line=node.get("line"), file=self.path_info,
-                ))
+                message = 'Unexpected "{0}".'.format(node["text"])
+                self._record_malformed(None, node.get("line"), InvalidConfiguration(message))
                 continue
 
             if parsed_type == "include":
@@ -328,7 +328,10 @@ class NginxParser(object):
         else:
             message = str(exc) or type(exc).__name__
         self.malformed.append(
-            Diagnostic("malformed", "parse", message, directive=name, line=line, file=self.path_info)
+            Diagnostic(
+                "malformed", getattr(exc, "phase", "parse"), message,
+                directive=name, line=line, file=self.path_info,
+            )
         )
 
     def _record_internal(self, name, line, exc):
@@ -434,7 +437,7 @@ class NginxParser(object):
                 self.parse_file(file_path, parent)
             except InvalidConfiguration as e:
                 self.malformed.append(Diagnostic(
-                    "malformed", "parse", str(e), file=file_path,
+                    "malformed", e.phase, str(e), file=file_path,
                 ))
             finally:
                 self._active_includes.discard(canonical)
