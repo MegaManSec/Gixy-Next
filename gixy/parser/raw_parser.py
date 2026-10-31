@@ -3,21 +3,36 @@ import re
 
 import crossplane
 from crossplane.errors import NgxParserBaseException
+from crossplane.ext.lua import LuaBlockPlugin
+from crossplane.lexer import register_external_lexer
+from crossplane.parser import _prepare_if_args
 
 import os
 import tempfile
 
+# OpenResty's *_by_lua_block directives that crossplane does not register itself.
+register_external_lexer(
+    directives=(
+        "exit_worker_by_lua_block",
+        "server_rewrite_by_lua_block",
+        "ssl_client_hello_by_lua_block",
+        "preread_by_lua_block",
+    ),
+    lexer=LuaBlockPlugin().lex,
+)
+
 
 @contextlib.contextmanager
 def config_path(data):
-    """Yield a filesystem path holding ``data`` for crossplane, which only
-    parses files: a temporary file, or on Linux an anonymous in-memory file
-    when no temporary directory is writable (e.g. ``docker run --read-only``)."""
+    """Yield a filesystem path holding ``data``: a temporary file, or on Linux
+    an anonymous in-memory file when no temporary directory is writable."""
     try:
         tmp = tempfile.NamedTemporaryFile(mode="wb", suffix=".conf", delete=False)
     except OSError:
-        if not hasattr(os, "memfd_create"):
+        if not (hasattr(os, "memfd_create") and os.path.isdir("/proc/self/fd")):
             raise
+        tmp = None
+    if tmp is None:
         fd = os.memfd_create("gixy.conf")
         try:
             with open(fd, "wb", closefd=False) as memfile:
@@ -73,20 +88,20 @@ class ParseException(Exception):
 
 
 def scan_tokens(tokens):
-    """Reject the braces nginx rejects: a "{" that opens no directive, and a
-    "}" that closes nothing or ends an unterminated directive. crossplane
-    accepts some of these and silently drops the directives that follow.
-
-    Returns {line of a stray ";": line of the statement after it}, since
-    crossplane only records the line of the stray ";" itself.
-    """
-    depth, pending, stray, after_stray = 0, False, None, {}
+    """Raise on an unexpected "{" or "}", and on a stray ";" that ends a block
+    or the file, as nginx does. Return the line of each statement that follows
+    any other stray ";", in order."""
+    depth, pending, stray, recovered = 0, False, None, []
     for token, line, quoted in tokens:
         if not quoted and token.startswith("#"):
             continue
-        if stray is not None and (quoted or token not in ";{}"):
-            after_stray.setdefault(stray, line)
+        if stray is not None:
+            if not quoted and token in ("{", "}"):
+                raise ParseException('unexpected ";"', stray)
             stray = None
+            if not quoted and token == ";":
+                continue
+            recovered.append(line)
         if quoted:
             pending = True
         elif token == "{":
@@ -103,7 +118,9 @@ def scan_tokens(tokens):
             pending = False
         else:
             pending = True
-    return after_stray
+    if stray is not None:
+        raise ParseException('unexpected ";"', stray)
+    return recovered
 
 
 def raise_on_crossplane_failure(parsed):
@@ -145,8 +162,6 @@ class RawParser(object):
     A class that parses nginx configuration with crossplane
     """
 
-    _after_stray = {}
-
     def parse(self, data):
         """Parse nginx configuration content and return normalized nodes (list[dict])."""
         if isinstance(data, bytes):
@@ -163,7 +178,7 @@ class RawParser(object):
 
         try:
             with config_path(content.encode("utf-8")) as temp_filename:
-                self._after_stray = scan_tokens(crossplane.lex(temp_filename))
+                recovered = scan_tokens(crossplane.lex(temp_filename))
                 # Parse using crossplane with relaxed context checking for standalone configs
                 parsed = crossplane.parse(
                     temp_filename,
@@ -175,7 +190,7 @@ class RawParser(object):
                 )
 
                 raise_on_crossplane_failure(parsed)
-                return self._normalize_crossplane(parsed)
+                return self._normalize_crossplane(parsed, recovered)
 
         except NgxParserBaseException as e:
             # Convert crossplane exception to ParseException format
@@ -189,7 +204,7 @@ class RawParser(object):
     def parse_path(self, path):
         """Parse nginx configuration by file path and return normalized nodes (list[dict])."""
         try:
-            self._after_stray = scan_tokens(crossplane.lex(path))
+            recovered = scan_tokens(crossplane.lex(path))
             parsed = crossplane.parse(
                 path,
                 single=True,
@@ -199,7 +214,7 @@ class RawParser(object):
                 comments=True,  # Include comments in the output
             )
             raise_on_crossplane_failure(parsed)
-            return self._normalize_crossplane(parsed)
+            return self._normalize_crossplane(parsed, recovered)
         except NgxParserBaseException as e:
             line = getattr(e, "line", None) or getattr(e, "lineno", None) or 1
             # Convert crossplane error to ParseException format
@@ -209,7 +224,7 @@ class RawParser(object):
         except Exception as e:
             raise ParseException(str(e), line=1) from e
 
-    def _normalize_crossplane(self, crossplane_data):
+    def _normalize_crossplane(self, crossplane_data, recovered=()):
         """Convert crossplane JSON output to a normalized list[dict] node structure.
 
         Node shapes:
@@ -221,6 +236,7 @@ class RawParser(object):
             {"kind": "unexpected", "text": str}
         """
         result = []
+        recovered = iter(recovered)
 
         if not crossplane_data or "config" not in crossplane_data:
             return result
@@ -240,11 +256,11 @@ class RawParser(object):
                             "line": None,
                         }
                     )
-                result.extend(self._normalize_blocks(file_data["parsed"]))
+                result.extend(self._normalize_blocks(file_data["parsed"], recovered))
 
         return result
 
-    def _normalize_blocks(self, blocks):
+    def _normalize_blocks(self, blocks, recovered):
         """Normalize crossplane 'parsed' list into list[dict] nodes."""
         result = []
 
@@ -269,21 +285,21 @@ class RawParser(object):
             if not isinstance(node, dict):
                 continue
 
-            # crossplane reads a stray ";" as a directive named ";" whose
-            # arguments are the statement that follows it.
             if node.get("directive") == ";":
                 result.append({"kind": "unexpected", "text": ";", "line": node.get("line")})
                 if not node.get("args"):
                     continue
-                line = self._after_stray.get(node.get("line"), node.get("line"))
+                line = next(recovered, node.get("line"))
                 node = dict(node, directive=node["args"][0], args=node["args"][1:], line=line)
+                if node["directive"] == "if":
+                    _prepare_if_args(node)
 
             directive_name = _process_nginx_string(node.get("directive", ""))
             args = [_process_nginx_string(arg) for arg in node.get("args", [])]
 
             if "block" in node:
                 # Block directive
-                children = self._normalize_blocks(node["block"])
+                children = self._normalize_blocks(node["block"], recovered)
                 if directive_name == "if":
                     # Normalize condition args for if-blocks
                     args = self._parse_if_condition(args)

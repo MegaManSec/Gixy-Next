@@ -7,7 +7,13 @@ class InvalidConfiguration(Exception):
     by the CLI with a distinct exit code instead of a traceback.
     """
 
-    pass
+    phase = "parse"
+
+
+class UnreadableFile(InvalidConfiguration):
+    """A configuration file that exists but cannot be read."""
+
+    phase = "read"
 
 
 class MalformedDirective(InvalidConfiguration):
