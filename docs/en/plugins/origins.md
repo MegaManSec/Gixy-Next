@@ -32,14 +32,22 @@ It can also flag values that contain uppercase letters or unusual characters in 
 
 ### Unconditional reflection of the Origin
 
-Reflecting `$http_origin` straight back into `Access-Control-Allow-Origin` accepts *any* origin — there is no allowlist at all. The plugin flags this whether the request Origin is reflected directly, through a `set`, or via a non-regex `map` default:
+Reflecting `$http_origin` straight back into `Access-Control-Allow-Origin` accepts *any* origin — there is no allowlist at all. The plugin flags this whether the header is emitted with `add_header` or `more_set_headers`, and whether the request Origin is reflected directly, through one or more `set` directives, or via a non-regex `map` default:
 
 ```nginx
 # Direct reflection — every origin is allowed
 add_header Access-Control-Allow-Origin $http_origin always;
 
+# The same header, emitted by the headers-more module
+more_set_headers "Access-Control-Allow-Origin: $http_origin";
+
 # Indirect, via set
 set $cors $http_origin;
+add_header Access-Control-Allow-Origin $cors always;
+
+# Indirect, via a chain of set directives
+set $tmp $http_origin;
+set $cors $tmp;
 add_header Access-Control-Allow-Origin $cors always;
 
 # Non-regex map that defaults to reflecting the origin
@@ -49,9 +57,9 @@ map $http_origin $cors {
 add_header Access-Control-Allow-Origin $cors always;
 ```
 
-A literal-key `map` allowlist (for example `https://trusted.example $http_origin;` with a safe `default`) is *not* flagged: only the listed origins are echoed back. Like the `map` analysis below, this detection runs only on a full configuration scan (one that includes an `http { .. }` block). Regex `map` entries whose value is empty or fixed (for example `~.* "";` or `~.* https://trusted.example;`) are skipped as well, since they never echo the request Origin.
+Only hops whose value is a single variable are followed (`set $cors $tmp;`, `default $tmp;`); a `map` hop is followed only when the map is keyed on `$http_origin`. A literal-key `map` allowlist (for example `https://trusted.example $http_origin;` with a safe `default`) is *not* flagged: only the listed origins are echoed back. Like the `map` analysis below, this detection runs only on a full configuration scan (one that includes an `http { .. }` block). Regex `map` entries whose value is empty or fixed (for example `~.* "";` or `~.* https://trusted.example;`) are skipped as well, since they never echo the request Origin.
 
-Reflection inside an `if` that checks the Origin first is also exempt, as long as that check is a real allowlist: an exact match such as `if ($http_origin = https://trusted.example)`, or a positive regex (`~`, `~*`) that passes the regex checks above. A guard the plugin reports itself does not restrict anything, so reflection inside it is still flagged:
+Reflection inside an `if` that checks the Origin first is also exempt, as long as that check is a real allowlist: an exact match such as `if ($http_origin = https://trusted.example)`, or a positive regex (`~`, `~*`) that passes the regex checks above. The same exemption applies to a `set` that copies the Origin inside such an `if`. A guard the plugin reports itself does not restrict anything, so reflection inside it is still flagged:
 
 ```nginx
 # Still flagged: any https origin passes the check and is reflected
@@ -63,6 +71,12 @@ if ($http_origin ~* "^https://") {
 if ($http_origin ~* "^https://(www\.)?trusted\.example$") {
     add_header Access-Control-Allow-Origin $http_origin always;
 }
+
+# Not flagged: $cors is only assigned for the allowlisted origin
+if ($http_origin ~ "^https://trusted\.example$") {
+    set $cors $http_origin;
+}
+add_header Access-Control-Allow-Origin $cors always;
 ```
 
 Negative matches (`!~`, `!~*`) and conditions on other variables do not count as guards.
