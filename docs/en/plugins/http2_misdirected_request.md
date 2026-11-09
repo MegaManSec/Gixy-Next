@@ -17,7 +17,7 @@ This plugin flags `server` blocks where all of the following are true:
 A server answers every request with 421 when either:
 
 - `return 421;` sits directly in the `server` block, or
-- a prefix `location /` (plain or `^~`) returns 421 *and* every other `location` in the server returns 421 as well. Named locations (`location @name`) and `internal` locations are not counted, since a client cannot select them directly. Nested locations are checked the same way, because `return` is not inherited into them.
+- a prefix `location /` (plain or `^~`) returns 421 *and* every other prefix `location` in the server, `=` ones included, returns 421 as well. Regex locations have to return 421 too, unless every prefix location carries `^~` or `=`: NGINX only consults regex locations when the longest matching prefix location has no modifier, so they are never selected otherwise. Named locations (`location @name`) and `internal` locations are not counted, since a client cannot select them directly. Nested locations are checked the same way, because `return` is not inherited into them.
 
 ## Why this is a problem
 
