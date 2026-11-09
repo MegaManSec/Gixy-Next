@@ -82,13 +82,13 @@ class allow_without_deny(Plugin):
         if directive.args[0] in ALLOW_ALL_RULES:
             # for example, "allow all" in a nested location which allows access to otherwise forbidden parent location
             return
-        if self._is_satisfy_any_with_auth(parent):
-            return
-
         key = id(parent)
         if key in self._reported_parents:
             return
         self._reported_parents.add(key)
+
+        if self._is_satisfy_any_with_auth(parent):
+            return
 
         allows = [
             child
