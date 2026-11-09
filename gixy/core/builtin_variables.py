@@ -56,7 +56,7 @@ BUILTIN_VARIABLES = {
     # https://nginx.org/en/docs/http/ngx_http_core_module.html#var_content_type
     "content_type": "",
     # https://nginx.org/en/docs/http/ngx_http_core_module.html#var_cookie_
-    "cookie_": "",
+    "cookie_": r"[^;\r\n]*",
     # https://nginx.org/en/docs/http/ngx_http_core_module.html#var_host
     "host": "",
     # https://nginx.org/en/docs/http/ngx_http_core_module.html#var_hostname
@@ -73,7 +73,7 @@ BUILTIN_VARIABLES = {
     # https://nginx.org/en/docs/http/ngx_http_core_module.html#var_request
     "request": "",
     # https://nginx.org/en/docs/http/ngx_http_core_module.html#var_request_body
-    "request_body": "",
+    "request_body": r"[\s\S]*",
     # https://nginx.org/en/docs/http/ngx_http_core_module.html#var_request_completion
     "request_completion": "",
     # https://nginx.org/en/docs/http/ngx_http_core_module.html#var_request_filename

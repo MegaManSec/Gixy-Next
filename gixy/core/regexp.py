@@ -79,6 +79,8 @@ def extract_groups(parsed, top=True):
             result.update(extract_groups(token[1][2], False))
         elif token[0] == sre_parse.BRANCH:
             result.update(extract_groups(token[1][1], False))
+        elif token[0] == sre_parse.ASSERT:
+            result.update(extract_groups(token[1][1], False))
         elif token[0] == sre_parse.IN:
             result.update(extract_groups(token[1], False))
         elif isinstance(token, sre_parse.SubPattern):
@@ -363,15 +365,22 @@ class MinRepeatToken(Token):
             if self.childs[0].can_startswith(char, strict):
                 return False
             return None
+        if self.min == 0:
+            # [a-z]*?
+            if self.childs[0].can_startswith(char, strict):
+                return True
+            return None
         return self.childs[0].can_startswith(char, strict)
 
     def must_startswith(self, char, strict=False):
-        if self.min == 0:
-            # [a-z]*?
-            return None
         if self.max == 0:
             # [a-z]{0}
             return None
+        if self.min == 0:
+            # [a-z]*?
+            if self.childs[0].must_startswith(char, strict=strict):
+                return None
+            return False
         return self.childs[0].must_startswith(char, strict=strict)
 
     def generate(self, context):
@@ -442,15 +451,22 @@ class MaxRepeatToken(Token):
             if self.childs[0].can_startswith(char, strict):
                 return False
             return None
+        if self.min == 0:
+            # [a-z]*
+            if self.childs[0].can_startswith(char, strict):
+                return True
+            return None
         return self.childs[0].can_startswith(char, strict)
 
     def must_startswith(self, char, strict=False):
-        if self.min == 0:
-            # [a-z]*
-            return None
         if self.max == 0:
             # [a-z]{0}
             return None
+        if self.min == 0:
+            # [a-z]*
+            if self.childs[0].must_startswith(char, strict=strict):
+                return None
+            return False
         return self.childs[0].must_startswith(char, strict=strict)
 
     def generate(self, context):
@@ -843,6 +859,10 @@ class GroupRefToken(Token):
 class AssertToken(Token):
     type = sre_parse.ASSERT
 
+    def _parse(self):
+        self._parse_childs(self.token[1][1])
+        self.ahead = self.token[1][0] > 0
+
     def can_contain(self, char, skip_literal=True):
         # TODO(buglloc): Do it!
         return False
@@ -856,6 +876,13 @@ class AssertToken(Token):
 
     def must_startswith(self, char, strict=False):
         return None
+
+    def generate(self, context):
+        return None
+
+    def __str__(self):
+        childs = "".join(str(x) for x in self.childs)
+        return "(?{dir}{childs})".format(dir="=" if self.ahead else "<=", childs=childs)
 
 
 class AssertNotToken(Token):
@@ -931,7 +958,7 @@ def parse(sre_obj, parent=None, regexp=None):
         elif token[0] == sre_parse.GROUPREF:
             result.append(GroupRefToken(token=token, parent=parent, regexp=regexp))
         elif token[0] == sre_parse.ASSERT:
-            pass  # TODO(buglloc): Do it!
+            result.append(AssertToken(token=token, parent=parent, regexp=regexp))
         elif token[0] == sre_parse.ASSERT_NOT:
             pass  # TODO(buglloc): Do it!
         else:

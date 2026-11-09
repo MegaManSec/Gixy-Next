@@ -152,6 +152,24 @@ def test_script_boundary():
     assert not var.must_startswith('a')
 
 
+def test_cookie_value_is_client_controlled_without_line_breaks():
+    var = builtins.builtin_var("cookie_backend")
+    assert var.can_contain(".")
+    assert var.can_contain("/")
+    assert not var.must_contain("/")
+    assert not var.can_contain(";")
+    assert not var.can_contain("\r")
+    assert not var.can_contain("\n")
+
+
+def test_request_body_is_raw_client_input():
+    var = builtins.builtin_var("request_body")
+    assert var.can_contain("\n")
+    assert var.can_contain("\r")
+    assert var.can_contain(".")
+    assert not var.must_contain("/")
+
+
 def test_custom_variable_dropin_literal_and_regex(tmp_path):
     # Create drop-in files
     d = tmp_path / "vars"

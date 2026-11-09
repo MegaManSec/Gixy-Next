@@ -34,6 +34,16 @@ location ~ /site(.*) {
 
 If `$1` can start with `.` (or contain `/`), you can end up with traversal-style paths reaching outside the intended directory.
 
+Making the slash optional inside the capture does not help:
+
+```nginx
+location ~ ^/download(/?.*)$ {
+    alias /data/files/$1;
+}
+```
+
+NGINX only collapses `..` when it is a whole path segment, so `/download../secret.txt` leaves `$1` as `../secret.txt` and the file is served from the parent directory.
+
 ## Better configuration
 
 If the alias points to a directory, make the location look like a directory too:
