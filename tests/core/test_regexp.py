@@ -139,6 +139,11 @@ def test_to_string(regexp, string):
     (r'((a))', 'b', False),
     (r'^[a-z]{0}0', '0', False),
     (r'^[a-z]{1}0', 'a', False),
+    (r'^a?b', 'a', False),
+    (r'^a?b', 'b', False),
+    (r'^a*b', 'b', False),
+    (r'^a*?b', 'b', False),
+    (r'^/?.*', '.', False),
 ))
 def test_positive_startswith(regexp, char, strict):
     reg = Regexp(regexp, case_sensitive=True, strict=strict)
@@ -163,6 +168,8 @@ def test_positive_startswith(regexp, char, strict):
     (r'((abc)|(ss))', 'b', True),
     (r'^[a-z]{0}0', 'a', False),
     (r'^[a-z]{0}0', 'g', False),
+    (r'^a?b', 'c', False),
+    (r'^a?[^/]*', '/', False),
 ))
 def test_negative_startswith(regexp, char, strict):
     reg = Regexp(regexp, case_sensitive=True, strict=strict)
@@ -235,6 +242,8 @@ def test_negative_must_contain(regexp, char):
     (r'((a))', 'a', True),
     (r'^[a-z]{0}0', '0', False),
     (r'^a{1}0', 'a', False),
+    (r'^/?/.*', '/', False),
+    (r'^/*/.*', '/', False),
 ))
 def test_positive_must_startswith(regexp, char, strict):
     reg = Regexp(regexp, case_sensitive=True, strict=strict)
@@ -259,6 +268,9 @@ def test_positive_must_startswith(regexp, char, strict):
     (r'^((a))', 'b', False),
     (r'((a))', 'a', False),
     (r'^a{0}0', 'a', False),
+    (r'^a?/.*', '/', False),
+    (r'^/?.*', '/', False),
+    (r'^a*?/.*', '/', False),
 ))
 def test_negative_must_startswith(regexp, char, strict):
     reg = Regexp(regexp, case_sensitive=True, strict=strict)

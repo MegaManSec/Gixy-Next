@@ -363,15 +363,22 @@ class MinRepeatToken(Token):
             if self.childs[0].can_startswith(char, strict):
                 return False
             return None
+        if self.min == 0:
+            # [a-z]*?
+            if self.childs[0].can_startswith(char, strict):
+                return True
+            return None
         return self.childs[0].can_startswith(char, strict)
 
     def must_startswith(self, char, strict=False):
-        if self.min == 0:
-            # [a-z]*?
-            return None
         if self.max == 0:
             # [a-z]{0}
             return None
+        if self.min == 0:
+            # [a-z]*?
+            if self.childs[0].must_startswith(char, strict=strict):
+                return None
+            return False
         return self.childs[0].must_startswith(char, strict=strict)
 
     def generate(self, context):
@@ -442,15 +449,22 @@ class MaxRepeatToken(Token):
             if self.childs[0].can_startswith(char, strict):
                 return False
             return None
+        if self.min == 0:
+            # [a-z]*
+            if self.childs[0].can_startswith(char, strict):
+                return True
+            return None
         return self.childs[0].can_startswith(char, strict)
 
     def must_startswith(self, char, strict=False):
-        if self.min == 0:
-            # [a-z]*
-            return None
         if self.max == 0:
             # [a-z]{0}
             return None
+        if self.min == 0:
+            # [a-z]*
+            if self.childs[0].must_startswith(char, strict=strict):
+                return None
+            return False
         return self.childs[0].must_startswith(char, strict=strict)
 
     def generate(self, context):
