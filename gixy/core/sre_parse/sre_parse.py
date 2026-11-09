@@ -133,7 +133,7 @@ class SubPattern:
             return self.width
         lo = hi = 0
         UNITCODES = (ANY, RANGE, IN, LITERAL, NOT_LITERAL, CATEGORY)
-        REPEATCODES = (MIN_REPEAT, MAX_REPEAT)
+        REPEATCODES = (MIN_REPEAT, MAX_REPEAT, POSSESSIVE_REPEAT)
         for op, av in self.data:
             if op == BRANCH:
                 i = MAXREPEAT - 1
@@ -142,6 +142,10 @@ class SubPattern:
                     l, h = branch.getwidth()
                     i = min(i, l)
                     j = max(j, h)
+                lo = lo + i
+                hi = hi + j
+            elif op == ATOMIC_GROUP:
+                i, j = av.getwidth()
                 lo = lo + i
                 hi = hi + j
             elif op == CALL:
@@ -389,7 +393,7 @@ def _parse_sub_cond(source, state, condgroup):
 _PATTERNENDERS = set("|)")
 _ASSERTCHARS = set("=!<")
 _LOOKBEHINDASSERTCHARS = set("=!")
-_REPEATCODES = {MIN_REPEAT, MAX_REPEAT}
+_REPEATCODES = {MIN_REPEAT, MAX_REPEAT, POSSESSIVE_REPEAT}
 
 
 def _parse(source, state):
@@ -533,8 +537,13 @@ def _parse(source, state):
             if item[0][0] in REPEATCODES:
                 raise error("multiple repeat")
             if sourcematch("?"):
+                # Non-Greedy Match
                 subpattern[-1] = (MIN_REPEAT, (min, max, item))
+            elif sourcematch("+"):
+                # Possessive Match (Always Greedy)
+                subpattern[-1] = (POSSESSIVE_REPEAT, (min, max, item))
             else:
+                # Greedy Match
                 subpattern[-1] = (MAX_REPEAT, (min, max, item))
 
         elif this == ".":
@@ -556,6 +565,7 @@ def _parse(source, state):
             group = 1
             name = None
             condgroup = None
+            atomic = False
             if sourcematch("?"):
                 group = 0
                 # options
@@ -612,6 +622,10 @@ def _parse(source, state):
                 elif sourcematch(":"):
                     # non-capturing group
                     group = 2
+                elif sourcematch(">"):
+                    # non-capturing, atomic group
+                    group = 2
+                    atomic = True
                 elif sourcematch("#"):
                     # comment
                     while 1:
@@ -695,7 +709,10 @@ def _parse(source, state):
                     raise error("unbalanced parenthesis")
                 if group is not None:
                     state.closegroup(group)
-                subpatternappend((SUBPATTERN, (group, p)))
+                if atomic:
+                    subpatternappend((ATOMIC_GROUP, p))
+                else:
+                    subpatternappend((SUBPATTERN, (group, p)))
                 state.flags = outer_flags
             else:
                 while 1:

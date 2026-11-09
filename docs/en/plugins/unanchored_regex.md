@@ -64,4 +64,6 @@ location ~ ^/foo$|^/bar$ {
 
 ## Additional notes
 
+PCRE atomic groups (`(?>...)`) and possessive quantifiers (`a++`, `a*+`, `a?+`, `a{n,m}+`) are read like their non-capturing and greedy equivalents, so `location ~ (?>\.php)` is reported just like `location ~ \.php`. A pattern using syntax gixy cannot parse at all — branch reset `(?|...)`, recursion `(?R)` or `(?1)` — is skipped, so the absence of a finding there says *nothing* about its anchors.
+
 It's also worth considering whether your regular expressions are vulnerable to ReDoS. See the [regex_redos](https://gixy.io/plugins/regex_redos/) plugin for more information.

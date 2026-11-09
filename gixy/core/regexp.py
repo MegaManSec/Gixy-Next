@@ -59,6 +59,15 @@ CATEGORIES_NAMES = {
     sre_parse.CATEGORY_NOT_WORD: r"\W",
 }
 
+_REPEATS = frozenset(
+    (sre_parse.MAX_REPEAT, sre_parse.MIN_REPEAT, sre_parse.POSSESSIVE_REPEAT)
+)
+_GROUPS = frozenset((sre_parse.SUBPATTERN, sre_parse.ATOMIC_GROUP))
+
+
+def _group_body(op, av):
+    return av[-1] if op == sre_parse.SUBPATTERN else av
+
 
 def extract_groups(parsed, top=True):
     result = {}
@@ -73,9 +82,9 @@ def extract_groups(parsed, top=True):
                 # Captured group index can't be a string. E.g. for pattern "(?:la)" group name is "None"
                 result[token[1][0]] = token[1][1]
             result.update(extract_groups(token[1][1], False))
-        elif token[0] == sre_parse.MIN_REPEAT:
-            result.update(extract_groups(token[1][2], False))
-        elif token[0] == sre_parse.MAX_REPEAT:
+        elif token[0] == sre_parse.ATOMIC_GROUP:
+            result.update(extract_groups(token[1], False))
+        elif token[0] in _REPEATS:
             result.update(extract_groups(token[1][2], False))
         elif token[0] == sre_parse.BRANCH:
             result.update(extract_groups(token[1][1], False))
@@ -139,8 +148,8 @@ def _seq_anchored(seq, anchors, last):
     op, av = seq[-1] if last else seq[0]
     if op == sre_parse.AT:
         return av in anchors
-    if op == sre_parse.SUBPATTERN:
-        return _seq_anchored(list(av[-1]), anchors, last)
+    if op in _GROUPS:
+        return _seq_anchored(list(_group_body(op, av)), anchors, last)
     if op == sre_parse.ASSERT:
         # A lookaround can carry the anchor itself, e.g. (?=^/foo)bar ...
         if _seq_anchored(list(av[-1]), anchors, last):
@@ -151,7 +160,7 @@ def _seq_anchored(seq, anchors, last):
         return _seq_anchored(seq[:-1] if last else seq[1:], anchors, last)
     if op == sre_parse.BRANCH:
         return all(_seq_anchored(list(alt), anchors, last) for alt in av[1])
-    if op in (sre_parse.MAX_REPEAT, sre_parse.MIN_REPEAT):
+    if op in _REPEATS:
         min_count, _, items = av
         return min_count >= 1 and _seq_anchored(list(items), anchors, last)
     return False
@@ -163,10 +172,10 @@ def _is_anchored(seq):
         op, av = seq[0]
         if op == sre_parse.BRANCH:
             return all(_is_anchored(list(alt)) for alt in av[1])
-        if op == sre_parse.SUBPATTERN:
+        if op in _GROUPS:
             # A group wrapping the whole pattern: each alternative inside
             # still picks its own side.
-            return _is_anchored(list(av[-1]))
+            return _is_anchored(list(_group_body(op, av)))
     return _seq_anchored(seq, _ANCHORS_BEGIN, last=False) or _seq_anchored(
         seq, _ANCHORS_END, last=True
     )
@@ -502,6 +511,13 @@ class MaxRepeatToken(Token):
         )
 
 
+class PossessiveRepeatToken(MaxRepeatToken):
+    type = sre_parse.POSSESSIVE_REPEAT
+
+    def __str__(self):
+        return super().__str__() + "+"
+
+
 class BranchToken(Token):
     type = sre_parse.BRANCH
 
@@ -629,6 +645,17 @@ class SubpatternToken(Token):
         if self.group is None:
             return "(?:{childs})".format(childs=childs)
         return "({childs})".format(childs=childs)
+
+
+class AtomicGroupToken(SubpatternToken):
+    type = sre_parse.ATOMIC_GROUP
+
+    def _parse(self):
+        self._parse_childs(self.token[1])
+        self.group = None
+
+    def __str__(self):
+        return "(?>{childs})".format(childs="".join(str(x) for x in self.childs))
 
 
 class InternalSubpatternToken(Token):
@@ -945,10 +972,14 @@ def parse(sre_obj, parent=None, regexp=None):
             result.append(MinRepeatToken(token=token, parent=parent, regexp=regexp))
         elif token[0] == sre_parse.MAX_REPEAT:
             result.append(MaxRepeatToken(token=token, parent=parent, regexp=regexp))
+        elif token[0] == sre_parse.POSSESSIVE_REPEAT:
+            result.append(PossessiveRepeatToken(token=token, parent=parent, regexp=regexp))
         elif token[0] == sre_parse.BRANCH:
             result.append(BranchToken(token=token, parent=parent, regexp=regexp))
         elif token[0] == sre_parse.SUBPATTERN:
             result.append(SubpatternToken(token=token, parent=parent, regexp=regexp))
+        elif token[0] == sre_parse.ATOMIC_GROUP:
+            result.append(AtomicGroupToken(token=token, parent=parent, regexp=regexp))
         elif token[0] == sre_parse.IN:
             result.append(InToken(token=token, parent=parent, regexp=regexp))
         elif token[0] == sre_parse.NEGATE:

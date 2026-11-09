@@ -162,7 +162,7 @@ class Manager(object):
     @staticmethod
     def _provided_variables(directive):
         """Variables a directive contributes to the scope, tolerant of regexes
-        the engine can't parse (PCRE atomic groups, possessive quantifiers).
+        the engine can't parse (PCRE branch reset, recursion and the like).
 
         Such a regex yields no analyzable captures rather than aborting the
         whole audit, mirroring _register_regex_captures.
