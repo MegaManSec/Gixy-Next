@@ -1,4 +1,5 @@
 import gixy
+from gixy.core.utils import resolve_inherited_single
 from gixy.core.variable import compile_script
 from gixy.plugins.plugin import Plugin
 
@@ -39,10 +40,45 @@ class http_splitting(Plugin):
                 char = "\\r"
             else:
                 continue
+            if _line_break_sources(var) == {"remote_user"} and _basic_auth_enforced(directive):
+                continue
             reason = "Variable `${var}` can contain `{char}`, which can enable header/response splitting.".format(
                 var=var.name, char=char
             )
             self.add_issue(directive=[directive] + var.providers, reason=reason)
+
+
+def _line_break_sources(var):
+    """Names of the leaf variables behind `var` that can carry CR or LF."""
+    names, seen = set(), set()
+
+    def collect(current):
+        if id(current) in seen:
+            return
+        seen.add(id(current))
+        children = list(current.depends or ()) + list(current.alternatives or ())
+        if not children:
+            if current.name and (current.can_contain("\n") or current.can_contain("\r")):
+                names.add(current.name)
+            return
+        for child in children:
+            collect(child)
+
+    collect(var)
+    return names
+
+
+def _basic_auth_enforced(directive):
+    """True when ngx_http_auth_basic_module rejects every request whose user
+    is not in the password file: realm and file set, and no `satisfy any`."""
+    scope = directive.parent
+    auth = resolve_inherited_single(scope, "auth_basic")
+    if auth is None or auth.args[0].lower() == "off":
+        return False
+    if resolve_inherited_single(scope, "auth_basic_user_file") is None:
+        return False
+    satisfy = resolve_inherited_single(scope, "satisfy")
+    return satisfy is None or satisfy.args[0].lower() == "all"
 
 
 # nginx only accepts a lone `return` argument as a redirect URL when it starts

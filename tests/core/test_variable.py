@@ -170,6 +170,23 @@ def test_request_body_is_raw_client_input():
     assert not var.must_contain("/")
 
 
+def test_remote_user_is_decoded_client_input_up_to_the_colon():
+    var = builtins.builtin_var("remote_user")
+    assert var.can_contain("\n")
+    assert var.can_contain("\r")
+    assert var.can_contain(".")
+    assert not var.can_contain(":")
+
+
+@pytest.mark.parametrize("name", ["request", "content_type"])
+def test_request_line_and_header_values_are_printable_client_input(name):
+    var = builtins.builtin_var(name)
+    assert var.can_contain(".")
+    assert var.can_contain(" ")
+    assert not var.can_contain("\r")
+    assert not var.can_contain("\n")
+
+
 def test_custom_variable_dropin_literal_and_regex(tmp_path):
     # Create drop-in files
     d = tmp_path / "vars"
