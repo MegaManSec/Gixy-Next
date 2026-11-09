@@ -425,12 +425,33 @@ class origins(Plugin):
                     if header.strip().lower() == "access-control-allow-origin":
                         yield node, value
 
-    def _origin_assignments(self, root, name):
+    @staticmethod
+    def _sets_in_scope(root, node):
+        """`set` directives that can run for a request the header directive `node` applies to.
+
+        Inside a location: the location chain and the enclosing server, flattened
+        through `if` blocks. At server level: every `set` in that server, since the
+        header is inherited into its locations. Above that: the whole configuration.
+        """
+        chain = []
+        server = None
+        for block in node.parents:
+            chain.append(block)
+            if block.name == "server":
+                server = block
+                break
+        if server is None:
+            scope = root.find_recursive("set")
+        elif any(block.name == "location" for block in chain):
+            scope = (sd for block in chain for sd in block.find("set", flat=True))
+        else:
+            scope = server.find_recursive("set")
+        return list({id(sd): sd for sd in scope if isinstance(sd, SetDirective)}.values())
+
+    def _origin_assignments(self, root, sets, name):
         """Unguarded `set $name ...` directives and `default` entries of maps keyed on $http_origin."""
-        for sd in root.find_recursive("set"):
-            if not isinstance(sd, SetDirective) or sd.variable != name:
-                continue
-            if self._has_origin_allowlist(sd):
+        for sd in sets:
+            if sd.variable != name or self._has_origin_allowlist(sd):
                 continue
             yield sd, sd.value
         for mb in root.find_recursive("map"):
@@ -466,8 +487,9 @@ class origins(Plugin):
 
             # set $var $http_origin; add_header ... $var; -> indirect reflection,
             # followed through chains of bare-variable set/map-default hops
+            sets = self._sets_in_scope(root, node)
             for hops, assigned in resolve_variable_chain(
-                dest_var, lambda name: self._origin_assignments(root, name)
+                dest_var, lambda name: self._origin_assignments(root, sets, name)
             ):
                 if self._is_origin_reflection(assigned.strip().strip("\"'")):
                     self._report_reflection(list(reversed(hops)) + [node])
