@@ -1,5 +1,5 @@
 import gixy
-from gixy.core.utils import parse_listen_key_and_default, resolve_inherited_single
+from gixy.core.utils import default_listens, resolve_inherited_single
 from gixy.plugins.plugin import Plugin
 
 
@@ -31,9 +31,9 @@ class http2_misdirected_request(Plugin):
         http2_global = bool(http2_dir and http2_dir.args and http2_dir.args[0].lower() == "on")
 
         servers = list(http_block.find_all_contexts_of_type("server"))
-        default_listens = self._default_listens(servers)
+        defaults = default_listens(servers)
         for server in servers:
-            listens = [listen for listen in default_listens.get(server, ()) if self._listen_is_ssl(listen)]
+            listens = [listen for listen in defaults.get(server, ()) if self._listen_is_ssl(listen)]
             if not listens:
                 continue
             ssl_reject = resolve_inherited_single(server, "ssl_reject_handshake")
@@ -54,27 +54,6 @@ class http2_misdirected_request(Plugin):
                     "other location) to reject misdirected HTTP/2 requests."
                 ),
             )
-
-    def _default_listens(self, servers):
-        """Map each server to the listen directives on whose socket it is the default server."""
-        sockets = {}
-        defaults = {}
-        for server in servers:
-            listens = server.find("listen")
-            if not listens:
-                sockets.setdefault("*:80", []).append((server, None, False))
-            for listen in listens:
-                key, is_default = parse_listen_key_and_default(listen.args)
-                if key is None:
-                    if is_default:
-                        defaults.setdefault(server, []).append(listen)
-                    continue
-                sockets.setdefault(key, []).append((server, listen, is_default))
-        for entries in sockets.values():
-            server, listen, _ = next((entry for entry in entries if entry[2]), entries[0])
-            if listen is not None:
-                defaults.setdefault(server, []).append(listen)
-        return defaults
 
     def _listen_is_ssl(self, listen):
         return any(arg.lower() in self.SSL_LISTEN_FLAGS for arg in listen.args)

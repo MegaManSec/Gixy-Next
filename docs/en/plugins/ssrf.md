@@ -9,6 +9,8 @@ description: "Detects SSRF-prone proxy_pass, fastcgi_pass, uwsgi_pass, scgi_pass
 
 This plugin looks for `proxy_pass`, `fastcgi_pass`, `uwsgi_pass`, `scgi_pass`, or `grpc_pass` usage where the upstream address is built from variables that can be influenced by the client (host, port, and — for `proxy_pass`/`grpc_pass` — the scheme or path). That is the classic NGINX SSRF shape.
 
+`$host` counts as client input only where a request for any host name can reach the server: the default server of a `listen` socket (the one flagged `default_server`, or the first one declared on that socket), or a server whose `server_name` is a catch-all regular expression such as `~.`. Deciding that needs the full configuration, so `$host` is only considered when an `http` block is present.
+
 ## Why this is a problem
 
 If an attacker can control where NGINX sends a request, they can:
@@ -39,6 +41,21 @@ location / {
     proxy_pass http://$backend;
 }
 ```
+
+### host header in the default server
+
+```nginx
+http {
+    server {
+        listen 80 default_server;
+        location / {
+            proxy_pass http://$host$request_uri;
+        }
+    }
+}
+```
+
+`$host` is the request's Host header after NGINX has validated and lowercased it. Every request whose host name matches no other server lands in the default server, so `Host: 169.254.169.254` makes NGINX fetch the metadata service. A server with a fixed `server_name` is the default too when it is the first one declared on its socket.
 
 Marking such a location `internal` stops clients from requesting it directly, so the plugin does not report an `internal` location on its own. It does not make the setup safe if other directives can route a request into it.
 
@@ -90,6 +107,8 @@ If you cannot enumerate hosts, treat the upstream address as a signed token (HMA
 ## Additional notes
 
 Variable-based proxying is not inherently insecure, but the moment the variable is derived from user input, you need a tight allowlist and a plan for internal redirect paths (`rewrite`, `error_page`, `try_files`, X-Accel-Redirect, and subrequests).
+
+In a server that is not the default of any of its sockets and lists fixed `server_name`s, `$host` can only be one of those names, so it is not reported. Wildcard names such as `*.example.com` are not reported either: an attacker would need to control DNS under that zone to point `$host` at another address.
 
 `$ssl_server_name` is the TLS server name (SNI) the client sent, copied by NGINX without validation, so `proxy_pass https://$ssl_server_name` is reported like any other client-controlled host.
 
