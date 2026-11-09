@@ -1,7 +1,16 @@
 from __future__ import absolute_import
 
+import re
+
 text_type = str
 binary_type = (bytes, bytearray)
+
+_CONTROL_RE = re.compile("[\x00-\x08\x0b-\x1f\x7f-\x9f]")
+
+
+def escape_control(text):
+    """Render C0/C1 control characters and DEL, except tab and newline, as \\xNN."""
+    return _CONTROL_RE.sub(lambda m: "\\x{0:02x}".format(ord(m.group())), text)
 
 
 def to_bytes(obj, encoding="latin1", errors="strict", nonstring="replace"):

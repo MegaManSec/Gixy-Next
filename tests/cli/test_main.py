@@ -48,15 +48,16 @@ def conf(tmp_path):
     return write
 
 
-def run(*args, **kwargs):
+def run(*args, env=None, **kwargs):
     """Run the CLI the way a caller does, in a subprocess, so the exit code and
     the stdout/stderr split are the real ones."""
-    env = {k: v for k, v in os.environ.items() if not k.startswith("GIXY_")}
-    env["PYTHONPATH"] = REPO_ROOT
+    environ = {k: v for k, v in os.environ.items() if not k.startswith("GIXY_")}
+    environ["PYTHONPATH"] = REPO_ROOT
+    environ.update(env or {})
     return subprocess.run(
         [sys.executable, "-m", "gixy.cli.main", "-f", "text"] + list(args),
         cwd=REPO_ROOT,
-        env=env,
+        env=environ,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         universal_newlines=True,
@@ -278,6 +279,45 @@ def test_identical_diagnostics_are_reported_once(conf):
     """Several plugins can hit the same missing argument independently."""
     result = run(conf("http { server { location / { proxy_pass ; } } }\n"))
     assert result.stderr.count("could not fully analyze") == 1
+
+
+# ---------------------------------------------------------------------------
+# Output is safe to show on a terminal
+# ---------------------------------------------------------------------------
+
+CONTROL_CHARS = (
+    "http { server { location /e\x1b[2K\x1b[1Avil { proxy_pass http://$http_host; } } }\n"
+    'include "/nonexist\x1b]0;x\x07";\n'
+)
+NON_ASCII = "http { server { location /café { proxy_pass http://$http_host; } } }\n"
+
+
+def test_control_characters_in_the_config_are_escaped_in_the_report(conf):
+    result = run(conf(CONTROL_CHARS))
+    assert result.returncode == EXIT_FINDINGS
+    assert "\\x1b[2K\\x1b[1Avil" in result.stdout
+    assert "\x1b" not in result.stdout
+
+
+def test_control_characters_in_the_config_are_escaped_on_stderr(conf):
+    result = run(conf(CONTROL_CHARS))
+    assert "File not found" in result.stderr
+    assert "\\x1b]0;x\\x07" in result.stderr
+    assert "\x1b" not in result.stderr
+    assert "\x07" not in result.stderr
+
+
+def test_console_report_keeps_its_colours_but_escapes_the_config(conf):
+    result = run("-f", "console", conf(CONTROL_CHARS))
+    assert "\\x1b[2K\\x1b[1Avil" in result.stdout
+    assert "\x1b[0m" in result.stdout
+
+
+def test_report_survives_a_stdout_that_cannot_encode_the_config(conf):
+    result = run("-f", "console", conf(NON_ASCII), env={"PYTHONIOENCODING": "ascii"})
+    assert result.returncode == EXIT_FINDINGS
+    assert "Traceback" not in result.stderr
+    assert "caf\\xe9" in result.stdout
 
 
 # ---------------------------------------------------------------------------
