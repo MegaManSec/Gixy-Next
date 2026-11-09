@@ -31,16 +31,27 @@ location ~* ^/proxy/(?<proxy_proto>https?)/(?<proxy_host>.*?)/(?<proxy_path>.*)$
 
 Any client can make NGINX request any host, for example `/proxy/http/169.254.169.254/latest/meta-data/`.
 
+The host is whatever precedes the first `/` of the address, so a client-controlled value (`$arg_*`, `$cookie_*`, `$http_*`) at the start of a `set` value still picks the host even when a fixed path follows it:
+
+```nginx
+location / {
+    set $backend "$cookie_backend/";
+    proxy_pass http://$backend;
+}
+```
+
 Marking such a location `internal` stops clients from requesting it directly, so the plugin does not report an `internal` location on its own. It does not make the setup safe if other directives can route a request into it.
 
 A common mistake is combining an unsafe rewrite with the internal proxy:
 
 ```nginx
-rewrite ^/(.*)/some$ /$1/ last;
+server {
+    rewrite ^/(.*)/some$ /$1/ last;
 
-location ~* ^/internal-proxy/(?<proxy_proto>https?)/(?<proxy_host>.*?)/(?<proxy_path>.*)$ {
-    internal;
-    proxy_pass $proxy_proto://$proxy_host/$proxy_path;
+    location ~* ^/internal-proxy/(?<proxy_proto>https?)/(?<proxy_host>.*?)/(?<proxy_path>.*)$ {
+        internal;
+        proxy_pass $proxy_proto://$proxy_host/$proxy_path;
+    }
 }
 ```
 

@@ -90,10 +90,11 @@ class ssrf(Plugin):
 
     def _check_script(self, script, directive):
         for var in compile_script(script):
-            if var.must_contain("/"):
+            tainted = self._host_tainted(var)
+            if tainted is None:
                 # Skip variable checks
                 return False
-            if any(option.can_contain(".") and not option.must_contain("/") for option in var.options):
+            if tainted:
                 # Yay! Our variable can contain any symbols!
                 reason = "Variable `${var}` can contain untrusted user input.".format(
                     var=var.name
@@ -102,3 +103,24 @@ class ssrf(Plugin):
 
                 return True
         return False
+
+    def _host_tainted(self, var):
+        """True if the host part of `var` can carry user input, None if the
+        variable ends the host part with a mandatory `/` before any such
+        input, False otherwise."""
+        if var.alternatives:
+            results = [self._host_tainted(option) for option in var.options]
+            if any(results):
+                return True
+            if results and all(result is None for result in results):
+                return None
+            return False
+        if var.depends:
+            for dep in var.depends:
+                result = self._host_tainted(dep)
+                if result is not False:
+                    return result
+            return False
+        if var.must_contain("/"):
+            return None
+        return bool(var.can_contain("."))
