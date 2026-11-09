@@ -98,11 +98,25 @@ def test_negative_contains(regexp, char):
     ('(1)(2)(?:3)', [0, 1, 2]),
     ('(1)((2)|(?:3))', [0, 1, 2, 3]),
     ("(?'pcre_7'1as)(?P<outer>(?<inner>2)|(?:3))", [0, 1, 2, 3, 'pcre_7', 'outer', 'inner']),
-    ('/proxy/(?<proxy>.*)$', [0, 1, 'proxy'])
+    ('/proxy/(?<proxy>.*)$', [0, 1, 'proxy']),
+    ('^/x/(?=(.*))', [0, 1]),
+    ('^/x/(?=(?<rest>.*))', [0, 1, 'rest']),
+    ('^/x/(?<=(a))b', [0, 1]),
+    ('^/x/(?!(.*))', [0]),
 ))
 def test_groups_names(regexp, groups):
     reg = Regexp(regexp)
     assert set(reg.groups.keys()) == set(groups)
+
+
+def test_lookahead_group_is_analysed():
+    reg = Regexp('^/x/(?=(.*))')
+    group = reg.group(1)
+    assert str(group) == '.*'
+    assert group.can_contain('\r')
+    assert group.can_startswith('.')
+    assert not reg.can_contain('\r')
+    assert sorted(reg.generate('|', anchored=True)) == ['^/x/']
 
 
 @pytest.mark.parametrize('regexp,string', (
@@ -118,6 +132,8 @@ def test_groups_names(regexp, groups):
     (r'1*', '1*'),
     (r'1*?', '1*?'),
     (r'1+', '1+'),
+    (r'^/x/(?=(.*))', '^/x/(?=(.*))'),
+    (r'(?<=a)b', '(?<=a)b'),
 ))
 def test_to_string(regexp, string):
     reg = Regexp(regexp)
