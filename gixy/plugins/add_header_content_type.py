@@ -1,6 +1,8 @@
 import gixy
 from gixy.plugins.plugin import Plugin
 
+UPSTREAM_FAMILIES = ("proxy", "fastcgi", "uwsgi", "scgi", "grpc")
+
 
 class add_header_content_type(Plugin):
     """
@@ -12,7 +14,7 @@ class add_header_content_type(Plugin):
     severity = gixy.severity.LOW
     description = "Do not set Content-Type using add_header; use default_type instead."
     help_url = "https://gixy.io/plugins/add_header_content_type/"
-    directives = ["add_header", "more_set_headers"]
+    directives = ["add_header"]
 
     def audit(self, directive):
         ct_value = next(
@@ -22,43 +24,38 @@ class add_header_content_type(Plugin):
         if ct_value is None:
             return
 
-        # Check if *_hide_header Content-Type is present in the same scope
-        # This is a valid pattern to override backend Content-Type
-        if self._has_hide_header_content_type(directive):
+        if self._upstream_hides_content_type(directive):
             return
 
-        reason = (
-            "Use `default_type {default_type};` instead of "
-            "`add_header`/`more_set_headers` to set Content-Type."
-        ).format(default_type=ct_value)
+        reason = "Use `default_type {default_type};` instead of `add_header` to set Content-Type.".format(
+            default_type=ct_value
+        )
         self.add_issue(directive=directive, reason=reason)
 
-    def _has_hide_header_content_type(self, directive):
-        """Check if *_hide_header Content-Type exists in the same scope or parent scopes"""
-        # List of nginx directives that can hide headers from backend
-        hide_header_directives = [
-            "proxy_hide_header",
-            "fastcgi_hide_header",
-            "uwsgi_hide_header",
-            "scgi_hide_header",
-            "grpc_hide_header",
-        ]
+    def _upstream_hides_content_type(self, directive):
+        families = self._upstream_families(directive)
+        if families is None:
+            return any(self._hides_content_type(directive, family) for family in UPSTREAM_FAMILIES)
+        return all(self._hides_content_type(directive, family) for family in families)
 
-        # Check in the same block (parent)
-        if directive.parent:
-            for hide_directive in hide_header_directives:
-                hide_headers = directive.parent.find(hide_directive)
-                for hh in hide_headers:
-                    # hide_header has one argument: the header name
-                    if hh.args and hh.args[0].lower() == "content-type":
-                        return True
+    @staticmethod
+    def _upstream_families(directive):
+        """`*_pass` families in effect for the block declaring `directive`, or None when there are none"""
+        for block in directive.parents:
+            families = {
+                family for family in UPSTREAM_FAMILIES if block.find("{0}_pass".format(family), flat=True)
+            }
+            if families:
+                return families
+            if block.self_context:
+                return None
+        return None
 
-        # Also check in parent scopes (server, http, etc.) because *_hide_header is inherited
-        for parent in directive.parents:
-            for hide_directive in hide_header_directives:
-                hide_headers = parent.find(hide_directive)
-                for hh in hide_headers:
-                    if hh.args and hh.args[0].lower() == "content-type":
-                        return True
-
+    @staticmethod
+    def _hides_content_type(directive, family):
+        """Whether the nearest `<family>_hide_header` list in scope hides Content-Type"""
+        for block in directive.parents:
+            hidden = block.find("{0}_hide_header".format(family), flat=True)
+            if hidden:
+                return any(h.arg(0, "").lower() == "content-type" for h in hidden)
         return False
