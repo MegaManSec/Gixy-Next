@@ -82,7 +82,7 @@ The image runs as an unprivileged user, so scan a config file that only root can
 
 Gixy-Next can detect a wide range of NGINX security and performance misconfigurations across `nginx.conf` and included configuration files. The following plugins are supported:
 
-- [[add_header_content_type] Setting Content-Type via add_header](https://gixy.io/plugins/add_header_content_type/)
+- [[add_header_content_type] Using `add_header` to set `Content-Type`](https://gixy.io/plugins/add_header_content_type/)
 - [[add_header_multiline] Multiline response headers](https://gixy.io/plugins/add_header_multiline/)
 - [[add_header_redefinition] Redefining of response headers by "add_header" directive](https://gixy.io/plugins/add_header_redefinition/)
 - [[alias_traversal] Path traversal via misconfigured alias](https://gixy.io/plugins/alias_traversal/)
