@@ -227,7 +227,7 @@ The source code can be found at [https://github.com/MegaManSec/Gixy-Next](https:
 
 ## What is Gixy? (Background)
 
-_Gixy_ is an NGINX configuration analyzer that was [originally](https://github.com/yandex/gixy) developed by Yandex's Andrew Krasichkov. It was first released in 2017 and has since become unmaintained. It does not support modern versions of Python, contains numerous bugs, and is limited in its functionality and ability to detect vulnerable NGINX configurations. Running the original Gixy today on a modern system will result in the following error:
+*Gixy* is an NGINX configuration analyzer that was [originally](https://github.com/yandex/gixy) developed by Yandex's Andrew Krasichkov. It was first released in 2017 and has since become unmaintained. It does not support modern versions of Python, contains numerous bugs, and is limited in its functionality and ability to detect vulnerable NGINX configurations. Running the original Gixy today on a modern system will result in the following error:
 
 ```text
   File "gixy/core/sre_parse/sre_parse.py", line 61, in <module>

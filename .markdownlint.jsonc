@@ -24,5 +24,9 @@
   "MD046": false,
 
   // Lock unordered list marker to `-` project-wide.
-  "MD004": { "style": "dash" }
+  "MD004": { "style": "dash" },
+
+  // Lock emphasis to `*text*` and strong to `**text**` project-wide.
+  "MD049": { "style": "asterisk" },
+  "MD050": { "style": "asterisk" }
 }
