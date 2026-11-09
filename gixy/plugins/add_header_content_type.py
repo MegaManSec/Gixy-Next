@@ -52,10 +52,17 @@ class add_header_content_type(Plugin):
         return None
 
     @staticmethod
-    def _hides_content_type(directive, family):
-        """Whether the nearest `<family>_hide_header` list in scope hides Content-Type"""
+    def _nearest_header_list(directive, name):
+        """Lowercased header names of the nearest `name` directives in scope; empty when none declares it"""
         for block in directive.parents:
-            hidden = block.find("{0}_hide_header".format(family), flat=True)
-            if hidden:
-                return any(h.arg(0, "").lower() == "content-type" for h in hidden)
-        return False
+            declared = block.find(name, flat=True)
+            if declared:
+                return {h.arg(0, "").lower() for h in declared}
+        return set()
+
+    @classmethod
+    def _hides_content_type(cls, directive, family):
+        """Whether the `<family>_hide_header` list in effect hides Content-Type, net of `<family>_pass_header`"""
+        hidden = cls._nearest_header_list(directive, "{0}_hide_header".format(family))
+        passed = cls._nearest_header_list(directive, "{0}_pass_header".format(family))
+        return "content-type" in hidden and "content-type" not in passed
