@@ -98,15 +98,24 @@ class http2_misdirected_request(Plugin):
             if not location.path.startswith("@") and not location.is_internal
         ]
 
+    def _locations_to_check(self, block):
+        """Routable locations a client can be served by: every prefix location, plus the regex
+        ones only when some prefix location lacks `=`/`^~`, since NGINX skips them otherwise."""
+        locations = self._routable_locations(block)
+        prefix = [location for location in locations if not location.is_regex]
+        if any(location.modifier is None for location in prefix):
+            return locations
+        return prefix
+
     def _location_returns_421(self, location):
         if not self._has_return_421(location):
             return False
-        return all(self._location_returns_421(nested) for nested in self._routable_locations(location))
+        return all(self._location_returns_421(nested) for nested in self._locations_to_check(location))
 
     def _server_returns_421(self, server):
         if self._has_return_421(server):
             return True
-        locations = self._routable_locations(server)
+        locations = self._locations_to_check(server)
         if not any(location.path == "/" and location.modifier in (None, "^~") for location in locations):
             return False
         return all(self._location_returns_421(location) for location in locations)
