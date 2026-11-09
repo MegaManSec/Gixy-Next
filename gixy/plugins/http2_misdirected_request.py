@@ -1,20 +1,23 @@
 import gixy
+from gixy.core.utils import parse_listen_key_and_default, resolve_inherited_single
 from gixy.plugins.plugin import Plugin
 
 
 class http2_misdirected_request(Plugin):
-    """Flag TLS default_server blocks with ssl_reject_handshake and HTTP/2 that lack a location / returning 421."""
+    """Flag TLS default servers with ssl_reject_handshake and HTTP/2 that do not answer every request with 421."""
 
     summary = "Missing HTTP/2 misdirected-request safeguard (return 421)."
     severity = gixy.severity.LOW
     description = (
-        "With HTTP/2 enabled, connection reuse may cause requests to reach a TLS default_server "
-        "even when ssl_reject_handshake is set. A location / { return 421; } provides a "
-        "deterministic, spec-compliant rejection of those misdirected requests."
+        "With HTTP/2 enabled, connection reuse may cause requests to reach the default server of a TLS "
+        "listen socket even when ssl_reject_handshake is set. Answering every request with return 421 "
+        "gives those misdirected requests a deterministic, spec-compliant rejection."
     )
     help_url = "https://gixy.io/plugins/http2_misdirected_request/"
     directives = []
     supports_full_config = True
+
+    SSL_LISTEN_FLAGS = ("ssl", "quic", "http3")
 
     def audit(self, directive):
         return
@@ -27,40 +30,54 @@ class http2_misdirected_request(Plugin):
         http2_dir = http_block.some("http2")
         http2_global = bool(http2_dir and http2_dir.args and http2_dir.args[0].lower() == "on")
 
-        for server in http_block.find_all_contexts_of_type("server"):
-            ssl_reject = server.some("ssl_reject_handshake")
-            if not ssl_reject or not ssl_reject.args or ssl_reject.args[0].lower() != "on":
+        servers = list(http_block.find_all_contexts_of_type("server"))
+        default_listens = self._default_listens(servers)
+        for server in servers:
+            listens = [listen for listen in default_listens.get(server, ()) if self._listen_is_ssl(listen)]
+            if not listens:
                 continue
-            if not self._server_is_default(server):
-                continue
-            if not self._server_is_ssl(server):
+            ssl_reject = resolve_inherited_single(server, "ssl_reject_handshake")
+            if not ssl_reject or ssl_reject.args[0].lower() != "on":
                 continue
             server_http2 = server.some("http2")
             if server_http2 and server_http2.args and server_http2.args[0].lower() == "off":
                 continue
             if not http2_global and not self._server_has_http2(server):
                 continue
-            if self._has_location_returning_421(server):
+            if self._server_returns_421(server):
                 continue
             self.add_issue(
-                directive=ssl_reject,
+                directive=[ssl_reject] + listens,
                 reason=(
-                    "default_server with ssl_reject_handshake on and HTTP/2 enabled "
-                    "should define location / { return 421; } to reject misdirected HTTP/2 requests."
+                    "The default server of a TLS listen socket with ssl_reject_handshake on and HTTP/2 enabled "
+                    "should answer every request with return 421 (at server level, or from location / and every "
+                    "other location) to reject misdirected HTTP/2 requests."
                 ),
             )
 
-    def _server_is_default(self, server):
-        for listen in server.find("listen"):
-            if any(t.lower() in ("default_server", "default") for t in listen.args):
-                return True
-        return False
+    def _default_listens(self, servers):
+        """Map each server to the listen directives on whose socket it is the default server."""
+        sockets = {}
+        defaults = {}
+        for server in servers:
+            listens = server.find("listen")
+            if not listens:
+                sockets.setdefault("*:80", []).append((server, None, False))
+            for listen in listens:
+                key, is_default = parse_listen_key_and_default(listen.args)
+                if key is None:
+                    if is_default:
+                        defaults.setdefault(server, []).append(listen)
+                    continue
+                sockets.setdefault(key, []).append((server, listen, is_default))
+        for entries in sockets.values():
+            server, listen, _ = next((entry for entry in entries if entry[2]), entries[0])
+            if listen is not None:
+                defaults.setdefault(server, []).append(listen)
+        return defaults
 
-    def _server_is_ssl(self, server):
-        for listen in server.find("listen"):
-            if any(t.lower() in ("ssl", "quic", "http3") for t in listen.args):
-                return True
-        return False
+    def _listen_is_ssl(self, listen):
+        return any(arg.lower() in self.SSL_LISTEN_FLAGS for arg in listen.args)
 
     def _server_has_http2(self, server):
         http2 = server.some("http2")
@@ -71,10 +88,25 @@ class http2_misdirected_request(Plugin):
                 return True
         return False
 
-    def _has_location_returning_421(self, server):
-        for location in server.find("location", flat=True):
-            if location.path != "/":
-                continue
-            if any(r.args and r.args[0] == "421" for r in location.find("return")):
-                return True
-        return False
+    def _has_return_421(self, block):
+        return any(r.args and r.args[0] == "421" for r in block.find("return"))
+
+    def _routable_locations(self, block):
+        return [
+            location
+            for location in block.find("location")
+            if not location.path.startswith("@") and not location.is_internal
+        ]
+
+    def _location_returns_421(self, location):
+        if not self._has_return_421(location):
+            return False
+        return all(self._location_returns_421(nested) for nested in self._routable_locations(location))
+
+    def _server_returns_421(self, server):
+        if self._has_return_421(server):
+            return True
+        locations = self._routable_locations(server)
+        if not any(location.path == "/" and location.modifier in (None, "^~") for location in locations):
+            return False
+        return all(self._location_returns_421(location) for location in locations)
