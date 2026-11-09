@@ -3,6 +3,7 @@ import glob
 import logging
 import os
 import re
+import stat
 import traceback
 
 from gixy.core.diagnostics import Diagnostic
@@ -57,6 +58,17 @@ def _dump_location(path, line):
     except OSError:
         return None
     return (location[0], line - location[1]) if location else None
+
+
+def _check_regular_file(path):
+    """Raise UnreadableFile unless `path` is a regular file, so that a FIFO,
+    device or socket is never opened (reading one could block forever)."""
+    try:
+        mode = os.stat(path).st_mode
+    except OSError as e:
+        raise UnreadableFile("Cannot read {0}: {1}.".format(path, e.strerror)) from e
+    if not stat.S_ISREG(mode):
+        raise UnreadableFile("Cannot read {0}: not a regular file.".format(path))
 
 
 class NginxParser(object):
@@ -433,6 +445,7 @@ class NginxParser(object):
                 continue
             self._active_includes.add(canonical)
             try:
+                _check_regular_file(file_path)
                 # parse the include into current context
                 self.parse_file(file_path, parent)
             except InvalidConfiguration as e:

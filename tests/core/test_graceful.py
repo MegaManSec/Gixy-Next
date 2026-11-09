@@ -7,6 +7,8 @@ malformed/internal taxonomy that the CLI maps onto exit codes 2 and 3.
 """
 
 import io
+import os
+import threading
 
 import pytest
 
@@ -194,6 +196,57 @@ def test_malformed_if_condition_is_not_a_bare_exception():
     parser, root = _parse("if ($foo $bar $baz $qux) { }")
     assert _kinds(parser.malformed) == ["malformed"]
     assert "if" not in _names(root)
+
+
+# ---------------------------------------------------------------------------
+# Parse-time: an include that is not a regular file
+# ---------------------------------------------------------------------------
+
+def _parse_file_in_thread(path, cwd, timeout=10):
+    """Parse on a worker thread so a regression that opens a FIFO with no
+    writer fails the test instead of hanging the whole run."""
+    result = {}
+
+    def target():
+        try:
+            parser = NginxParser(cwd=cwd, allow_includes=True)
+            result["root"] = parser.parse_file(path)
+            result["malformed"] = parser.malformed
+        except BaseException as e:
+            result["error"] = e
+
+    worker = threading.Thread(target=target, daemon=True)
+    worker.start()
+    worker.join(timeout)
+    assert not worker.is_alive(), "parsing blocked on the include"
+    if "error" in result:
+        raise result["error"]
+    return result["root"], result["malformed"]
+
+
+def test_include_matching_a_fifo_is_skipped_not_opened(tmp_path):
+    inc = tmp_path / "inc"
+    inc.mkdir()
+    os.mkfifo(str(inc / "pipe"))
+    (inc / "real.conf").write_text("server_tokens off;")
+    main = tmp_path / "nginx.conf"
+    main.write_text("include inc/*;")
+
+    root, malformed = _parse_file_in_thread(str(main), str(tmp_path))
+    assert _kinds(malformed) == ["malformed"]
+    assert malformed[0].phase == "read"
+    assert "not a regular file" in malformed[0].message
+    assert malformed[0].file == str(inc / "pipe")
+    assert "server_tokens" in _names(root)
+
+
+def test_include_of_a_device_is_skipped(tmp_path):
+    main = tmp_path / "nginx.conf"
+    main.write_text("include /dev/null;")
+    parser = NginxParser(cwd=str(tmp_path), allow_includes=True)
+    parser.parse_file(str(main))
+    assert _kinds(parser.malformed) == ["malformed"]
+    assert "not a regular file" in parser.malformed[0].message
 
 
 # ---------------------------------------------------------------------------
