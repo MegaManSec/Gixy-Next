@@ -132,3 +132,26 @@ def resolve_variable_chain(name, assignments):
             if following and following not in seen:
                 seen.add(following)
                 pending.append((following, chain))
+
+
+def default_listens(servers):
+    """Map each server to the `listen` directives on whose socket it is the default server:
+    the one flagged `default_server`, otherwise the first server on that socket."""
+    sockets = {}
+    defaults = {}
+    for server in servers:
+        listens = server.find("listen")
+        if not listens:
+            sockets.setdefault("*:80", []).append((server, None, False))
+        for listen in listens:
+            key, is_default = parse_listen_key_and_default(listen.args)
+            if key is None:
+                if is_default:
+                    defaults.setdefault(server, []).append(listen)
+                continue
+            sockets.setdefault(key, []).append((server, listen, is_default))
+    for entries in sockets.values():
+        server, listen, _ = next((entry for entry in entries if entry[2]), entries[0])
+        if listen is not None:
+            defaults.setdefault(server, []).append(listen)
+    return defaults

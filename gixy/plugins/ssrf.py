@@ -1,11 +1,36 @@
 import re
+import string
 
 import gixy
 import gixy.core.sre_parse.sre_parse as sre_parse
 from gixy.core.context import get_context
 from gixy.core.regexp import Regexp
+from gixy.core.utils import default_listens, parse_listen_key_and_default
 from gixy.core.variable import compile_script
 from gixy.plugins.plugin import Plugin
+
+
+HOST_NAME_CHARS = string.ascii_lowercase + string.digits + "-."
+
+
+def _is_catch_all_name(name):
+    """A `server_name` regex that pins no character, such as `~.` or `~^.*$`, matches any Host."""
+    if not name.startswith("~"):
+        return False
+    pattern = name[1:]
+    if pattern.startswith("*"):
+        pattern = pattern[1:]
+    try:
+        regexp = Regexp(pattern)
+        return not any(regexp.must_contain(char) for char in HOST_NAME_CHARS)
+    except (sre_parse.error, OverflowError, RecursionError):
+        return False
+
+
+def _depends_on_host(var):
+    if var.name == "host" and var.value == "builtin":
+        return True
+    return any(_depends_on_host(dep) for dep in var.depends or var.alternatives or ())
 
 
 def _literal_start(location):
@@ -68,6 +93,8 @@ class ssrf(Plugin):
     def __init__(self, config):
         super(ssrf, self).__init__(config)
         self.parse_uri_re = re.compile(r"(?P<scheme>[^?#/)]+://)?(?P<host>[^?#/)]+)")
+        self._defaults = {}
+        self._host_explanation = None
 
     def audit(self, directive):
         # proxy_pass and friends require an upstream argument; its absence is
@@ -84,6 +111,7 @@ class ssrf(Plugin):
         if not parsed:
             return
 
+        self._host_explanation = self._host_header_explanation(directive)
         res = self._check_script(parsed.group("scheme"), directive)
         if not res:
             self._check_script(parsed.group("host"), directive)
@@ -99,6 +127,8 @@ class ssrf(Plugin):
                 reason = "Variable `${var}` can contain untrusted user input.".format(
                     var=var.name
                 )
+                if self._host_explanation and _depends_on_host(var):
+                    reason += " " + self._host_explanation
                 self.add_issue(directive=[directive] + var.providers, reason=reason)
 
                 return True
@@ -108,6 +138,8 @@ class ssrf(Plugin):
         """True if the host part of `var` can carry user input, None if the
         variable ends the host part with a mandatory `/` before any such
         input, False otherwise."""
+        if var.name == "host" and var.value == "builtin":
+            return bool(self._host_explanation)
         if var.alternatives:
             results = [self._host_tainted(option) for option in var.options]
             if any(results):
@@ -124,3 +156,27 @@ class ssrf(Plugin):
         if var.must_contain("/"):
             return None
         return bool(var.can_contain("."))
+
+    def _host_header_explanation(self, directive):
+        """Why `$host` is attacker-chosen for `directive`, or None when the server only sees the
+        host names it declares. Needs the full configuration: without an `http` block the other
+        servers on the socket are unknown."""
+        server = next((block for block in directive.parents if block.name == "server"), None)
+        http = next((block for block in directive.parents if block.name == "http"), None)
+        if server is None or http is None:
+            return None
+        if id(http) not in self._defaults:
+            self._defaults[id(http)] = default_listens(list(http.find_all_contexts_of_type("server")))
+        listens = self._defaults[id(http)].get(server)
+        if listens:
+            sockets = sorted({parse_listen_key_and_default(listen.args)[0] or listen.args[0] for listen in listens})
+            return (
+                "`$host` is taken from the request: this is the default server for {sockets}, "
+                "so a request for any host name reaches it."
+            ).format(sockets=", ".join("`{0}`".format(socket) for socket in sockets))
+        if any(_is_catch_all_name(name) for sn in server.find("server_name") for name in sn.args):
+            return (
+                "`$host` is taken from the request: `server_name` has a catch-all regular expression, "
+                "so a request for any host name reaches this server."
+            )
+        return None
