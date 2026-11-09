@@ -7,6 +7,8 @@ malformed/internal taxonomy that the CLI maps onto exit codes 2 and 3.
 """
 
 import io
+import os
+import threading
 
 import pytest
 
@@ -197,6 +199,57 @@ def test_malformed_if_condition_is_not_a_bare_exception():
 
 
 # ---------------------------------------------------------------------------
+# Parse-time: an include that is not a regular file
+# ---------------------------------------------------------------------------
+
+def _parse_file_in_thread(path, cwd, timeout=10):
+    """Parse on a worker thread so a regression that opens a FIFO with no
+    writer fails the test instead of hanging the whole run."""
+    result = {}
+
+    def target():
+        try:
+            parser = NginxParser(cwd=cwd, allow_includes=True)
+            result["root"] = parser.parse_file(path)
+            result["malformed"] = parser.malformed
+        except BaseException as e:
+            result["error"] = e
+
+    worker = threading.Thread(target=target, daemon=True)
+    worker.start()
+    worker.join(timeout)
+    assert not worker.is_alive(), "parsing blocked on the include"
+    if "error" in result:
+        raise result["error"]
+    return result["root"], result["malformed"]
+
+
+def test_include_matching_a_fifo_is_skipped_not_opened(tmp_path):
+    inc = tmp_path / "inc"
+    inc.mkdir()
+    os.mkfifo(str(inc / "pipe"))
+    (inc / "real.conf").write_text("server_tokens off;")
+    main = tmp_path / "nginx.conf"
+    main.write_text("include inc/*;")
+
+    root, malformed = _parse_file_in_thread(str(main), str(tmp_path))
+    assert _kinds(malformed) == ["malformed"]
+    assert malformed[0].phase == "read"
+    assert "not a regular file" in malformed[0].message
+    assert malformed[0].file == str(inc / "pipe")
+    assert "server_tokens" in _names(root)
+
+
+def test_include_of_a_device_is_skipped(tmp_path):
+    main = tmp_path / "nginx.conf"
+    main.write_text("include /dev/null;")
+    parser = NginxParser(cwd=str(tmp_path), allow_includes=True)
+    parser.parse_file(str(main))
+    assert _kinds(parser.malformed) == ["malformed"]
+    assert "not a regular file" in parser.malformed[0].message
+
+
+# ---------------------------------------------------------------------------
 # Audit-time: a plugin that raises
 # ---------------------------------------------------------------------------
 
@@ -321,6 +374,52 @@ def test_non_numeric_value_is_malformed_not_an_internal_error():
     m = _audit("events { worker_connections abc; }\nworker_rlimit_nofile 100;\n")
     assert _kinds(m.errors) == ["malformed"]
     assert "expects a number" in m.errors[0].message
+
+
+@pytest.mark.parametrize(
+    "config",
+    [
+        "http { upstream b { server; } server { location / { proxy_pass http://b; } } }",
+        "http { server { open_file_cache; location / { try_files $uri =404; } } }",
+    ],
+)
+def test_missing_argument_on_a_related_directive_is_malformed(config):
+    """A plugin that reads another directive's arguments must report that
+    directive as malformed, not crash on the missing index."""
+    m = _audit(config)
+    assert m.errors
+    assert all(d.kind == "malformed" for d in m.errors), [
+        (d.kind, d.message) for d in m.errors
+    ]
+
+
+# ---------------------------------------------------------------------------
+# Audit-time: regexes the engine cannot, or should not, expand
+# ---------------------------------------------------------------------------
+
+def _origin_check(pattern):
+    return (
+        'http { server { if ($http_origin ~ "%s") { '
+        "add_header X-Frame-Options SAMEORIGIN; } } }" % pattern
+    )
+
+
+def test_exponential_origin_regex_is_skipped_with_a_warning(caplog):
+    m = _audit(_origin_check("^https://" + "(?:a|b)?" * 13 + "$"))
+    assert m.errors == []
+    assert "too complex to analyze" in caplog.text
+
+
+@pytest.mark.parametrize(
+    "pattern",
+    [
+        "^https://a{4294967296}$",
+        "^https://" + "(" * 300 + "a" + ")" * 300 + "$",
+    ],
+)
+def test_unparsable_origin_regex_is_not_an_internal_error(pattern):
+    m = _audit(_origin_check(pattern))
+    assert m.errors == []
 
 
 # ---------------------------------------------------------------------------

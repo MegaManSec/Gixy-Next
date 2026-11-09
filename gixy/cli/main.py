@@ -15,6 +15,7 @@ from gixy.core.exceptions import InvalidConfiguration
 from gixy.core.manager import Manager as Gixy
 from gixy.core.plugins_manager import PluginsManager
 from gixy.formatters import get_all as formatters
+from gixy.utils.text import escape_control
 
 LOG = logging.getLogger()
 
@@ -52,6 +53,10 @@ def _diag_location(rec, path):
     return " ({0})".format(", ".join(bits)) if bits else ""
 
 
+def _write_stderr(text):
+    sys.stderr.write(escape_control(text))
+
+
 def _emit_diagnostics(diagnostics, debug=False):
     """Print malformed-input and internal-error diagnostics to stderr.
 
@@ -77,7 +82,7 @@ def _emit_diagnostics(diagnostics, debug=False):
     internal = [(p, r) for p, r in unique if r.kind == "internal"]
 
     for path, rec in malformed:
-        sys.stderr.write(
+        _write_stderr(
             "gixy: could not fully analyze {path}{loc}: {msg}\n".format(
                 path=path, loc=_diag_location(rec, path), msg=rec.message
             )
@@ -94,7 +99,7 @@ def _emit_diagnostics(diagnostics, debug=False):
 
     for path, rec in internal:
         plugin = " in plugin '{0}'".format(rec.plugin) if rec.plugin else ""
-        sys.stderr.write(
+        _write_stderr(
             "gixy: internal error analyzing {path}{plugin}{loc}: {msg}\n".format(
                 path=path, plugin=plugin, loc=_diag_location(rec, path), msg=rec.message
             )
@@ -112,13 +117,18 @@ def _emit_diagnostics(diagnostics, debug=False):
         )
 
 
+class _EscapingFormatter(logging.Formatter):
+    def format(self, record):
+        return escape_control(super().format(record))
+
+
 def _init_logger(debug=False):
     LOG.handlers = []
     log_level = logging.DEBUG if debug else logging.INFO
 
     LOG.setLevel(log_level)
     handler = logging.StreamHandler(sys.stderr)
-    handler.setFormatter(logging.Formatter("[%(module)s]\t%(levelname)s\t%(message)s"))
+    handler.setFormatter(_EscapingFormatter("[%(module)s]\t%(levelname)s\t%(message)s"))
     LOG.addHandler(handler)
     LOG.debug("logging initialized")
 
@@ -302,7 +312,16 @@ def _get_cli_parser():
     return parser
 
 
+def _tolerate_unencodable_output():
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.reconfigure(errors="backslashreplace")
+        except (AttributeError, ValueError):
+            pass
+
+
 def main():
+    _tolerate_unencodable_output()
     parser = _get_cli_parser()
     args = parser.parse_args()
     _init_logger(args.debug)
@@ -455,7 +474,7 @@ def main():
 
     report = formatter.flush()
     if args.output_file:
-        with open(config.output_file, "w") as f:
+        with open(config.output_file, "w", errors="backslashreplace") as f:
             f.write(report)
     else:
         print(report)

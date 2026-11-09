@@ -119,10 +119,10 @@ class stale_dns_cache(Plugin):
 
                     # No 'resolve' -> stale DNS risk if this server target is a hostname
 
-                    if _UNIX_SOCKET_RE.match(child.args[0]):
+                    if _UNIX_SOCKET_RE.match(child.arg(0)):
                         continue
 
-                    parsed_upstream_server = self.parse_uri_re.match(child.args[0])
+                    parsed_upstream_server = self.parse_uri_re.match(child.arg(0))
                     if not parsed_upstream_server:
                         continue
 

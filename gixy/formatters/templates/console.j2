@@ -3,7 +3,7 @@
 {{ colors.TITLE }}==================== Results ==================={{ colors.DEF }}
 {% for path, issues in reports.items() %}
 {% if reports|length > 1 %}
-File path: {{ path }}
+File path: {{ path | escape_control }}
 {% endif %}
 {% if not issues %}
 No issues found.
@@ -19,10 +19,10 @@ Description: {{ issue.description }}
 Additional info: {{ issue.help_url }}
 {% endif %}
 {% if issue.reason %}
-Reason: {{ issue.reason }}
+Reason: {{ issue.reason | escape_control }}
 {% endif %}
 Pseudo config:
-{{ issue.config | to_text }}
+{{ issue.config | to_text | escape_control }}
 
 {% if not loop.last %}
 ------------------------------------------------

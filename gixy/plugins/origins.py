@@ -6,7 +6,7 @@ import tldextract
 
 import gixy
 import gixy.core.sre_parse.sre_parse as sre_parse
-from gixy.core.regexp import Regexp
+from gixy.core.regexp import Regexp, RegexpTooComplex
 from gixy.core.utils import bare_variable_name, resolve_variable_chain
 from gixy.directives.block import MapBlock
 from gixy.directives.directive import (
@@ -148,8 +148,11 @@ class origins(Plugin):
         try:
             regexp = Regexp(pattern, case_sensitive=case_sensitive)
             candidates = list(regexp.generate("`", anchored=True, max_repeat=5))
-        except sre_parse.error as e:
+        except (sre_parse.error, OverflowError, RecursionError) as e:
             LOG.warning("Failed to parse regex: %s (%s)", pattern, str(e))
+            return False
+        except RegexpTooComplex as e:
+            LOG.warning("Regex too complex to analyze: %s (%s)", pattern, str(e))
             return False
         for candidate_match in candidates:
             try:

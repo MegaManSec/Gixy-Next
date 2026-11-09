@@ -207,6 +207,8 @@ By default, `gixy` processes `include` directives so it can analyze the full con
 gixy --disable-includes /path/to/nginx.conf
 ```
 
+Only regular files are read. An `include` that matches a FIFO, device or socket is skipped and reported on stderr with exit code `2`, like an include that cannot be read.
+
 When scanning a rendered `nginx -T` dump, leaving includes enabled is usually fine, but disabling them can fix any odd edge cases such as when an include file could not be found on the system the dump was performed on.
 
 ## Custom variable drop-ins

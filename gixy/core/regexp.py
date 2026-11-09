@@ -18,6 +18,12 @@ LOG = logging.getLogger(__name__)
 _AT_BEGIN_SENTINEL = "\x00"
 _AT_END_SENTINEL = "\x7f"
 
+MAX_CANDIDATES = 10000
+
+
+class RegexpTooComplex(Exception):
+    """The regex expands to more candidates than the generation budget allows."""
+
 
 def _build_reverse_list(original):
     result = []
@@ -97,7 +103,7 @@ def extract_groups(parsed, top=True):
     return result
 
 
-def _gen_combinator(variants, _merge=True):
+def _gen_combinator(variants, _merge=True, context=None):
     if not hasattr(variants, "__iter__"):
         return [variants] if variants is not None else []
 
@@ -105,18 +111,20 @@ def _gen_combinator(variants, _merge=True):
     need_product = False
     for var in variants:
         if isinstance(var, list):
-            sol = _gen_combinator(var, _merge=False)
+            sol = _gen_combinator(var, _merge=False, context=context)
             res.append(sol)
             need_product = True
         elif var is not None:
             res.append(var)
 
     if need_product:
+        if context is not None:
+            context.check_budget(res)
         producted = product(*res)
         if _merge:
             # TODO(buglloc): ??!
             return list(map(_merge_variants, producted))
-        return producted
+        return list(producted)
     elif _merge:
         return list(map(_merge_variants, [res]))
     return res
@@ -406,7 +414,7 @@ class MinRepeatToken(Token):
 
         result = []
         repeat = self.max if self.max <= context.max_repeat else context.max_repeat
-        for val in _gen_combinator([res]):
+        for val in _gen_combinator([res], context=context):
             result.append(val * repeat)
         return result
 
@@ -492,7 +500,7 @@ class MaxRepeatToken(Token):
 
         result = []
         repeat = self.max if self.max <= context.max_repeat else context.max_repeat
-        for val in _gen_combinator([res]):
+        for val in _gen_combinator([res], context=context):
             result.append(val * repeat)
         return result
 
@@ -638,7 +646,7 @@ class SubpatternToken(Token):
         for child in self.childs:
             res.append(child.generate(context))
 
-        return _gen_combinator(res)
+        return _gen_combinator(res, context=context)
 
     def __str__(self):
         childs = "".join(str(x) for x in self.childs)
@@ -726,7 +734,7 @@ class InternalSubpatternToken(Token):
         for child in self.childs:
             res.append(child.generate(context))
 
-        return _gen_combinator(res)
+        return _gen_combinator(res, context=context)
 
     def __str__(self):
         return "".join(str(x) for x in self.childs)
@@ -999,11 +1007,25 @@ def parse(sre_obj, parent=None, regexp=None):
 
 
 class GenerationContext(object):
-    def __init__(self, char, max_repeat=5, strict=False, anchored=True):
+    def __init__(
+        self, char, max_repeat=5, strict=False, anchored=True, max_candidates=MAX_CANDIDATES
+    ):
         self.char = char
         self.max_repeat = max_repeat
         self.strict = strict
         self.anchored = anchored
+        self.max_candidates = max_candidates
+
+    def check_budget(self, variants):
+        if self.max_candidates is None:
+            return
+        count = 1
+        for variant in variants:
+            count *= len(variant)
+            if count > self.max_candidates:
+                raise RegexpTooComplex(
+                    "regex expands to more than {0} candidates".format(self.max_candidates)
+                )
 
 
 class Regexp(object):
@@ -1094,7 +1116,7 @@ class Regexp(object):
             char=char if self.case_sensitive else char.lower()
         )
 
-    def generate(self, char, anchored=False, max_repeat=5):
+    def generate(self, char, anchored=False, max_repeat=5, max_candidates=MAX_CANDIDATES):
         """
         Generate values that match regex.
         Example:
@@ -1106,10 +1128,14 @@ class Regexp(object):
         :param str char: "dangerous" character, generator try to place it wherever possible.
         :param bool anchored: place anchors in generated values.
         :param int max_repeat: maximum count of repeated group (e.g. "a+" provides "aaaaa").
+        :param int max_candidates: give up (raise RegexpTooComplex) once an expansion step would
+            yield more candidates than this; None disables the budget.
         :return list of str: True if regex can contain the specified char, False otherwise.
         """
 
-        context = GenerationContext(char, anchored=anchored, max_repeat=max_repeat)
+        context = GenerationContext(
+            char, anchored=anchored, max_repeat=max_repeat, max_candidates=max_candidates
+        )
         for val in self.root.generate(context=context):
             body = val.lstrip(_AT_BEGIN_SENTINEL).rstrip(_AT_END_SENTINEL)
             if _AT_BEGIN_SENTINEL in body or _AT_END_SENTINEL in body:
