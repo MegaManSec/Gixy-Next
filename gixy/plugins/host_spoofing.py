@@ -29,9 +29,16 @@ class host_spoofing(Plugin):
             self.add_issue(directive=directive, reason="Upstream Host is set from " + source)
             return
 
+        sets = {
+            id(sd): sd
+            for block in directive.parents
+            for sd in block.find("set", flat=True)
+            if isinstance(sd, SetDirective)
+        }
+
         def assignments(var):
-            for sd in directive.find_declarative_directives_in_scope("set"):
-                if isinstance(sd, SetDirective) and sd.variable == var:
+            for sd in sets.values():
+                if sd.variable == var:
                     yield sd, sd.value
 
         for var in self._variables(value):
