@@ -9,6 +9,7 @@ from gixy.directives.directive import is_ipv4, is_ipv6
 from gixy.plugins.plugin import Plugin
 
 _EXTRACT = tldextract.TLDExtract(include_psl_private_domains=True, suffix_list_urls=(), cache_dir=None)
+_UNIX_SOCKET_RE = re.compile(r"^(?:[a-z][a-z0-9+.-]*://)?unix:", re.IGNORECASE)
 
 
 class stale_dns_cache(Plugin):
@@ -48,7 +49,7 @@ class stale_dns_cache(Plugin):
 
         proxy_target = directive.args[0]
 
-        if "unix:" in proxy_target:
+        if _UNIX_SOCKET_RE.match(proxy_target):
             return
 
         parsed = self.parse_uri_re.match(proxy_target)
@@ -118,7 +119,7 @@ class stale_dns_cache(Plugin):
 
                     # No 'resolve' -> stale DNS risk if this server target is a hostname
 
-                    if "unix:" in child.args[0]:
+                    if _UNIX_SOCKET_RE.match(child.args[0]):
                         continue
 
                     parsed_upstream_server = self.parse_uri_re.match(child.args[0])

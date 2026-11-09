@@ -1,12 +1,17 @@
+import ipaddress
+
 import gixy
 from gixy.core.utils import AUTH_DIRECTIVES, resolve_inherited_single
 from gixy.plugins.plugin import Plugin
 
+ALL_RULE = "all"
+ALLOW_ALL_RULES = frozenset((ALL_RULE, "0.0.0.0/0", "::/0"))
+
 
 class allow_without_deny(Plugin):
     """
-    Warn when an 'allow' directive appears in a context without a corresponding
-    'deny all;' (or equivalent restriction) in the same context.
+    Warn when the 'allow' directives in a context are not paired with a 'deny'
+    (usually 'deny all;') that covers any of the allowed addresses.
     """
 
     summary = "Allow directives without a deny restriction."
@@ -40,11 +45,41 @@ class allow_without_deny(Plugin):
                 return True
         return False
 
+    @staticmethod
+    def _rule_range(directive):
+        """ip_network for an address rule; the raw argument for `all`, `unix:`
+        and anything ipaddress cannot parse."""
+        value = directive.args[0]
+        if value in (ALL_RULE, "unix:"):
+            return value
+        try:
+            return ipaddress.ip_network(value, strict=False)
+        except ValueError:
+            return value
+
+    @classmethod
+    def _deny_covers(cls, deny, allow):
+        """True if some client matched by `allow` would be rejected by `deny`.
+
+        ngx_http_access_handler() takes the first matching rule, so an allow
+        only does something when a deny would otherwise catch one of its
+        addresses. `deny all` covers everything; unix: is its own family;
+        IPv4 and IPv6 ranges, `0.0.0.0/0` and `::/0` included, never overlap
+        each other.
+        """
+        deny_range = cls._rule_range(deny)
+        allow_range = cls._rule_range(allow)
+        if deny_range == ALL_RULE:
+            return True
+        if isinstance(deny_range, str) or isinstance(allow_range, str):
+            return deny_range == allow_range
+        return deny_range.version == allow_range.version and deny_range.overlaps(allow_range)
+
     def audit(self, directive):
         parent = directive.parent
-        if not parent:
+        if not parent or not directive.args:
             return
-        if directive.args == ["all"]:
+        if directive.args[0] in ALLOW_ALL_RULES:
             # for example, "allow all" in a nested location which allows access to otherwise forbidden parent location
             return
         if self._is_satisfy_any_with_auth(parent):
@@ -55,15 +90,24 @@ class allow_without_deny(Plugin):
             return
         self._reported_parents.add(key)
 
-        deny_found = False
-        for child in parent.children:
-            if child.name == "deny":
-                deny_found = True
-                break
+        allows = [
+            child
+            for child in parent.find("allow")
+            if child.args and child.args[0] not in ALLOW_ALL_RULES
+        ]
+        denies = [child for child in parent.find("deny") if child.args]
 
-        if not deny_found:
-            reason = "No deny rule was found in the same context; add `deny all;` after the `allow` directives."
-            self.add_issue(
-                directive=[directive] + list(parent.find_recursive("allow")),
-                reason=reason,
+        if any(self._deny_covers(deny, allow) for deny in denies for allow in allows):
+            return
+
+        if denies:
+            reason = (
+                "No `deny` rule in the same context overlaps the allowed addresses, so the `allow` "
+                "directives change nothing; add `deny all;` after them."
             )
+        else:
+            reason = "No deny rule was found in the same context; add `deny all;` after the `allow` directives."
+        self.add_issue(
+            directive=allows + denies,
+            reason=reason,
+        )

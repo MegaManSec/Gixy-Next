@@ -37,13 +37,13 @@ class version_disclosure(Plugin):
             return
 
         # Check if server_tokens is set at http level
-        http_server_tokens = http_block.some("server_tokens")
+        http_server_tokens = http_block.some("server_tokens", flat=False)
         if http_server_tokens:
             return
 
         # Check each server block for server_tokens
         for server_block in http_block.find_all_contexts_of_type("server"):
-            server_tokens = server_block.some("server_tokens")
+            server_tokens = server_block.some("server_tokens", flat=False)
 
             if not server_tokens:
                 # Missing server_tokens directive in this server block
