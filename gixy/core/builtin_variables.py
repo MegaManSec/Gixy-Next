@@ -9,9 +9,9 @@ LOG = logging.getLogger(__name__)
 
 BUILTIN_VARIABLES = {
     # https://nginx.org/en/docs/http/ngx_http_core_module.html#var_uri
-    "uri": r"/[^\x20\t]*",
+    "uri": r"/[^\x00]*",
     # https://nginx.org/en/docs/http/ngx_http_core_module.html#var_document_uri
-    "document_uri": r"/[^\x20\t]*",
+    "document_uri": r"/[^\x00]*",
     # https://nginx.org/en/docs/http/ngx_http_core_module.html#var_arg_
     "arg_": r"[^\s&]+",
     # https://nginx.org/en/docs/http/ngx_http_core_module.html#var_args
@@ -21,7 +21,7 @@ BUILTIN_VARIABLES = {
     # https://nginx.org/en/docs/http/ngx_http_core_module.html#var_request_uri
     "request_uri": r"/[^\s]*",
     # https://nginx.org/en/docs/http/ngx_http_core_module.html#var_http_
-    "http_": r"[\x21-\x7e]",
+    "http_": r"[^\r\n\x00]*",
     # https://nginx.org/en/docs/http/ngx_http_upstream_module.html#var_upstream_http_
     "upstream_http_": "",
     # https://nginx.org/en/docs/http/ngx_http_upstream_module.html#var_upstream_cookie_
@@ -29,7 +29,7 @@ BUILTIN_VARIABLES = {
     # https://nginx.org/en/docs/http/ngx_http_upstream_module.html#var_upstream_trailer_
     "upstream_trailer_": None,
     # https://nginx.org/en/docs/http/ngx_http_proxy_module.html#var_proxy_add_x_forwarded_for
-    "proxy_add_x_forwarded_for": "",
+    "proxy_add_x_forwarded_for": r"[^\r\n\x00]*",
     # https://nginx.org/en/docs/http/ngx_http_proxy_module.html#var_proxy_host
     "proxy_host": "",
     # https://nginx.org/en/docs/http/ngx_http_proxy_module.html#var_proxy_port
@@ -50,11 +50,11 @@ BUILTIN_VARIABLES = {
     # https://nginx.org/en/docs/stream/ngx_stream_core_module.html#var_proxy_protocol_tlv_
     "proxy_protocol_tlv_": None,
     # https://nginx.org/en/docs/http/ngx_http_fastcgi_module.html#var_fastcgi_path_info
-    "fastcgi_path_info": "",
+    "fastcgi_path_info": r"[^\x00]*",
     # https://nginx.org/en/docs/http/ngx_http_fastcgi_module.html#var_fastcgi_script_name
-    "fastcgi_script_name": "",
+    "fastcgi_script_name": r"[^\x00]*",
     # https://nginx.org/en/docs/http/ngx_http_core_module.html#var_content_type
-    "content_type": "",
+    "content_type": r"[^\r\n\x00]*",
     # https://nginx.org/en/docs/http/ngx_http_core_module.html#var_cookie_
     "cookie_": r"[^;\r\n]*",
     # https://nginx.org/en/docs/http/ngx_http_core_module.html#var_host
@@ -69,15 +69,17 @@ BUILTIN_VARIABLES = {
     # https://nginx.org/en/docs/http/ngx_http_core_module.html#var_realpath_root
     "realpath_root": "",
     # https://nginx.org/en/docs/http/ngx_http_core_module.html#var_remote_user
-    "remote_user": "",
+    "remote_user": r"[^:]+",
     # https://nginx.org/en/docs/http/ngx_http_core_module.html#var_request
-    "request": "",
+    "request": r"[^\x00-\x1f\x7f]*",
+    # https://nginx.org/en/docs/http/ngx_http_core_module.html#var_request_method
+    "request_method": r"[A-Z_-]+",
     # https://nginx.org/en/docs/http/ngx_http_core_module.html#var_request_body
     "request_body": r"[\s\S]*",
     # https://nginx.org/en/docs/http/ngx_http_core_module.html#var_request_completion
     "request_completion": "",
     # https://nginx.org/en/docs/http/ngx_http_core_module.html#var_request_filename
-    "request_filename": "",
+    "request_filename": r"[^\x00]*",
     # https://nginx.org/en/docs/http/ngx_http_core_module.html#var_request_id
     "request_id": "",
     # https://nginx.org/en/docs/http/ngx_http_slice_module.html#var_slice_range
@@ -92,6 +94,8 @@ BUILTIN_VARIABLES = {
     "sent_trailer_": None,
     # https://nginx.org/en/docs/http/ngx_http_core_module.html#var_server_name
     "server_name": "",
+    # https://nginx.org/en/docs/http/ngx_http_ssl_module.html#var_ssl_server_name
+    "ssl_server_name": r"[^\x00]*",
     # "Secure" variables that can't content or strictly limited user input
     # https://nginx.org/en/docs/http/ngx_http_browser_module.html#var_ancient_browser
     "ancient_browser": None,
@@ -193,8 +197,6 @@ BUILTIN_VARIABLES = {
     # https://nginx.org/en/docs/http/ngx_http_core_module.html#var_request_length
     # https://nginx.org/en/docs/http/ngx_http_log_module.html#var_request_length
     "request_length": None,
-    # https://nginx.org/en/docs/http/ngx_http_core_module.html#var_request_method
-    "request_method": None,
     # https://nginx.org/en/docs/http/ngx_http_core_module.html#var_request_port
     "request_port": None,
     # https://nginx.org/en/docs/http/ngx_http_core_module.html#var_request_time
