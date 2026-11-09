@@ -11,7 +11,7 @@ This plugin looks for configurations that set the `Content-Type` response header
 
 A location that proxies to an upstream is not reported when the upstream's `Content-Type` is hidden by the `*_hide_header` directive of the module that does the proxying: `proxy_hide_header` for `proxy_pass`, `fastcgi_hide_header` for `fastcgi_pass`, and likewise for `uwsgi_pass`, `scgi_pass` and `grpc_pass`. Each upstream module keeps its own hide list, so a `fastcgi_hide_header` has no effect on a `proxy_pass` response. When the scope has no `*_pass` directive, a `Content-Type` hidden by any of the five modules is accepted.
 
-The hide list in effect is the one from the nearest level (`location`, `server`, `http`) that declares *any* `<module>_hide_header`. A level that declares its own list replaces the inherited one rather than merging with it; `<module>_pass_header` does not reset it.
+The hide list in effect is the one from the nearest level (`location`, `server`, `http`) that declares *any* `<module>_hide_header`. A level that declares its own list replaces the inherited one rather than merging with it. `<module>_pass_header` does not reset the hide list, but a `<module>_pass_header Content-Type` in effect removes `Content-Type` from it again, so the header is reported.
 
 ## Why this is a problem
 
@@ -55,6 +55,22 @@ server {
 ```
 
 The `location` declares its own `proxy_hide_header` list, so it no longer inherits `Content-Type` from the `server` level and the upstream header reaches the client.
+
+### pass_header re-exposes the upstream header
+
+```nginx
+server {
+    proxy_hide_header Content-Type;
+
+    location / {
+        proxy_pass_header Content-Type;
+        proxy_pass http://127.0.0.1:8080;
+        add_header Content-Type text/plain;
+    }
+}
+```
+
+The `location` inherits the hide list, but its `proxy_pass_header Content-Type` takes the header out of it again, so the upstream header reaches the client alongside the added one.
 
 ## Better configuration
 
