@@ -1,6 +1,10 @@
 import ipaddress
+import re
+from collections import deque
 
 AUTH_DIRECTIVES = ("auth_basic", "auth_request", "auth_jwt", "auth_oidc")
+
+_BARE_VARIABLE_RE = re.compile(r"\$(?:([a-z_][a-z0-9_]*)|\{([a-z_][a-z0-9_]*)\})", re.IGNORECASE)
 
 
 def is_indexed_name(name):
@@ -97,3 +101,34 @@ def normalize_address(address):
     if parsed.version == 6:
         return f"[{parsed.compressed}]"
     return parsed.compressed
+
+
+def bare_variable_name(value):
+    """Name of the single variable a script consists of (`$var` or `${var}`),
+    lowercased; None for literals, mixed scripts and empty values."""
+    match = _BARE_VARIABLE_RE.fullmatch((value or "").strip().strip("\"'"))
+    if not match:
+        return None
+    return (match.group(1) or match.group(2)).lower()
+
+
+def resolve_variable_chain(name, assignments):
+    """Assignments reachable from `$name` through bare-variable hops.
+
+    `assignments(name)` yields (directive, value) pairs for the directives
+    that may assign `$name`. Each pair is yielded with the hops walked to
+    reach it, starting from the consumer's side, and a value that is itself
+    a single variable is followed in turn. Every variable is expanded once,
+    so cycles and diamonds terminate.
+    """
+    seen = {name}
+    pending = deque([(name, ())])
+    while pending:
+        current, hops = pending.popleft()
+        for directive, value in assignments(current):
+            chain = hops + (directive,)
+            yield chain, value
+            following = bare_variable_name(value)
+            if following and following not in seen:
+                seen.add(following)
+                pending.append((following, chain))

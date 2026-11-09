@@ -7,7 +7,7 @@ description: "Detects setting the Host from client-controlled values ($http_host
 
 ## What this check looks for
 
-This plugin flags configurations that set the `Host` from a client-controlled value — `$http_host`, `$http_x_forwarded_host` (the `X-Forwarded-Host` request header), a `$cookie_*` value, or a query-string `$arg_*` — especially when it is passed upstream or used to build redirects/URLs.
+This plugin flags configurations that set the `Host` from a client-controlled value — `$http_host`, `$http_x_forwarded_host` (the `X-Forwarded-Host` request header), a `$cookie_*` value, or a query-string `$arg_*` — especially when it is passed upstream or used to build redirects/URLs. The value is also followed through `set` directives in the same and enclosing blocks, wherever in the block they appear, so `set $upstream_host $http_host; proxy_set_header Host $upstream_host;` is reported as well.
 
 ## Why this is a problem
 
