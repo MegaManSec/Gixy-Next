@@ -1,9 +1,10 @@
 import re
+import time
 
 import pytest
 
 import gixy.core.sre_parse.sre_parse as sre_parse
-from gixy.core.regexp import Regexp
+from gixy.core.regexp import Regexp, RegexpTooComplex
 
 
 @pytest.mark.parametrize("pattern", [r"(?s)^(.*)$", r"^((?s:.*))$"])
@@ -390,6 +391,22 @@ def test_gen_anchor():
     reg = Regexp('^some$', strict=True)
     val = next(reg.generate('', anchored=True))
     assert val == '^some$'
+
+
+def test_generate_gives_up_on_an_exponential_candidate_set():
+    reg = Regexp("^https://" + "(?:a|b)?" * 13 + "$")
+    started = time.perf_counter()
+    with pytest.raises(RegexpTooComplex):
+        list(reg.generate("`", anchored=True))
+    assert time.perf_counter() - started < 1.0
+
+
+def test_generate_candidate_budget_is_adjustable():
+    reg = Regexp("(?:a|b)?" * 3)
+    assert len(list(reg.generate("`"))) == 27
+    with pytest.raises(RegexpTooComplex):
+        list(reg.generate("`", max_candidates=26))
+    assert len(list(reg.generate("`", max_candidates=None))) == 27
 
 
 def test_group_can_contains():

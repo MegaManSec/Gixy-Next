@@ -233,6 +233,18 @@ def test_no_traceback_escapes_to_the_user(conf):
         assert result.returncode in (EXIT_OK, EXIT_FINDINGS, EXIT_INVALID_CONFIG)
 
 
+HUGE_REPEAT = (
+    'http { server { if ($http_origin ~ "^https://a{4294967296}$") '
+    "{ add_header X-Frame-Options SAMEORIGIN; } } }\n"
+)
+
+
+def test_regex_nginx_itself_rejects_is_not_an_internal_error(conf):
+    result = run(conf(HUGE_REPEAT))
+    assert result.returncode in (EXIT_OK, EXIT_FINDINGS)
+    assert "internal error" not in result.stderr
+
+
 def test_report_on_stdout_diagnostics_on_stderr(conf):
     result = run(conf(MISSING_ARG))
     assert "Summary" in result.stdout

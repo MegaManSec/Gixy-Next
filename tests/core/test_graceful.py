@@ -376,6 +376,52 @@ def test_non_numeric_value_is_malformed_not_an_internal_error():
     assert "expects a number" in m.errors[0].message
 
 
+@pytest.mark.parametrize(
+    "config",
+    [
+        "http { upstream b { server; } server { location / { proxy_pass http://b; } } }",
+        "http { server { open_file_cache; location / { try_files $uri =404; } } }",
+    ],
+)
+def test_missing_argument_on_a_related_directive_is_malformed(config):
+    """A plugin that reads another directive's arguments must report that
+    directive as malformed, not crash on the missing index."""
+    m = _audit(config)
+    assert m.errors
+    assert all(d.kind == "malformed" for d in m.errors), [
+        (d.kind, d.message) for d in m.errors
+    ]
+
+
+# ---------------------------------------------------------------------------
+# Audit-time: regexes the engine cannot, or should not, expand
+# ---------------------------------------------------------------------------
+
+def _origin_check(pattern):
+    return (
+        'http { server { if ($http_origin ~ "%s") { '
+        "add_header X-Frame-Options SAMEORIGIN; } } }" % pattern
+    )
+
+
+def test_exponential_origin_regex_is_skipped_with_a_warning(caplog):
+    m = _audit(_origin_check("^https://" + "(?:a|b)?" * 13 + "$"))
+    assert m.errors == []
+    assert "too complex to analyze" in caplog.text
+
+
+@pytest.mark.parametrize(
+    "pattern",
+    [
+        "^https://a{4294967296}$",
+        "^https://" + "(" * 300 + "a" + ")" * 300 + "$",
+    ],
+)
+def test_unparsable_origin_regex_is_not_an_internal_error(pattern):
+    m = _audit(_origin_check(pattern))
+    assert m.errors == []
+
+
 # ---------------------------------------------------------------------------
 # map/geo entries are not directives
 # ---------------------------------------------------------------------------
