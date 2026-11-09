@@ -1,5 +1,8 @@
+import re
+
 import pytest
 
+import gixy.core.sre_parse.sre_parse as sre_parse
 from gixy.core.regexp import Regexp
 
 
@@ -373,3 +376,115 @@ def test_group_can_contains():
     assert reg.group(1).can_contain('\n'), 'Group 1 from regex "{src}" can contains {sym!r}'.format(src=source, sym='\\n')
 
     assert not reg.group('action').can_contain('/'), 'Group "action" from regex "{src}" CAN\'T (!) contain {sym!r}'.format(src=source, sym='/')
+
+
+@pytest.mark.parametrize('regexp,tree', (
+    (r'a++', [(sre_parse.POSSESSIVE_REPEAT, (1, sre_parse.MAXREPEAT, [(sre_parse.LITERAL, 97)]))]),
+    (r'a*+', [(sre_parse.POSSESSIVE_REPEAT, (0, sre_parse.MAXREPEAT, [(sre_parse.LITERAL, 97)]))]),
+    (r'a?+', [(sre_parse.POSSESSIVE_REPEAT, (0, 1, [(sre_parse.LITERAL, 97)]))]),
+    (r'a{2,3}+', [(sre_parse.POSSESSIVE_REPEAT, (2, 3, [(sre_parse.LITERAL, 97)]))]),
+    (r'(?>ab)', [(sre_parse.ATOMIC_GROUP, [(sre_parse.LITERAL, 97), (sre_parse.LITERAL, 98)])]),
+    (r'(?>(a))', [(sre_parse.ATOMIC_GROUP, [(sre_parse.SUBPATTERN, (1, [(sre_parse.LITERAL, 97)]))])]),
+))
+def test_parse_pcre_constructs(regexp, tree):
+    re.compile(regexp)
+    assert repr(sre_parse.parse(regexp)) == repr(tree)
+
+
+@pytest.mark.parametrize('regexp', (
+    r'a++',
+    r'a*+',
+    r'a?+',
+    r'a{2,3}+',
+    r'[ab]++',
+    r'(?>ab|cd)e',
+    r'(?>(a|b))c',
+    r'(?>a+)(b+)',
+    r'(a++)',
+    r'/p(?>/x)?+/(a)',
+    r'(?>(?P<name>a))',
+))
+def test_pcre_constructs_match_stdlib(regexp):
+    compiled = re.compile(regexp)
+    reg = Regexp(regexp)
+    assert {g for g in reg.groups if isinstance(g, int)} == set(range(compiled.groups + 1))
+    assert {g for g in reg.groups if isinstance(g, str)} == set(compiled.groupindex)
+    values = list(reg.generate('a'))
+    assert values
+    for value in values:
+        assert compiled.fullmatch(value), value
+    assert re.compile(str(reg)).pattern == str(reg)
+
+
+@pytest.mark.parametrize('regexp,string', (
+    (r'a++', 'a++'),
+    (r'a*+', 'a*+'),
+    (r'a?+', 'a?+'),
+    (r'a{2,3}+', 'a{2,3}+'),
+    (r'(?>ab)', '(?>ab)'),
+    (r'(?>(a|b))c', '(?>([ab]))c'),
+))
+def test_pcre_constructs_to_string(regexp, string):
+    assert str(Regexp(regexp)) == string
+
+
+@pytest.mark.parametrize('strict', (False, True))
+@pytest.mark.parametrize('regexp,equivalent', (
+    (r'a++', r'a+'),
+    (r'[a-z]*+', r'[a-z]*'),
+    (r'(ab)?+c', r'(ab)?c'),
+    (r'(?>ab|cd)e', r'(?:ab|cd)e'),
+    (r'^/x(?>/y)?+/(.*)$', r'^/x(?:/y)?/(.*)$'),
+    (r'(?>^foo)', r'(?:^foo)'),
+))
+def test_pcre_constructs_model_as_greedy_and_non_capturing(regexp, equivalent, strict):
+    reg = Regexp(regexp, strict=strict)
+    plain = Regexp(equivalent, strict=strict)
+    assert set(reg.groups) == set(plain.groups)
+    for char in 'abcxy/.\n':
+        assert reg.can_contain(char) == plain.can_contain(char), char
+        assert reg.must_contain(char) == plain.must_contain(char), char
+        assert reg.can_startswith(char) == plain.can_startswith(char), char
+        assert reg.must_startswith(char) == plain.must_startswith(char), char
+    assert sorted(reg.generate('a', anchored=True)) == sorted(plain.generate('a', anchored=True))
+
+
+def test_atomic_group_exposes_inner_captures():
+    groups = Regexp(r'(?>(a|b))(?<name>c)').groups
+    assert set(groups) == {0, 1, 2, 'name'}
+    assert groups[1].can_startswith('a')
+    assert groups[1].can_startswith('b')
+    assert not groups[1].can_startswith('c')
+    assert groups['name'].must_contain('c')
+
+
+@pytest.mark.parametrize('regexp,needs_anchor', (
+    (r'\.php', True),
+    (r'\.php$', False),
+    (r'(?>\.php)', True),
+    (r'(?>atomic)/v1', True),
+    (r'^(?>/a|/b)', False),
+    (r'(?>/a|^/b)', True),
+    (r'(?>^/a|/b$)', False),
+    (r'(^/a|/b$)', False),
+    (r'/v1/(?>.+)\z', False),
+    (r'(?>/v1/.+)\z', False),
+    (r'/v1/.+\\z', True),
+    (r'(?!/admin)^/v1', False),
+    (r'(?=^/foo)/foo/bar', False),
+    (r'(^/foo)++bar', False),
+    (r'(^/foo)*+bar', True),
+    (r'/v1/[a-z]++', True),
+    (r'^/v1/[a-z]++', False),
+    (r'(?|/a|/b)/v1', False),
+    (r'(?R)', False),
+    (r'(?1)/v1', False),
+))
+def test_needs_anchor(regexp, needs_anchor):
+    assert Regexp(regexp).needs_anchor() is needs_anchor
+
+
+@pytest.mark.parametrize('regexp', (r'(?|a|b)', r'(?R)', r'(?1)', r'a(?1)'))
+def test_unsupported_pcre_constructs_fail_to_parse(regexp):
+    with pytest.raises(sre_parse.error):
+        Regexp(regexp).parsed

@@ -272,4 +272,4 @@ This plugin uses different severities depending on what it finds, and which head
 
 The check for the invalid `map`-based CORS header is only performed when a full configuration scan occurs, i.e. when the configuration scanned includes an `http { .. }` block.
 
-NGINX matches these patterns with PCRE, while gixy analyses them with Python's regex dialect. A pattern using PCRE-only syntax that Python cannot parse — an atomic group `(?>...)`, a possessive quantifier `a++`, a backtracking verb `(*SKIP)` — is skipped with a warning on stderr rather than analysed. Such a pattern is never reported, so a warning means the origin or referer check did not run for that regex.
+NGINX matches these patterns with PCRE, while gixy analyses them with its own parser. Atomic groups (`(?>...)`) and possessive quantifiers (`a++`) are analysed like their non-capturing and greedy equivalents. A pattern using PCRE-only syntax gixy cannot parse — branch reset `(?|...)`, recursion `(?R)` — is skipped with a warning on stderr rather than analysed. Such a pattern is never reported, so a warning means the origin or referer check did not run for that regex.

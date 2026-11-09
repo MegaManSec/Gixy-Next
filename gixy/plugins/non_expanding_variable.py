@@ -43,7 +43,9 @@ def _variable_names(text):
 def _required_parts(op, av):
     if op in (sre_parse.SUBPATTERN, sre_parse.ASSERT):
         return [av[-1]]
-    if op in (sre_parse.MAX_REPEAT, sre_parse.MIN_REPEAT) and av[0] >= 1:
+    if op == sre_parse.ATOMIC_GROUP:
+        return [av]
+    if op in (sre_parse.MAX_REPEAT, sre_parse.MIN_REPEAT, sre_parse.POSSESSIVE_REPEAT) and av[0] >= 1:
         return [av[2]]
     return []
 

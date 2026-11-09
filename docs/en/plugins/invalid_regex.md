@@ -91,3 +91,9 @@ if ($uri ~ "^/path/(.*)$") {
     set $x $1;
 }
 ```
+
+## Additional notes
+
+Atomic groups (`(?>...)`) and possessive quantifiers (`a++`, `a*+`, `a?+`, `a{n,m}+`) are parsed, and a capture inside an atomic group is numbered as usual: with `rewrite "^/(?>(a|b))$" /x/$1 break;` the `$1` reference is valid, while `$2` would be reported.
+
+A regex using syntax gixy cannot parse — branch reset `(?|...)`, recursion `(?R)` or `(?1)` — is skipped. The `rewrite`, `if` and `map` checks report nothing for it, and because such a pattern could define *any* group, the whole-scope check stays quiet for the enclosing server (or for the whole configuration when the pattern is a `map` key).

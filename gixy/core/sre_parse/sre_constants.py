@@ -70,6 +70,9 @@ REPEAT = "repeat"
 REPEAT_ONE = "repeat_one"
 SUBPATTERN = "subpattern"
 MIN_REPEAT_ONE = "min_repeat_one"
+ATOMIC_GROUP = "atomic_group"
+POSSESSIVE_REPEAT = "possessive_repeat"
+POSSESSIVE_REPEAT_ONE = "possessive_repeat_one"
 
 # positions
 AT_BEGINNING = "at_beginning"
@@ -139,6 +142,9 @@ OPCODES = [
     REPEAT_ONE,
     SUBPATTERN,
     MIN_REPEAT_ONE,
+    ATOMIC_GROUP,
+    POSSESSIVE_REPEAT,
+    POSSESSIVE_REPEAT_ONE,
 ]
 
 ATCODES = [
