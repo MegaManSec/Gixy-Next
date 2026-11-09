@@ -91,4 +91,6 @@ If you cannot enumerate hosts, treat the upstream address as a signed token (HMA
 
 Variable-based proxying is not inherently insecure, but the moment the variable is derived from user input, you need a tight allowlist and a plan for internal redirect paths (`rewrite`, `error_page`, `try_files`, X-Accel-Redirect, and subrequests).
 
+`$ssl_server_name` is the TLS server name (SNI) the client sent, copied by NGINX without validation, so `proxy_pass https://$ssl_server_name` is reported like any other client-controlled host.
+
 The plugin checks an `internal` location when a `rewrite` in the same `server` can send a request there: one whose replacement is built from variables, that searches the locations again (`last` or no flag), and whose fixed start can match the location.

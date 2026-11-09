@@ -12,7 +12,9 @@ This plugin looks for cases where user-controlled input can end up inside respon
 - regex captures that are not restricted to a safe character set,
 - `$uri` and `$document_uri`, which hold the decoded URI, so `%0d%0a` becomes a line break,
 - `$request_body`, which is raw client input,
-- `$remote_user`, which NGINX base64-decodes from the `Authorization` header without validation.
+- `$remote_user`, which NGINX base64-decodes from the `Authorization` header without validation,
+- `$request_filename`, `$fastcgi_script_name` and `$fastcgi_path_info`, which are built from `$uri`,
+- `$ssl_server_name`, the TLS server name the client sent, which NGINX copies without validation.
 
 ## Why this is a problem
 
