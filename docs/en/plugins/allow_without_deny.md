@@ -69,6 +69,8 @@ Blocking a subnet except for one host is a legitimate pattern: the `allow` carve
 
 `allow` and `deny` rules are not merged across levels. As soon as a child context declares an `allow` or `deny` of its own, it stops inheriting the parent's rules (`ngx_http_access_merge_loc_conf`). A `deny all;` at the `server` level therefore does *not* protect a `location` that only says `allow 10.0.0.0/8;`: that location is open to everyone, while a sibling location without rules of its own still inherits the `deny all;`. Every context that declares an `allow` needs its own `deny`.
 
+`deny all;` covers both address families. `deny 0.0.0.0/0;` blocks only IPv4 clients and `deny ::/0;` only IPv6 ones, so neither counts as covering an `allow` from the other family.
+
 This plugin does not warn when the effective configuration is `satisfy any;` combined with an auth module (`auth_basic`, `auth_request`, `auth_jwt`, or `auth_oidc`):
 
 ```nginx
