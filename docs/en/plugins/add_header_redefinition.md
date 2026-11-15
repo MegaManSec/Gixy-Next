@@ -9,6 +9,8 @@ description: "Detects add_header and add_trailer usage that unintentionally drop
 
 This plugin looks for nested contexts where `add_header` is used at a lower level and headers declared at higher levels are not effective at that lower level. The same check is applied to `add_trailer`, which follows the identical inheritance rule.
 
+It also reports nested contexts that inherit `add_header_inherit off` (or `add_trailer_inherit off`) and so lose the fields of the level above. A block that declares `off` itself is not reported.
+
 ## Why this is a problem
 
 `add_header` follows an all-or-nothing inheritance rule: headers from the previous level are inherited only if there are no `add_header` directives at the current level. As soon as you add any header in a nested block, you stop inheriting every header defined above it.
@@ -16,6 +18,8 @@ This plugin looks for nested contexts where `add_header` is used at a lower leve
 That is how teams end up with security headers on most pages, but missing on "just one location".
 
 ## Bad configuration
+
+### add_header in a nested block
 
 ```nginx
 server {
@@ -31,7 +35,28 @@ server {
 
 Requests under `/static/` will only get `Cache-Control`, and the security headers vanish.
 
+### inherited add_header_inherit off
+
+```nginx
+http {
+    add_header X-Powered-By "example";
+
+    server {
+        add_header_inherit off;
+        add_header X-Frame-Options "DENY";
+
+        location / {
+            proxy_pass http://127.0.0.1:8080;
+        }
+    }
+}
+```
+
+The `location` inherits `off` as well, so it sends no `X-Frame-Options`.
+
 ## Better configuration
+
+### add_header in a nested block
 
 Option 1: keep all headers at one level (often `server`), and avoid redefining them in child blocks.
 
@@ -57,6 +82,10 @@ server {
     }
 }
 ```
+
+### add_header_inherit off
+
+Set `add_header_inherit on;` (or `merge;`) in the nested blocks that should keep the headers of the level that declares `off`.
 
 ## Configuration
 
@@ -104,61 +133,14 @@ gixy --add-header-redefinition-merge-reported-headers false
 merge_reported_headers = false
 ```
 
+## How severity is determined
+
+- **MEDIUM**: a dropped response header is on the list below.
+- **LOW**: any other dropped header, and every dropped trailer.
+
+Security-sensitive headers: `strict-transport-security`, `content-security-policy`, `content-security-policy-report-only`, `x-frame-options`, `x-content-type-options`, `permissions-policy`, `referrer-policy`, `cross-origin-embedder-policy`, `cross-origin-opener-policy`, `cross-origin-resource-policy`, `x-xss-protection`, `x-permitted-cross-domain-policies`, `expect-ct`, `cache-control`, `pragma`, `expires` and `content-disposition`.
+
 ## Additional notes
 
-### add_header_inherit
-
-Recent NGINX versions added `add_header_inherit` to adjust how `add_header` inherits across levels. If you have it available (nginx 1.29.3+), using `add_header_inherit merge;` prevents nested `add_header` blocks from wiping out headers defined at higher levels by merging inherited headers with headers defined at the current level. See the [documentation](https://nginx.org/en/docs/http/ngx_http_headers_module.html#add_header_inherit).
-
-### add_trailer
-
-`add_trailer` has the same all-or-nothing inheritance rule as `add_header`, and `add_trailer_inherit` (also nginx 1.29.3+) tunes it the same way. NGINX keeps the two sets apart, so an `add_trailer` in a nested block drops inherited trailers but leaves inherited headers alone, and an `add_header` drops inherited headers but leaves inherited trailers alone. This plugin tracks them separately and reports each drop on its own.
-
-```nginx
-server {
-    add_header  X-Frame-Options "DENY";
-    add_trailer X-Checksum "$request_id";
-
-    location /static/ {
-        # Drops X-Checksum for /static/. X-Frame-Options is still inherited.
-        add_trailer X-Served-By "$hostname";
-    }
-}
-```
-
-Dropped trailers are always reported as LOW: the secure-header list below escalates severity for response headers only, since a security header carries no weight in a trailer.
-
-### What "dropped" means in reports
-
-By default, this plugin reports headers that were declared in higher scopes but are not effective at the flagged block.
-
-In practice, that usually means the headers were dropped by the `add_header` directives inside the flagged block. However, in some configurations a header can be dropped earlier (at an intermediate scope) and remain missing further down.
-
-If you see a report where the flagged block never inherited a header in the first place, that is expected with the default behavior: the plugin is telling you "this header is declared somewhere above, but it is not in effect here".
-
-### How severity is determined
-
-This plugin treats some headers as "secure headers" and escalates severity when they are dropped. Concretely:
-
-- If a nested block drops only non-security headers, the issue is reported as LOW.
-- If a nested block drops any header from the secure list below, the issue is reported as MEDIUM.
-
-The following headers are considered security-sensitive:
-
-- `strict-transport-security`
-- `content-security-policy`
-- `content-security-policy-report-only`
-- `x-frame-options`
-- `x-content-type-options`
-- `permissions-policy`
-- `referrer-policy`
-- `cross-origin-embedder-policy`
-- `cross-origin-opener-policy`
-- `cross-origin-resource-policy`
-- `x-xss-protection`
-- `x-permitted-cross-domain-policies`
-- `expect-ct`
-- `cache-control`
-- `pragma`
-- `expires`
-- `content-disposition`
+- With nginx 1.29.3+, `add_header_inherit merge;` merges inherited headers with those of the current level, so a nested `add_header` no longer drops them. See the [documentation](https://nginx.org/en/docs/http/ngx_http_headers_module.html#add_header_inherit).
+- `add_trailer` and `add_trailer_inherit` follow the same rules, but NGINX keeps trailers and headers apart: a nested `add_trailer` drops inherited trailers only, and a nested `add_header` drops inherited headers only. Each drop is reported on its own.
