@@ -21,6 +21,8 @@ BUILTIN_VARIABLES = {
     # https://nginx.org/en/docs/http/ngx_http_core_module.html#var_request_uri
     "request_uri": r"/[^\s]*",
     # https://nginx.org/en/docs/http/ngx_http_core_module.html#var_http_
+    "http_host": r"[^\x00-\x20\x7f/]*",
+    # https://nginx.org/en/docs/http/ngx_http_core_module.html#var_http_
     "http_": r"[^\r\n\x00]*",
     # https://nginx.org/en/docs/http/ngx_http_upstream_module.html#var_upstream_http_
     "upstream_http_": "",
