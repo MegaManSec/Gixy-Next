@@ -14,19 +14,21 @@ class regex_redos(Plugin):
     r"""
     This plugin checks regular expressions used by nginx directives for
     patterns that may be vulnerable to ReDoS (Regular Expression Denial of
-    Service). ReDoS vulnerabilities may be used to overwhelm nginx servers
-    with minimal resources from an attacker.
+    Service). Each crafted request can make the worker backtrack until
+    PCRE2's match limit stops it.
 
     nginx runs regexes from many directives through its PCRE engine, so this
     plugin inspects every regex-bearing source: location/if matches,
-    server_name, rewrite, and map keys.
+    server_name, rewrite, map keys, gzip_disable, valid_referers and
+    fastcgi_split_path_info.
 
     Example of a vulnerable directive:
         location ~ ^/(a|aa|aaa|aaaa)+$
 
     Accessing the above location with a path such as
     /aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaab
-    can result in catastrophic backtracking.
+    makes PCRE2 backtrack until its match limit, about 0.1 s of worker CPU,
+    and fails the request with 500.
 
     This plugin relies on an external, public API to determine vulnerability.
     Because of this network-dependence, and the fact that potentially private
@@ -42,12 +44,20 @@ class regex_redos(Plugin):
     summary = "Regular expression denial of service (ReDoS)."
     severity = gixy.severity.MEDIUM
     description = (
-        "Regular expressions with the potential for catastrophic backtracking "
-        "allow an nginx server to be denial-of-service attacked with very low "
-        "resources (also known as ReDoS)."
+        "A regular expression that can backtrack catastrophically lets each crafted "
+        "request burn worker CPU until PCRE2's match limit stops it (ReDoS)."
     )
     help_url = "https://gixy.io/plugins/regex_redos/"
-    directives = ["location", "if", "server_name", "rewrite", "map"]
+    directives = [
+        "location",
+        "if",
+        "server_name",
+        "rewrite",
+        "map",
+        "gzip_disable",
+        "valid_referers",
+        "fastcgi_split_path_info",
+    ]
     options = {"url": ""}
     options_help = {
         "url": "URL pointing to a server running a compatible ReDoS checking server (e.g. MegaManSec/recheck-http-api.)"
@@ -100,6 +110,17 @@ class regex_redos(Plugin):
                     yield src[2:], "i"
                 elif src.startswith("~"):
                     yield src[1:], ""
+        elif name == "gzip_disable":
+            for arg in directive.args:
+                if arg not in ("msie6", "degradation"):
+                    yield arg, "i"
+        elif name == "valid_referers":
+            for arg in directive.args:
+                if arg.startswith("~"):
+                    yield arg[1:], "i"
+        elif name == "fastcgi_split_path_info":
+            if directive.args:
+                yield directive.args[0], ""
 
     def audit(self, directive):
         # If requests is not available, skip.
