@@ -119,7 +119,7 @@ server {
 
 ## Additional notes
 
-This plugin only runs when a scan of full configuration is performed, i.e. when the configuration scanned includes an `http { .. }` block.
+This plugin only runs on a full configuration, one with a top-level `http` or `events` block.
 
 Sockets are compared the way NGINX itself compares them. `listen 80`, `listen *:80`, `listen 0.0.0.0:80` and `listen 0.0.0.0` all name one socket, as do `listen [::]:80`, `listen [::0]:80` and `listen [::]`; an argument with no port implies port 80. The IPv4 and IPv6 wildcards on one port stay separate, and so do sockets of different types - `listen 443 ssl` and `listen 443 quic` each have their own default server, as do `listen 12345` and `listen 12345 udp` in `stream`.
 
