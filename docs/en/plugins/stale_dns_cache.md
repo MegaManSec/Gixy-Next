@@ -1,22 +1,22 @@
 ---
 title: "Outdated/stale cached DNS records used in proxy_pass"
-description: "Detects proxy_pass targets that may keep using cached, stale/outdated IP addresses because hostnames are only resolved at startup. Use a resolver-based proxy_pass (variables) or upstream server ... resolve with a shared zone so DNS TTLs are respected/honored."
+description: "Detects proxy_pass targets whose hostnames are resolved only at startup, so the cached IP addresses can go stale. Use a variable with a resolver, or upstream server ... resolve."
 ---
 
 # [stale_dns_cache] Outdated/stale cached DNS records used in proxy_pass
 
 ## What this check looks for
 
-This plugin detects risky `proxy_pass` and `upstream` configurations where NGINX can keep using stale/outdated DNS cache entries, causing requests to be routed to the wrong upstream IP addresses.
-
-Gixy-Next's `stale_dns_cache` plugin mainly catches two patterns:
+This plugin reports hostnames that NGINX resolves only once, at startup, so requests can go to outdated IP addresses:
 
 - `proxy_pass` points at a literal hostname, for example `proxy_pass https://api.example.com;`,
 - `proxy_pass` points to an `upstream`, and one or more `server` entries inside that `upstream` are hostnames without the `resolve` option.
 
+`fastcgi_pass`, `uwsgi_pass`, `scgi_pass` and `grpc_pass` are checked the same way.
+
 ## Why this is a problem
 
-By default, NGINX does not automatically honor DNS TTL values for upstream hostnames. Unless otherwise configured, it resolves upstream hostnames once at startup, then continues using the same resolved IP addresses until NGINX is reloaded or restarted; even if the DNS records change in the meantime. That behavior can lead to traffic being sent to an unintended host and data being exchanged with the wrong upstream.
+By default, NGINX resolves upstream hostnames once at startup and ignores their TTL. When the records change, traffic keeps going to the old addresses, which may now belong to another host.
 
 If you want NGINX to re-resolve names at runtime, you have to opt into it using either:
 
@@ -33,7 +33,7 @@ location / {
 }
 ```
 
-In this example, NGINX resolves the domain's DNS records on startup, and continues to use them until reload/restart.
+NGINX resolves the name on startup and keeps the addresses until reload or restart.
 
 ### upstream uses hostnames without resolve
 
@@ -50,8 +50,6 @@ server {
 }
 ```
 
-In this example, NGINX will also resolve the domains' DNS records on startup, and continue to use them until reload/restart.
-
 ### variables, but without resolver
 
 ```nginx
@@ -61,7 +59,7 @@ location / {
 }
 ```
 
-In this case, the proxy will not work at all, because there is no `resolver` configured.
+Without a `resolver`, this proxy does not work at all. A variable whose values are all unix sockets or IP addresses, such as a `map` that picks a PHP-FPM socket, needs no `resolver` and is not reported.
 
 ### upstream with resolve, but no resolver
 
@@ -97,7 +95,7 @@ http {
 }
 ```
 
-One way to force NGINX to resolve addresses of hostnames with `proxy_pass` is to use variables. If there is a variable (any variable at all) in the `proxy_pass` directive, DNS resolution will occur. Note however, that a `resolver` MUST be set for it to work. When using `resolver`, if you do not set the `valid=` option, the DNS record's TTL will be respected; otherwise the record's TTL will not be honored and the `valid=` option will take preference.
+With any variable in `proxy_pass`, NGINX resolves the name at request time through the `resolver`, which must be set. It honors the record's TTL unless `valid=` overrides it.
 
 ### upstream server ... resolve (open source NGINX 1.27.3+)
 
@@ -118,7 +116,7 @@ http {
 }
 ```
 
-Since NGINX 1.27.3, it has also been possible to specify an upstream server to use the resolver, like above. As with the other example, a `resolver` MUST be set for it to work.
+Since NGINX 1.27.3, `server ... resolve` re-resolves upstream names the same way, and also needs a `resolver`.
 
 ## How severity is determined
 
