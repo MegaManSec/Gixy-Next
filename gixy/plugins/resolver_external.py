@@ -20,7 +20,6 @@ class resolver_external(Plugin):
         bad_nameservers = directive.get_external_nameservers()
         if bad_nameservers:
             self.add_issue(
-                severity=gixy.severity.HIGH,
                 directive=directive,
                 reason="Resolver uses external DNS servers: `{dns_servers}`.".format(
                     dns_servers=", ".join(bad_nameservers)
