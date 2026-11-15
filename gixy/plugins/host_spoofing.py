@@ -1,7 +1,8 @@
 import gixy
-from gixy.core.utils import resolve_variable_chain
+from gixy.core.utils import bare_variable_name, resolve_variable_chain
 from gixy.core.variable import EXTRACT_RE
-from gixy.directives.directive import SetDirective
+from gixy.directives.block import MapBlock
+from gixy.directives.directive import MapDirective, SetDirective
 from gixy.plugins.plugin import Plugin
 
 
@@ -15,7 +16,7 @@ class host_spoofing(Plugin):
     severity = gixy.severity.HIGH
     description = "In most cases, the $host variable is more appropriate; prefer it over $http_host."
     help_url = "https://gixy.io/plugins/host_spoofing/"
-    directives = ["proxy_set_header"]
+    directives = ["proxy_set_header", "grpc_set_header"]
 
     def audit(self, directive):
         name = directive.arg(0)
@@ -36,10 +37,16 @@ class host_spoofing(Plugin):
             if isinstance(sd, SetDirective)
         }
 
+        root = list(directive.parents)[-1]
+        maps = [mb for mb in root.find_recursive("map") if isinstance(mb, MapBlock)]
+
         def assignments(var):
             for sd in sets.values():
                 if sd.variable == var:
                     yield sd, sd.value
+            for mb in maps:
+                if mb.variable == var:
+                    yield from self._map_values(mb)
 
         for var in self._variables(value):
             for hops, assigned in resolve_variable_chain(var, assignments):
@@ -51,6 +58,18 @@ class host_spoofing(Plugin):
                 return
 
     @staticmethod
+    def _map_values(mb):
+        entries = [md for md in mb.gather_map_directives(mb.children) if isinstance(md, MapDirective)]
+        hostnames = any(md.src_val == "hostnames" and md.dest_val is None for md in entries)
+        for md in entries:
+            if md.dest_val is None:
+                continue
+            pinned = md.src_val != "default" and not md.is_regex and not (hostnames and md.src_val.endswith(".*"))
+            if pinned and bare_variable_name(md.dest_val) == bare_variable_name(mb.source):
+                continue
+            yield md, md.dest_val
+
+    @staticmethod
     def _variables(value):
         return [m.group(1).strip("{}") for m in EXTRACT_RE.finditer(value.lower())]
 
@@ -59,13 +78,17 @@ class host_spoofing(Plugin):
         variables = cls._variables(value)
         arg = next((var for var in variables if var.startswith("arg_")), None)
         cookie = next((var for var in variables if var.startswith("cookie_")), None)
+        header = next((var for var in variables if var.startswith("http_")), None)
+        advice = "" if "host" in variables else " Prefer `$host`."
         if "http_host" in variables:
-            return "`$http_host`, which can be attacker-controlled. Prefer `$host`."
+            return "`$http_host`, which can be attacker-controlled." + advice
         if "http_x_forwarded_host" in variables:
             return (
                 "`$http_x_forwarded_host` (X-Forwarded-Host request header), "
-                "which is attacker-controlled. Prefer `$host`."
+                "which is attacker-controlled." + advice
             )
+        if header:
+            return f"request header variable `${header}`, which is attacker-controlled." + advice
         if arg:
             return f"query-string variable `${arg}`, which is attacker-controlled."
         if cookie:
