@@ -52,7 +52,36 @@ server {
     assert directive.is_block
     assert directive.self_context
     assert [d.args[0] for d in directive.get_names()] == ['_', 'cool.io']
-    assert not directive.provide_variables
+    assert directive.provide_variables
+    assert directive.variables == []
+
+
+def test_server_regex_name_captures():
+    config = '''
+server {
+    server_name ~^(www\\.)?(?<domain>.+)$ example.com;
+}
+    '''
+
+    directive = _get_parsed(config)
+    variables = {v.name: v for v in directive.variables}
+    assert {1, 2, 'domain'} <= set(variables)
+    assert variables['domain'].can_contain('.')
+    assert not variables['domain'].can_contain('/')
+    assert not variables['domain'].can_contain('\r')
+    assert not variables['domain'].can_contain('A')
+
+
+def test_server_regex_name_captures_after_rewrite():
+    config = '''
+server {
+    server_name ~^(www\\.)?(?<domain>.+)$;
+    rewrite ^/old/(.*)$ /new/$1;
+}
+    '''
+
+    directive = _get_parsed(config)
+    assert [v.name for v in directive.variables] == ['domain']
 
 
 def test_location():
