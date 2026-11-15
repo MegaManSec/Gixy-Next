@@ -527,12 +527,65 @@ def test_atomic_group_exposes_inner_captures():
     (r'(?|/a|/b)/v1', False),
     (r'(?R)', False),
     (r'(?1)/v1', False),
+    (r'\G/v1', False),
+    (r'/v1\G', True),
+    (r'\Q^\E/v1', True),
 ))
 def test_needs_anchor(regexp, needs_anchor):
     assert Regexp(regexp).needs_anchor() is needs_anchor
 
 
-@pytest.mark.parametrize('regexp', (r'(?|a|b)', r'(?R)', r'(?1)', r'a(?1)'))
+@pytest.mark.parametrize('regexp', (
+    r'(?|a|b)', r'(?R)', r'(?1)', r'a(?1)', r'(a)\g<1>', r'(a)\g{-3}', r'\g{-1}',
+))
 def test_unsupported_pcre_constructs_fail_to_parse(regexp):
     with pytest.raises(sre_parse.error):
         Regexp(regexp).parsed
+
+
+@pytest.mark.parametrize('regexp,char,contains', (
+    (r'^\h$', ' ', True),
+    (r'^\h$', '\n', False),
+    (r'^\H$', '\t', False),
+    (r'^\H$', 'a', True),
+    (r'^[\H]$', 'a', True),
+    (r'^\v$', '\n', True),
+    (r'^\v$', '\r', True),
+    (r'^\v$', ' ', False),
+    (r'^\V$', '\n', False),
+    (r'^[\V\d]$', '\n', False),
+    (r'^[\V\d]$', 'a', True),
+    (r'^\R$', '\n', True),
+    (r'^\N$', '\n', False),
+    (r'^\N$', 'a', True),
+    (r'^\X$', '\n', True),
+    (r'^\C$', '\n', True),
+    (r'^\Q.*\E$', '.', True),
+    (r'^\Q.*\E$', 'a', False),
+    (r'^[\Q]\E]$', ']', True),
+    (r'^\x{2e}$', '.', True),
+    (r'^\o{56}$', '.', True),
+    (r'^\cJ$', '\n', True),
+    (r'^\e$', '\x1b', True),
+    (r'^\p{L}+$', 'a', True),
+    (r'^\p{L}+$', '\r', False),
+    (r'^\pN$', '7', True),
+    (r'^\P{L}+$', '\r', True),
+    (r'^\p{^L}+$', 'a', False),
+    (r'^\p{Latin}+$', 'a', True),
+    (r'^\p{Latin}+$', '/', False),
+    (r'^a\Kb$', 'b', True),
+    (r'^a\yb$', 'y', True),
+))
+def test_pcre_escapes_can_contain(regexp, char, contains):
+    assert Regexp(regexp).can_contain(char, skip_literal=False) is contains
+
+
+@pytest.mark.parametrize('regexp,groups', (
+    (r'^/\Q(a)\E$', {0}),
+    (r'^/(a)\g{1}$', {0, 1}),
+    (r'^/(a)\g{-1}$', {0, 1}),
+    (r'^/(?<n>a)\k<n>$', {0, 1, 'n'}),
+))
+def test_pcre_escapes_groups(regexp, groups):
+    assert set(Regexp(regexp).groups) == groups
