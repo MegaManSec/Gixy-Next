@@ -216,10 +216,11 @@ class MoreSetHeadersDirective(Directive):
 
     nginx_name = "more_set_headers"
 
-    def get_headers(self):
+    @staticmethod
+    def parse_headers(args):
         result = {}
         skip_next = False
-        for arg in self.args:
+        for arg in args:
             if arg in ["-s", "-t"]:
                 # Mark to skip the next value because it's not a header
                 skip_next = True
@@ -239,6 +240,9 @@ class MoreSetHeadersDirective(Directive):
                     value = parts[1].lstrip(" ")
                 result[header] = value
         return result
+
+    def get_headers(self):
+        return MoreSetHeadersDirective.parse_headers(self.args)
 
     def __init__(self, name, args):
         super().__init__(name, args)
@@ -310,7 +314,6 @@ class SetByLuaDirective(Directive):
 class RewriteDirective(Directive):
     nginx_name = "rewrite"
     provide_variables = True
-    boundary = Regexp(r"[^\s\r\n]")
 
     def __init__(self, name, args):
         super().__init__(name, args)
@@ -328,7 +331,7 @@ class RewriteDirective(Directive):
     def variables(self):
         regexp = self._regexp
         return [
-            Variable(name=name, value=group, boundary=self.boundary, provider=self)
+            Variable(name=name, value=group, boundary=None, provider=self)
             for name, group in regexp.groups.items()
         ]
 
