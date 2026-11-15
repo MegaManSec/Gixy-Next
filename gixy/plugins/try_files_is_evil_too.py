@@ -13,8 +13,8 @@ class try_files_is_evil_too(Plugin):
     summary = "try_files used without open_file_cache."
     severity = gixy.severity.LOW
     description = (
-        "Using try_files without open_file_cache adds extra stat() calls per request "
-        "and can cause significant performance overhead."
+        "Without open_file_cache, try_files checks each candidate file with a stat() call "
+        "on every request, one more filesystem lookup than serving the file directly."
     )
     help_url = "https://gixy.io/plugins/try_files_is_evil_too/"
     directives = ["try_files"]

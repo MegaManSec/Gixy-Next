@@ -1,6 +1,6 @@
 ---
 title: "Uncached try_files"
-description: "Detects try_files usage without open_file_cache. Without caching, try_files can generate a high volume of stat() syscalls and become a bottleneck under load."
+description: "Detects try_files usage without open_file_cache, which makes every request repeat a stat() call for each candidate file."
 ---
 
 # [try_files_is_evil_too] `try_files` without `open_file_cache`
@@ -11,7 +11,7 @@ This plugin warns when `try_files` is used, but `open_file_cache` is not configu
 
 ## Why this is a problem
 
-`try_files` checks the filesystem repeatedly to see whether files exist. Without caching, those checks translate into repeated `stat()` syscalls. Under load, that adds up quickly and can become one of the hottest spots on a busy server.
+`try_files` checks each candidate file with a `stat()` call: one extra system call when the first candidate exists, plus one for every candidate a request skips. Without `open_file_cache`, every request repeats them. Each call is cheap, so this matters mostly on busy servers.
 
 ## Bad configuration
 
@@ -20,8 +20,6 @@ location / {
     try_files $uri $uri/ /index.html;
 }
 ```
-
-This works, but every request may trigger multiple filesystem checks.
 
 ## Better configuration
 
@@ -42,4 +40,6 @@ server {
 
 ## Additional notes
 
-Caching is not always appropriate. If you serve highly dynamic file trees that change constantly (or you are on a filesystem where metadata caching is risky), you may choose to skip it. If you do, at least be aware of the performance tradeoff and test under realistic load.
+Failed lookups are cached only with `open_file_cache_errors on;`. A file created after a cached failure is found once `open_file_cache_valid` (60 seconds by default) has passed.
+
+Caching may not suit file trees that change constantly, or filesystems where metadata caching is risky.
