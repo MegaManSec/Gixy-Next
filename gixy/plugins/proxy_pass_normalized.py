@@ -1,10 +1,43 @@
 from urllib.parse import urlparse
 
 import gixy
+import gixy.core.sre_parse.sre_parse as sre_parse
+from gixy.core.regexp import Regexp
 from gixy.core.variable import compile_script, memoize_query
+from gixy.directives.directive import RewriteDirective
 from gixy.plugins.plugin import Plugin
 
 DECODED_PATH_VARS = frozenset({"uri", "document_uri"})
+
+
+def _matches_every_uri(pattern, prefix):
+    """True if `pattern` matches every URI starting with `prefix`, as `^`, `^(.*)` and `^/api(.*)` do for `/api`."""
+    try:
+        seq = list(Regexp(pattern).parsed)
+    except (sre_parse.error, OverflowError, RecursionError):
+        return False
+    if not seq or seq[0] != (sre_parse.AT, sre_parse.AT_BEGINNING):
+        return False
+    literal = ""
+    rest = seq[1:]
+    while rest and rest[0][0] == sre_parse.LITERAL:
+        literal += chr(rest[0][1])
+        rest = rest[1:]
+    anchored = bool(rest) and rest[-1] == (sre_parse.AT, sre_parse.AT_END)
+    if anchored:
+        rest = rest[:-1]
+        if not rest:
+            return False
+    if len(rest) == 1 and rest[0][0] == sre_parse.SUBPATTERN:
+        rest = list(rest[0][1][-1])
+    any_char = (sre_parse.ANY_ALL,) if anchored else (sre_parse.ANY, sre_parse.ANY_ALL)
+    return prefix.startswith(literal) and all(
+        op in (sre_parse.MAX_REPEAT, sre_parse.MIN_REPEAT)
+        and av[:2] == (0, sre_parse.MAXREPEAT)
+        and len(av[2]) == 1
+        and av[2][0][0] in any_char
+        for op, av in rest
+    )
 
 
 class proxy_pass_normalized(Plugin):
@@ -161,10 +194,29 @@ class proxy_pass_normalized(Plugin):
         elif path and "$" not in directive.arg(0) and directive.parent is location:
             self._audit_uri_part(directive, location, path)
 
+    @staticmethod
+    def _rewritten_in_place(location):
+        """True if every request goes through an unconditional `rewrite ... break`, or a `rewrite` and then `break`,
+        in the location or its server, which make NGINX ignore the URI part of `proxy_pass`."""
+        scopes = [location] + [parent for parent in location.parents if parent.name == "server"][:1]
+        for scope in scopes:
+            for i, child in enumerate(scope.children):
+                rewrite = isinstance(child, RewriteDirective)
+                if rewrite and _matches_every_uri(child.pattern, location.path):
+                    if child.flag == "break":
+                        return True
+                    if child.flag is None and any(later.name == "break" for later in scope.children[i + 1:]):
+                        return True
+                if child.name in ("break", "return", "if") or (rewrite and child.flag):
+                    break
+        return False
+
     def _audit_uri_part(self, directive, location, uri):
         if location.modifier not in (None, "^~") or location.path.startswith("@"):
             return
         if location.path.endswith("/") == uri.endswith("/"):
+            return
+        if self._rewritten_in_place(location):
             return
 
         if uri.endswith("/"):
