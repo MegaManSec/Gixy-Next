@@ -45,10 +45,12 @@ class worker_rlimit_nofile_vs_connections(Plugin):
             if worker_rlimit_nofile < worker_connections * 2:
                 self.add_issue(
                     directive=directive,
+                    severity=gixy.severity.LOW,
                     reason=(
-                        "Missing `worker_rlimit_nofile`. Assuming default "
-                        f"({worker_rlimit_nofile}), "
-                        "`worker_rlimit_nofile` should be at least twice `worker_connections`."
+                        "Missing `worker_rlimit_nofile`, so workers inherit the open-file limit "
+                        f"set by the service manager or container (often {worker_rlimit_nofile}). "
+                        "Set `worker_rlimit_nofile`, or raise that limit, to at least twice "
+                        f"`worker_connections` ({worker_connections * 2})."
                     ),
                 )
 
@@ -77,6 +79,7 @@ class worker_rlimit_nofile_vs_connections(Plugin):
             if worker_rlimit_nofile < worker_connections * 2:
                 self.add_issue(
                     directive=root,
+                    severity=gixy.severity.LOW,
                     reason=(
                         "Missing `worker_rlimit_nofile` and `worker_connections`. "
                         "Assuming default `worker_rlimit_nofile`="
