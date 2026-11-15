@@ -31,7 +31,10 @@ class proxy_set_header_redefinition(Plugin):
 
     summary = 'Nested "proxy_set_header" drops parent headers.'
     severity = gixy.severity.LOW
-    description = '"proxy_set_header" at a nested level replaces the whole set of headers inherited from parent levels.'
+    description = (
+        '"proxy_set_header" or "grpc_set_header" at a nested level replaces the whole set of headers '
+        "inherited from parent levels."
+    )
     help_url = "https://gixy.io/plugins/proxy_set_header_redefinition/"
     directives = ["server", "location"]
     options = {"headers": set(), "merge_reported_headers": True}
@@ -71,12 +74,25 @@ class proxy_set_header_redefinition(Plugin):
         # Values nginx itself uses for these headers (Connection since 1.29.7);
         # an empty value means the header is not sent
         self.nginx_default_headers = {
-            "connection": "",
-            "expect": "",
-            "host": "$proxy_host",
-            "keep-alive": "",
-            "te": "",
-            "upgrade": "",
+            "proxy_set_header": {
+                "connection": "",
+                "expect": "",
+                "host": "$proxy_host",
+                "keep-alive": "",
+                "te": "",
+                "upgrade": "",
+            },
+            "grpc_set_header": {
+                "connection": "",
+                "content-length": "$content_length",
+                "expect": "",
+                "host": "",
+                "keep-alive": "",
+                "proxy-connection": "",
+                "te": "$grpc_internal_trailers",
+                "transfer-encoding": "",
+                "upgrade": "",
+            },
         }
         self.merge_reported_headers = self.config.get("merge_reported_headers")
 
@@ -84,14 +100,18 @@ class proxy_set_header_redefinition(Plugin):
         if not directive.is_block:
             return
 
-        own = self.get_headers(directive)
+        for name in self.nginx_default_headers:
+            self._audit_headers(directive, name)
+
+    def _audit_headers(self, directive, name):
+        own = self.get_headers(directive, name)
         if not own:
             return
 
         if self.merge_reported_headers:
-            dropped = self.declared_above(directive) - own
+            dropped = self.declared_above(directive, name) - own
         else:
-            dropped = self.inherited_headers(directive) - own
+            dropped = self.inherited_headers(directive, name) - own
 
         if self.interesting_headers:
             dropped = dropped & self.interesting_headers
@@ -99,20 +119,20 @@ class proxy_set_header_redefinition(Plugin):
         if not dropped:
             return
 
-        self._report_issue(directive, dropped)
+        self._report_issue(directive, name, dropped)
 
-    def _report_issue(self, directive, dropped):
+    def _report_issue(self, directive, name, dropped):
         dropped_directives = []
         parent = directive.parent
         while parent is not None:
             dropped_directives.extend(
                 d
-                for d in self.find_headers(parent)
-                if self.header_name(d) in dropped and not self.is_nginx_default(d)
+                for d in self.find_headers(parent, name)
+                if self.header_name(d) in dropped and not self.is_nginx_default(d, name)
             )
             parent = parent.parent
 
-        directives = self.find_headers(directive)
+        directives = self.find_headers(directive, name)
         directives.extend(dropped_directives)
 
         is_secure_header_dropped = any(
@@ -131,9 +151,13 @@ class proxy_set_header_redefinition(Plugin):
                 headers="`, `".join(sorted(dropped))
             )
 
-        self.add_issue(directive=directives, reason=reason, severity=issue_severity)
+        summary = None
+        if name != "proxy_set_header":
+            summary = 'Nested "{name}" drops parent headers.'.format(name=name)
 
-    def declared_above(self, directive):
+        self.add_issue(directive=directives, summary=summary, reason=reason, severity=issue_severity)
+
+    def declared_above(self, directive, name):
         """
         Every header declared in an ancestor level, including those already
         dropped before reaching the parent level.
@@ -141,25 +165,25 @@ class proxy_set_header_redefinition(Plugin):
         headers = set()
         parent = directive.parent
         while parent is not None:
-            headers |= self.get_headers(parent, skip_nginx_defaults=True)
+            headers |= self.get_headers(parent, name, skip_nginx_defaults=True)
             parent = parent.parent
         return headers
 
-    def inherited_headers(self, directive):
+    def inherited_headers(self, directive, name):
         """
         Headers in effect at the parent level: the nearest ancestor that declares
-        any "proxy_set_header" replaces everything declared above it.
+        any header with the same directive replaces everything declared above it.
         """
         parent = directive.parent
         while parent is not None:
-            if self.get_headers(parent):
-                return self.get_headers(parent, skip_nginx_defaults=True)
+            if self.get_headers(parent, name):
+                return self.get_headers(parent, name, skip_nginx_defaults=True)
             parent = parent.parent
         return set()
 
     @staticmethod
-    def find_headers(block):
-        return block.find("proxy_set_header", flat=True)
+    def find_headers(block, name):
+        return block.find(name, flat=True)
 
     @staticmethod
     def header_name(directive):
@@ -169,13 +193,13 @@ class proxy_set_header_redefinition(Plugin):
     def is_blanked(directive):
         return len(directive.args) > 1 and not directive.args[1]
 
-    def is_nginx_default(self, directive):
-        default = self.nginx_default_headers.get(self.header_name(directive))
+    def is_nginx_default(self, directive, name):
+        default = self.nginx_default_headers[name].get(self.header_name(directive))
         return len(directive.args) > 1 and directive.args[1].lower() == default
 
-    def get_headers(self, block, skip_nginx_defaults=False):
+    def get_headers(self, block, name, skip_nginx_defaults=False):
         return {
             self.header_name(d)
-            for d in self.find_headers(block)
-            if d.args and not (skip_nginx_defaults and self.is_nginx_default(d))
+            for d in self.find_headers(block, name)
+            if d.args and not (skip_nginx_defaults and self.is_nginx_default(d, name))
         }
