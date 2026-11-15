@@ -55,3 +55,5 @@ http {
 ## Additional notes
 
 This check cannot determine how many CPU cores the host has. On a single-core machine, the default of 1 may be fine, and this warning can be considered a false positive.
+
+`worker_processes auto` ignores CPU quotas such as `docker run --cpus` or a Kubernetes CPU limit, so in a CPU-limited container it can start far more workers than there are CPUs to run them; set an explicit number there. The official NGINX Docker image does this for you when `NGINX_ENTRYPOINT_WORKER_PROCESSES_AUTOTUNE` is set.
