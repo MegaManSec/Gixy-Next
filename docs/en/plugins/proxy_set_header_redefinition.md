@@ -7,7 +7,7 @@ description: "Detects proxy_set_header usage that unintentionally drops request 
 
 ## What this check looks for
 
-This plugin looks for nested contexts where `proxy_set_header` is used at a lower level and headers declared at higher levels are no longer effective.
+This plugin looks for nested contexts where `proxy_set_header` is used at a lower level and headers declared at higher levels are no longer effective. `grpc_set_header` follows the same rule and is checked the same way.
 
 ## Why this is a problem
 
@@ -138,7 +138,7 @@ merge_reported_headers = false
 
 ### Which levels are checked
 
-`proxy_set_header` is only valid in the `http`, `server` and `location` contexts, so the plugin reports on `server` and `location` blocks that replace headers declared above them. A `server` block that declares a header drops the `http`-level list in exactly the same way a `location` does.
+`proxy_set_header` and `grpc_set_header` are only valid in the `http`, `server` and `location` contexts, so the plugin reports on `server` and `location` blocks that replace headers declared above them. A `server` block that declares a header drops the `http`-level list in exactly the same way a `location` does. The two directives keep separate lists.
 
 ### The built-in defaults still apply
 
@@ -150,15 +150,11 @@ Every other dropped header is not removed either. NGINX forwards the client's re
 
 The plugin only reports a block when something was actually inherited and is actually lost. A nested block that re-declares every inherited header is correct and is not reported, even when the values differ. A nested block whose parents declare no `proxy_set_header` at all has nothing to drop and is not reported either.
 
-A header declared with the value NGINX uses anyway is not reported when dropped, since dropping it changes nothing: `Host $proxy_host`, or an empty `Connection`, `Upgrade`, `Keep-Alive`, `TE` or `Expect`. Before NGINX 1.29.7 a dropped `Connection ""` reverts to `Connection: close`, which only disables upstream keepalive.
+A header declared with the value NGINX uses anyway is not reported when dropped, since dropping it changes nothing: `Host $proxy_host`, or an empty `Connection`, `Upgrade`, `Keep-Alive`, `TE` or `Expect`. Before NGINX 1.29.7 a dropped `Connection ""` reverts to `Connection: close`, which only disables upstream keepalive. The same goes for the `grpc_set_header` defaults, such as `TE $grpc_internal_trailers`.
 
 ### What "dropped" means in reports
 
-By default, this plugin reports headers that were declared in higher scopes but are not effective at the flagged block.
-
-In practice, that usually means the headers were dropped by the `proxy_set_header` directives inside the flagged block. However, in some configurations a header can be dropped earlier (at an intermediate scope) and remain dropped further down.
-
-If you see a report where the flagged block never inherited a header in the first place, that is expected with the default behavior: the plugin is telling you "this header is declared somewhere above, but it is not effective here".
+By default, a report lists every header declared above that is not effective at the flagged block, including one already dropped at an intermediate level. Set `merge_reported_headers` to `false` to compare only with the nearest ancestor that declares headers.
 
 ### How severity is determined
 
