@@ -127,9 +127,7 @@ class stale_dns_cache(Plugin):
                         continue
 
                     parsed_upstream_host = parsed_upstream_server.group("host")
-                    if is_ipv6(parsed_upstream_host) or is_ipv4(
-                        parsed_upstream_host, False
-                    ):
+                    if not self._needs_dns(parsed_upstream_host):
                         continue
 
                     found_bad_server = True
