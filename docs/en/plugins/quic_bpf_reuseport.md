@@ -1,6 +1,6 @@
 ---
 title: "QUIC BPF Reuseport"
-description: "Detects the quic_bpf + reuseport + multiple workers combination that silently drops ~50% of QUIC connections after every nginx reload."
+description: "Detects the quic_bpf + reuseport + multiple workers combination that silently drops ~50% of QUIC connections after every reload on NGINX before 1.31.7."
 ---
 
 # [quic_bpf_reuseport] QUIC connections silently dropped after reload
@@ -15,9 +15,9 @@ This plugin flags configurations where all three of the following are present si
 
 ## Why this is a problem
 
-When these conditions coincide, NGINX silently drops approximately 50% of QUIC connections after every `nginx -s reload`. The root cause is stale BPF reuseport maps: after a reload, old worker processes hold BPF maps that reference socket file descriptors which no longer exist in the new workers, so roughly half of incoming QUIC packets are sent to the wrong worker and silently discarded.
+On NGINX before 1.31.7, these settings make NGINX silently drop about half of new QUIC connections after every `nginx -s reload`: the BPF reuseport maps still point at the old workers' sockets, so packets reach the wrong worker.
 
-This is a known upstream NGINX bug ([nginx/nginx#425](https://github.com/nginx/nginx/issues/425)) that remains unfixed in mainline.
+This was upstream bug [nginx/nginx#425](https://github.com/nginx/nginx/issues/425), fixed in mainline 1.31.7 by [nginx/nginx#1756](https://github.com/nginx/nginx/pull/1756). Every stable release up to 1.30.x is affected.
 
 ## Bad configuration
 
@@ -36,7 +36,7 @@ http {
 
 ## Better configuration
 
-Disable `quic_bpf`:
+Upgrade to NGINX 1.31.7 or later, or disable `quic_bpf`:
 
 ```nginx
 worker_processes auto;
@@ -53,6 +53,6 @@ http {
 
 ## Additional notes
 
-- The bug does not trigger with `worker_processes 1` since there is only one worker and no BPF map handoff occurs.
-- If `worker_processes` is not set, NGINX defaults to 1, which is also safe.
-- Removing `reuseport` from the QUIC listener also avoids the bug, though at the cost of reduced multi-core performance.
+- Gixy-Next cannot see the NGINX version. On 1.31.7 or later the finding does not apply; skip it with `--skips quic_bpf_reuseport`.
+- `worker_processes 1`, the default, is not affected.
+- Do not remove `reuseport` instead: without it, several workers share one UDP socket and QUIC handshakes fail even without a reload.
