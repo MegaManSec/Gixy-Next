@@ -90,6 +90,7 @@ nav:
       - plugins/add_header_redefinition.md
       - plugins/alias_traversal.md
       - plugins/allow_without_deny.md
+      - plugins/capture_before_map.md
       - plugins/default_server_flag.md
       - plugins/error_log_off.md
       - plugins/filesystem_root_exposure.md

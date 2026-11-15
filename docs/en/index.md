@@ -88,6 +88,7 @@ Gixy-Next can detect a wide range of NGINX security and performance misconfigura
 - [[add_header_redefinition] Redefining of response headers by "add_header" directive](https://gixy.io/plugins/add_header_redefinition/)
 - [[alias_traversal] Path traversal via misconfigured alias](https://gixy.io/plugins/alias_traversal/)
 - [[allow_without_deny] Allow specified without deny](https://gixy.io/plugins/allow_without_deny/)
+- [[capture_before_map] `$N` before a regex `map` variable in one value (CVE-2026-42533)](https://gixy.io/plugins/capture_before_map/)
 - [[default_server_flag] Missing default_server flag](https://gixy.io/plugins/default_server_flag/)
 - [[error_log_off] `error_log` set to `off`](https://gixy.io/plugins/error_log_off/)
 - [[filesystem_root_exposure] Filesystem root used as a document root](https://gixy.io/plugins/filesystem_root_exposure/)
