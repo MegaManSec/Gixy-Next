@@ -112,7 +112,7 @@ Gixy-Next can detect a wide range of NGINX security and performance misconfigura
 - [[return_bypasses_allow_deny] Return directive bypasses allow/deny restrictions](https://gixy.io/plugins/return_bypasses_allow_deny/)
 - [[ssl_ecdh_curve] Group lists that break startup or post-quantum key exchange](https://gixy.io/plugins/ssl_ecdh_curve/)
 - [[ssl_stapling_letsencrypt] OCSP stapling does nothing for a Let's Encrypt certificate](https://gixy.io/plugins/ssl_stapling_letsencrypt/)
-- [[ssl_stapling_without_resolver] OCSP stapling silently fails without a resolver](https://gixy.io/plugins/ssl_stapling_without_resolver/)
+- [[ssl_stapling_without_resolver] OCSP responder never re-resolved without a resolver](https://gixy.io/plugins/ssl_stapling_without_resolver/)
 - [[ssrf] Server Side Request Forgery](https://gixy.io/plugins/ssrf/)
 - [[stale_dns_cache] Outdated/stale cached DNS records used in proxy_pass](https://gixy.io/plugins/stale_dns_cache/)
 - [[status_page_exposed] Ensures that status_page is not exposed to the world](https://gixy.io/plugins/status_page_exposed/)

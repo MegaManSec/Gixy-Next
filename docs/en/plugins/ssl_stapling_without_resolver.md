@@ -1,24 +1,22 @@
 ---
 title: "OCSP Stapling Without Resolver"
-description: "Detects SSL servers where ssl_stapling on is effective but no resolver directive is reachable in scope, causing OCSP stapling to silently fail at runtime."
+description: "Detects SSL servers with ssl_stapling on but no resolver in scope, so nginx resolves the OCSP responder only at startup."
 ---
 
-# [ssl_stapling_without_resolver] OCSP stapling silently fails without a resolver
+# [ssl_stapling_without_resolver] OCSP responder never re-resolved without a resolver
 
 ## What this check looks for
 
 This plugin flags `server` blocks where all of the following are true:
 
-- The server handles SSL/TLS connections (`listen ... ssl;`, `listen ... quic;`, or `listen ... http3;`)
+- The server handles SSL/TLS connections: a `listen` of its own has `ssl`, `quic` or `http3`, or shares its address and port with another server's `listen ... ssl`
 - `ssl_stapling on;` is in effect — declared directly in the server or inherited from the enclosing `http {}` block
 - No `resolver` directive is reachable in the server's scope or any enclosing scope
 - No `ssl_stapling_file` is set (a pre-loaded OCSP response removes the need for a resolver)
 
 ## Why this is a problem
 
-`ssl_stapling` directs nginx to fetch a signed OCSP response from the certificate authority and staple it to the TLS handshake. To reach the CA's OCSP responder, nginx must resolve the responder hostname — and it can only do that if a `resolver` is configured in the same or a parent scope.
-
-Without one, nginx logs a warning at startup and silently disables stapling. Clients then have to make their own OCSP requests during every handshake, adding a round trip of latency and defeating the point of enabling stapling in the first place.
+`ssl_stapling` makes nginx fetch an OCSP response from the certificate authority and staple it to the TLS handshake. Without a `resolver` in scope, nginx resolves the responder's hostname only once, at startup. If those addresses change, it keeps stapling the last response until it expires and then staples nothing until a reload, so clients make their own OCSP requests again.
 
 ## Bad configuration
 
@@ -34,7 +32,7 @@ server {
 
     ssl_stapling on;
     ssl_stapling_verify on;
-    # no resolver — stapling silently fails
+    # no resolver — the responder is never re-resolved
 }
 ```
 
@@ -77,9 +75,5 @@ http {
 
 ## Additional notes
 
-- Point `resolver` at a local caching resolver (`127.0.0.1`, `[::1]`) or one inside your network, not at a public DNS service. A public resolver is reachable off-path by an attacker who can spoof replies, which is what [resolver_external](resolver_external.md) reports — at HIGH severity.
-- A `resolver` declared in the same server block is also sufficient; http-level is just the most common pattern.
-- If you pre-load the stapled response via `ssl_stapling_file`, nginx uses that file directly and does not need a resolver.
-- If `ssl_stapling_responder` is set to an IP-literal URL (for example `http://192.0.2.1/ocsp`), no DNS resolution happens, so the server is not flagged. A hostname responder — or none at all, where nginx falls back to the certificate's AIA URL — still requires a resolver.
-- A server that overrides with `ssl_stapling off;` is not flagged, even when the http block enables stapling globally.
-- Non-SSL servers (plain `listen 80;`) are skipped — stapling is irrelevant there.
+- Point `resolver` at a local caching resolver (`127.0.0.1`, `[::1]`) or one inside your network, not at a public DNS service, which [resolver_external](resolver_external.md) reports at MEDIUM severity.
+- A server whose `ssl_stapling_responder` is an IP-literal URL (for example `http://192.0.2.1/ocsp`) or `localhost` is not flagged, since its addresses cannot change.
