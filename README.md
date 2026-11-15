@@ -103,7 +103,7 @@ Gixy-Next can detect a wide range of NGINX security and performance misconfigura
 - [[non_expanding_variable] Variable used where NGINX does not expand variables](https://gixy.io/plugins/non_expanding_variable/)
 - [[origins] Problems with referer/origin header validation](https://gixy.io/plugins/origins/)
 - [[overlapping_captures] Overlapping captures in rewrite redirect/args context](https://gixy.io/plugins/overlapping_captures/)
-- [[proxy_buffering_off] Disabling `proxy_buffering`](https://gixy.io/plugins/proxy_buffering_off/)
+- [[proxy_buffering_off] Disabling upstream buffering](https://gixy.io/plugins/proxy_buffering_off/)
 - [[proxy_pass_normalized] `proxy_pass` can send an unintended path upstream](https://gixy.io/plugins/proxy_pass_normalized/)
 - [[proxy_set_header_redefinition] Redefining of proxied request headers by "proxy_set_header" directive](https://gixy.io/plugins/proxy_set_header_redefinition/)
 - [[quic_bpf_reuseport] QUIC connections silently dropped after reload](https://gixy.io/plugins/quic_bpf_reuseport/)
