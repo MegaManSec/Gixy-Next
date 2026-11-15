@@ -62,3 +62,5 @@ server {
 ## Additional notes
 
 This applies to all NGINX variables regardless of origin: user-defined (`set`), built-in (`$http_*`, `$arg_*`, etc.), and variables produced by `map`, `geo`, `rewrite`, and regex capture groups. Named regex capture groups (`(?P<Name>...)`) are also normalized to lowercase by NGINX, so `$Name` and `$name` are the same variable.
+
+The regular expressions of `location ~`, `if (... ~ ...)`, `rewrite` and `server_name ~` are not checked, since `$Name` and `\$Name` there are regex syntax, not variables. In a value, `"\$Name"` still references `$name`.
