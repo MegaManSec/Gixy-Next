@@ -1,53 +1,35 @@
 ---
 title: "Invalid Regex Captures"
-description: "Detects references to non-existent regex capture groups (for example $2 when the pattern has only one group). NGINX treats missing captures as empty strings, which can silently break rewrites and logic."
+description: "Detects $N references to capture groups that no regex defines. NGINX substitutes an empty string, which silently breaks rewrites and logic."
 ---
 
-# [invalid_regex] Using a nonexistent regex capture group
+# [invalid_regex] Invalid regex capture groups
 
 ## What this check looks for
 
-This plugin looks for places where a configuration references `$1`, `$2`, and so on, but the regex being used does not actually define that capture group.
+A `$1` to `$9` reference that the regex in effect cannot set:
 
-Common places this shows up:
+- a `rewrite` replacement or a regex `map` value that uses a group its own pattern lacks,
+- a `set` inside an `if ($var ~ regex)` block that uses a group the pattern lacks. After a `rewrite` in the block, that `rewrite` counts instead, and after one that stops processing on a match (`last`, `break`, `redirect`, `permanent`), no group is set,
+- any other value, such as `return`, `proxy_pass`, `root`, `alias`, `add_header`, `fastcgi_param` or an `if` comparison, that uses a group no regex in the server or in a `map` defines.
 
-- `rewrite` replacement strings
-- `set` inside an `if ($var ~ regex)` block
-- regex `map` entries whose value references captures the key pattern does not define
-- `return`, `proxy_pass`, `add_header`/`more_set_headers`, `try_files` and `set` values referencing `$N` when no regex anywhere in the enclosing server (location, if, rewrite, server_name) or any map key defines that group
-- patterns that use non-capturing groups like `(?:...)` or inline modifiers like `(?i)` and then expect numbered captures
-
-Note that NGINX reads exactly one digit after `$`: `$12` means capture `$1`
-followed by a literal `2`, so only `$1` through `$9` exist.
-
-Because `$N` always refers to the most recent regex evaluation at runtime,
-the whole-scope check is deliberately conservative: it only reports a
-reference when **no** regex that could run for the request defines that
-group, which makes the reference provably empty.
+NGINX reads one digit after `$`, so `$12` is `$1` followed by `2`. A file without an `http` or `server` block is only checked under a regex `location`, because the including file may hold the other regexes.
 
 ## Why this is a problem
 
-NGINX does not throw an error when you reference a missing group. It just substitutes an empty string. That turns into subtle bugs: broken redirects, unexpected paths, or conditions that never match the way you think they do.
+NGINX substitutes an empty string for a missing group, which silently breaks redirects, paths and conditions.
 
 ## Bad configuration
 
-### Case 1: modifier without a capture
+### modifier without a capture
 
 ```nginx
 rewrite "(?i)/path" /$1 break;
 ```
 
-`(?i)` changes matching behavior, but it does not create a capture. There is no `$1`, so the replacement becomes `/`.
+`(?i)` changes matching, but it does not capture, so `$1` is empty.
 
-### Case 2: no captures at all
-
-```nginx
-rewrite "^/path" /$1 redirect;
-```
-
-The pattern has zero capture groups, so `$1` is always empty.
-
-### Case 3: map value without a capture
+### map value without a capture
 
 ```nginx
 map $uri $dest {
@@ -55,11 +37,7 @@ map $uri $dest {
 }
 ```
 
-When a map regex is evaluated it resets the request's numbered captures, so
-`$1` in the value can only come from the entry's own pattern — which defines
-no groups here. The value is always empty.
-
-### Case 4: no capture provider anywhere in scope
+### no capture provider in scope
 
 ```nginx
 location ~ ^/static/ {
@@ -67,24 +45,11 @@ location ~ ^/static/ {
 }
 ```
 
-No regex in the enclosing server defines a capture group, so `$1` is
-guaranteed empty.
-
 ## Better configuration
-
-Either remove the unnecessary capture reference:
-
-```nginx
-rewrite "^/path" /newpath redirect;
-```
-
-Or add a capture group if you actually need part of the input:
 
 ```nginx
 rewrite "^/path/(.*)$" /newpath/$1 redirect;
 ```
-
-Same idea inside an `if`:
 
 ```nginx
 if ($uri ~ "^/path/(.*)$") {
@@ -94,6 +59,4 @@ if ($uri ~ "^/path/(.*)$") {
 
 ## Additional notes
 
-Atomic groups (`(?>...)`) and possessive quantifiers (`a++`, `a*+`, `a?+`, `a{n,m}+`) are parsed, and a capture inside an atomic group is numbered as usual: with `rewrite "^/(?>(a|b))$" /x/$1 break;` the `$1` reference is valid, while `$2` would be reported.
-
-A regex using syntax gixy cannot parse — branch reset `(?|...)`, recursion `(?R)` or `(?1)` — is skipped. The `rewrite`, `if` and `map` checks report nothing for it, and because such a pattern could define *any* group, the whole-scope check stays quiet for the enclosing server (or for the whole configuration when the pattern is a `map` key).
+- A regex gixy cannot parse, such as branch reset `(?|...)` or recursion `(?R)`, is skipped, and because it could define any group, the whole-scope check stays quiet for its server (or the whole configuration, for a `map` key).
