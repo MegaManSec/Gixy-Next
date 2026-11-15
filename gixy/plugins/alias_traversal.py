@@ -1,7 +1,8 @@
 import gixy
 import gixy.core.sre_parse.sre_parse as sre_parse
-from gixy.core.regexp import Regexp
-from gixy.core.variable import compile_script
+from gixy.core.regexp import Regexp, RegexpTooComplex
+from gixy.core.utils import resolve_inherited_single
+from gixy.core.variable import EXTRACT_RE, compile_script
 from gixy.plugins.plugin import Plugin
 
 _PATTERN_START = (sre_parse.AT, sre_parse.AT_BEGINNING)
@@ -43,21 +44,31 @@ class alias_traversal(Plugin):
             return
 
     def check_prefix_location(self, directive, location):
+        severities = list(self._variable_severities(directive, location))
         if not location.path.endswith("/"):
-            severity = (
+            severities.append(
                 gixy.severity.HIGH
                 if directive.path.endswith("/")
                 else gixy.severity.MEDIUM
             )
-            self.report_issue(directive, location, severity)
+        elif not directive.path.endswith("/") and EXTRACT_RE.split(directive.path)[-1]:
+            severities.append(gixy.severity.MEDIUM)
+        if severities:
+            self.report_issue(directive, location, max(severities, key=gixy.severity.ALL.index))
 
     def check_regex_location(self, directive, location):
+        for severity in self._variable_severities(directive, location):
+            self.report_issue(directive, location, severity)
+
+    def _variable_severities(self, directive, location):
         alias_parts = compile_script(directive.path)
 
         prev_part = None
 
         for part in alias_parts:
-            if not getattr(part, "regexp", False):
+            if not getattr(part, "regexp", False) or (
+                part.name == "remote_user" and self._basic_auth_enforced(directive)
+            ):
                 prev_part = part
                 continue
 
@@ -66,22 +77,48 @@ class alias_traversal(Plugin):
             )
 
             if prev_part is None:
-                self.report_issue(directive, location, gixy.severity.HIGH)
+                yield gixy.severity.HIGH
             elif str(prev_part.value).endswith("/"):
                 # location /bar(.*) ~ { alias /foo/$1; }
                 # only dangerous if the captured part can start with "."
-                if not location_has_slash_before and part.can_startswith("."):
+                if not location_has_slash_before and part.can_startswith(".") and not self._from_host(part):
                     if part.can_contain("/"):
                         # location /site(.*) ~ { alias /lol/$1; }
-                        self.report_issue(directive, location, gixy.severity.HIGH)
-                    else:
+                        yield gixy.severity.HIGH
+                    elif self._can_be_parent_dir(part):
                         # location /site([^/]*) ~ { alias /lol/$1; }
-                        self.report_issue(directive, location, gixy.severity.MEDIUM)
+                        yield gixy.severity.MEDIUM
             elif not part.must_startswith("/"):
                 # location /site/(.*) ~ { alias /lol$1; }
-                self.report_issue(directive, location, gixy.severity.MEDIUM)
+                yield gixy.severity.MEDIUM
 
             prev_part = part
+
+    @staticmethod
+    def _basic_auth_enforced(directive):
+        """True when ngx_http_auth_basic_module rejects every request whose user
+        is not in the password file: realm and file set, and no `satisfy any`."""
+        scope = directive.parent
+        auth = resolve_inherited_single(scope, "auth_basic")
+        if auth is None or auth.args[0].lower() == "off":
+            return False
+        if resolve_inherited_single(scope, "auth_basic_user_file") is None:
+            return False
+        satisfy = resolve_inherited_single(scope, "satisfy")
+        return satisfy is None or satisfy.args[0].lower() == "all"
+
+    @staticmethod
+    def _from_host(part):
+        """True for values nginx takes from the validated Host, which never
+        contain `/` or `..`."""
+        return part.name == "http_host" or getattr(part.provider, "name", None) == "server"
+
+    @staticmethod
+    def _can_be_parent_dir(part):
+        try:
+            return ".." in part.regexp.generate(".", max_repeat=2)
+        except RegexpTooComplex:
+            return True
 
     @classmethod
     def _literal_before_capture(cls, location, part):
