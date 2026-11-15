@@ -11,9 +11,9 @@ This plugin flags `error_log off;`.
 
 ## Why this is a problem
 
-Unlike `access_log`, the `error_log` directive does not support an `off` parameter. When you write `error_log off;`, NGINX interprets `off` as a path and creates a log file named `off` in the default config directory (often `/etc/nginx`).
+Unlike `access_log`, the `error_log` directive does not support an `off` parameter. When you write `error_log off;`, NGINX interprets `off` as a path and creates a log file named `off` under its prefix (`-p`), often `/etc/nginx` but `/var/lib/nginx` on Alpine.
 
-That is confusing at best, and at worst it can fill a filesystem you did not expect to be writing to.
+That is confusing at best, and at worst it can fill a filesystem you did not expect to be writing to. On a read-only root filesystem, NGINX cannot create the file and fails to start.
 
 ## Bad configuration
 
