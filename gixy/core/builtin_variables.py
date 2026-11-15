@@ -96,6 +96,8 @@ BUILTIN_VARIABLES = {
     "server_name": "",
     # https://nginx.org/en/docs/http/ngx_http_ssl_module.html#var_ssl_server_name
     "ssl_server_name": r"[^\x00]*",
+    # https://nginx.org/en/docs/stream/ngx_stream_ssl_preread_module.html#var_ssl_preread_server_name
+    "ssl_preread_server_name": r"[^\x00]*",
     # "Secure" variables that can't content or strictly limited user input
     # https://nginx.org/en/docs/http/ngx_http_browser_module.html#var_ancient_browser
     "ancient_browser": None,
