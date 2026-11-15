@@ -13,45 +13,41 @@ This plugin checks hash-like blocks such as `map` and `geo` and warns when they 
 
 For `map`, the check intentionally ignores a very common pattern of when a `map` has exactly one mapping entry and no explicit `default`. This configuration is often meant to return an empty string for all other inputs, and is used with `limit_req` and `limit_conn`, where an empty key disables limits.
 
-Therefore, this plugin only really warns for `map` when there are two or more mapping entries and no explicit `default`. It warns for all cases with `geo`.
+Therefore, this plugin only really warns for `map` when there are two or more mapping entries (not counting `hostnames` and `volatile`) and no explicit `default`. It warns for all cases with `geo`, unless both `0.0.0.0/0` and `::/0` are listed, which is what `default` stands for.
 
 ## Why this is a problem
 
-A `map` or `geo` without a default can leave "unmatched" inputs in a surprising state. Depending on how you use the variable later, that can mean:
+A `map` or `geo` without a default gives unmatched inputs an empty string, which `if` treats like `0`. That is harmless when the empty value is also the safe one, but when the safe fallback is non-empty, every input you did not list gets the unsafe value:
 
-- falling back to an unintended value,
-- skipping security or routing logic,
-- or accidentally allowing a request that should have been denied.
-
-For `map`, this risk grows as the number of explicit mappings increases (because more cases are being handled, but unmatched inputs still have no defined behavior).
+- an empty rate-limit key turns `limit_req` and `limit_conn` off for that request,
+- an empty value can skip security or routing logic that only acts on a non-empty one,
+- or it can let a request through that should have been denied.
 
 ## Bad configuration
 
 ```nginx
-map $request_uri $is_admin {
-    /admin 1;
-    /admin/ 1;
+map $http_x_client_tier $limit_key {
+    free  $binary_remote_addr;
+    trial $binary_remote_addr;
     # no default
 }
 
-# Later:
-if ($is_admin) {
-    return 403;
-}
+limit_req_zone $limit_key zone=api:10m rate=5r/s;
 ```
 
-If `$request_uri` does not match, `$is_admin` may be empty and the surrounding logic may not behave the way you expect.
+A client that sends no `X-Client-Tier` header, or any other tier, gets an empty key and is not rate-limited.
 
 ## Better configuration
 
 Pick an explicit default that matches least privilege:
 
 ```nginx
-map $request_uri $is_admin {
-    default 0;   # not admin unless matched
-    /admin  1;
-    /admin/ 1;
+map $http_x_client_tier $limit_key {
+    default $binary_remote_addr;   # limited unless exempted
+    premium "";
 }
+
+limit_req_zone $limit_key zone=api:10m rate=5r/s;
 ```
 
 Same idea for `geo`:
@@ -62,20 +58,6 @@ geo $block_client {
     192.0.2.0/24 1;
 }
 ```
-
-## Intentional empty default pattern (map)
-
-Sometimes, an implicit empty result is the goal. A common example is selectively enabling rate limits:
-
-```nginx
-# Only requests matching /api get a non-empty key (limits apply).
-# Everything else gets an empty key (limits disabled).
-map $request_uri $limit_key {
-    ~^/api $binary_remote_addr;
-}
-```
-
-This is why the plugin does not warn on `map` blocks with a single mapping entry and no explicit `default`.
 
 ## Additional notes
 
