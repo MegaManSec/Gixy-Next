@@ -7,34 +7,31 @@ description: "Detects worker_rlimit_nofile values that are too low relative to w
 
 ## What this check looks for
 
-This plugin checks the relationship between `worker_connections` and `worker_rlimit_nofile` and warns when the file descriptor limit is too low.
-
-If `worker_connections` is unset, the default is used: 512.
-
-If `worker_rlimit_nofile` is unset, an estimate of the default (most likely for major Linux distributions) is used: 1024.
+- `worker_rlimit_nofile` set below twice `worker_connections` (default 512).
+- `worker_rlimit_nofile` unset while `worker_connections` is above 512. The inherited limit is not in the config, so the check assumes the common 1024.
 
 ## Why this is a problem
 
-NGINX needs file descriptors (FDs) for more than just client connections.
+NGINX needs file descriptors (FDs) for more than its connections. `worker_connections` already caps every socket a worker holds, upstream connections included, so the FDs beyond it go to files:
 
-Typical FD usage:
-
-- Web server mode: 1 FD for the client connection, plus at least 1 FD for the file being served. A single page load can involve multiple files.
-- Proxy mode: 1 FD for the client connection and 1 FD for the upstream connection, plus potentially a temporary file.
-- Caching mode: combines both behaviors (serve cached files, and proxy/cache misses).
+- Web server mode: the file each request serves. A single page load can involve multiple files.
+- Proxy mode: a temporary file for a response buffered to disk.
+- Caching mode: the cached file on a hit, and proxy mode on a miss.
+- HTTP/2 and `open_file_cache`: many open files per connection, or files kept open after their requests finish.
 
 If the FD limit is too low, workers will start failing with "Too many open files", which shows up as request failures under load.
 
 ## Bad configuration
 
+### missing worker_rlimit_nofile
+
 ```nginx
-# Missing or too-low worker_rlimit_nofile
 events {
     worker_connections 4096;
 }
 ```
 
-or:
+### 1:1 ratio
 
 ```nginx
 worker_rlimit_nofile 4096;
@@ -44,13 +41,14 @@ events {
 }
 ```
 
-A 1:1 ratio is often not enough once you account for upstream sockets and files.
+A 1:1 ratio leaves no room for the files that requests hold open.
 
 ## Better configuration
 
 A practical baseline is at least 2x worker_connections:
 
 ```nginx
+worker_processes auto;
 worker_rlimit_nofile 8192;
 
 events {
@@ -58,11 +56,18 @@ events {
 }
 ```
 
-Adjust upward if you are proxying heavily, caching, or serving lots of static assets.
+Adjust upward if you are proxying heavily, caching, serving lots of static assets, or using HTTP/2 or `open_file_cache`.
+
+## How severity is determined
+
+- **MEDIUM**: `worker_rlimit_nofile` is set too low. NGINX also makes it the workers' hard limit, so the shortfall is certain.
+- **LOW**: `worker_rlimit_nofile` is not set. The real limit comes from the service manager or container and may be high enough.
 
 ## Additional notes
 
-Also check the OS-level limits (ulimit, systemd unit limits, container limits). Setting `worker_rlimit_nofile` higher than the process is allowed to use will not help. The common idiom is:
+Without `worker_rlimit_nofile`, workers inherit the limit from `ulimit`, the systemd unit's `LimitNOFILE` or the container runtime; check it in `/proc/<worker pid>/limits`. Raising `worker_rlimit_nofile` above the inherited hard limit needs `CAP_SYS_RESOURCE`, which a default Docker container does not have.
+
+The common idiom, halved for proxied traffic, is:
 
 ```text
 max clients = worker_processes * worker_connections
