@@ -1,5 +1,6 @@
 from functools import cached_property
 
+import gixy.core.sre_parse.sre_parse as sre_parse
 from gixy.core.exceptions import MalformedDirective
 from gixy.core.regexp import Regexp
 from gixy.core.variable import Variable, compile_script
@@ -246,6 +247,14 @@ class IncludeBlock(Block):
         return "include {0};".format(quote_arg(self.file_path))
 
 
+def _key_parses(entry):
+    try:
+        entry.regex.groups
+    except (sre_parse.error, OverflowError, RecursionError):
+        return False
+    return True
+
+
 class MapBlock(Block):
     """
     map $source $destination { <- this part is the block
@@ -280,7 +289,7 @@ class MapBlock(Block):
             src_val = child.src_val
             dest_val = child.dest_val
 
-            if not child.is_regex:
+            if not child.is_regex or not _key_parses(child):
                 vars.append(
                     Variable(
                         name=src_val,

@@ -283,6 +283,19 @@ map $some_var $some_other_var {
     assert [c.dest_val for c in directive.children] == ['b', '$1', 'c']
 
 
+def test_block_map_unparseable_key():
+    config = '''
+map $some_var $some_other_var {
+    "~^/(?|a|b)/" b;
+    default c;
+}
+    '''
+
+    directive = _get_parsed(config)
+    entries = directive.variables[0].value
+    assert [e.provider.src_val for e in entries] == ['~^/(?|a|b)/', 'default']
+
+
 def test_block_geo_two_vars():
     config = '''
 geo $some_var $some_other_var {
