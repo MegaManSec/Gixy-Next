@@ -36,6 +36,8 @@ def _issues(config):
     ("server { if ($uri ~ ^/$x) { return 403; } }", "HIGH"),
     ("server { if ($uri !~ ^/$x) { return 403; } }", "MEDIUM"),
     ("http { geo $g { ranges; default 1; 10.0.0.1-10.0.0.9 $x; } }", "MEDIUM"),
+    ("server { location / { valid_referers ~^$host/; } }", "MEDIUM"),
+    ('server { location / { gzip_disable "^$bad_agent"; } }', "LOW"),
 ])
 def test_severity(config, severity):
     assert [found for found, _ in _issues(config)] == [severity]
@@ -52,6 +54,9 @@ def test_severity(config, severity):
     "server { location ~ \"^/a{4294967296}$b\" { } }",
     "http { geo $g { ranges; default 0; 10.0.0.1-10.0.0.9 1; } }",
     "http { geo $price { default \"$5\"; } }",
+    "server { location / { proxy_redirect http://$host/ /; proxy_cookie_path /$app/ /; } }",
+    "server { location / { valid_referers none blocked server_names *.example.com ~\\.example\\.; } }",
+    "server { location / { gzip_disable msie6 degradation; } }",
 ])
 def test_not_reported(config):
     assert _issues(config) == []
