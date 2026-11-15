@@ -1,6 +1,7 @@
 import re
 
 import gixy
+from gixy.directives.block import IfBlock, LocationBlock
 from gixy.plugins.plugin import Plugin
 
 _VAR_RE = re.compile(r"\$([a-z_][a-z0-9_]*|\{[a-z_][a-z0-9_]*\})", re.IGNORECASE)
@@ -37,11 +38,23 @@ class mixed_case_variable(Plugin):
         self._finalized = False
 
     def audit(self, directive):
-        for arg in directive.args:
+        for arg in self._variable_args(directive):
             for m in _VAR_RE.finditer(arg):
                 name = m.group(1).strip("{}")
                 entry = self._seen.setdefault(name.lower(), {})
                 entry.setdefault(name, directive)
+
+    @staticmethod
+    def _variable_args(directive):
+        if isinstance(directive, LocationBlock) and directive.is_regex:
+            return []
+        if isinstance(directive, IfBlock) and directive.is_regex:
+            return directive.args[:1]
+        if directive.name == "rewrite":
+            return directive.args[1:]
+        if directive.name == "server_name":
+            return [arg for arg in directive.args if not arg.startswith("~")]
+        return directive.args
 
     def _finalize(self):
         if self._finalized:
