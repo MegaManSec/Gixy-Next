@@ -118,3 +118,5 @@ location /admin/ {
 ```
 
 That is the intended "IP allowlist OR authentication" pattern. Clients outside the allow list fall through to authentication whether or not `deny all;` is present, so omitting it changes nothing.
+
+`auth_basic` without an `auth_basic_user_file` in effect lets every client through, so it does not count. In a file without an `http` block, the user file is assumed to come from the main configuration.
