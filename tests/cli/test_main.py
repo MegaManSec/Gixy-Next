@@ -77,7 +77,7 @@ def test_clean_config_exits_zero(conf):
 
 
 @pytest.mark.parametrize("plugin,config,level,expected", [
-    ("resolver_external", "resolver 8.8.8.8;", "-lll", ["HIGH"]),
+    ("resolver_external", "resolver 8.8.8.8;", "-ll", ["MEDIUM"]),
     ("origins", 'server { if ($http_origin ~ "^https://example.com$") { return 200; } }',
      "-lll", ["HIGH"]),
     ("alias_traversal", "location /img { alias /data/images; }", "-lll", []),

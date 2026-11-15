@@ -16,6 +16,7 @@ _NO_DEFAULT = object()
 _MISSING = object()
 
 _BRACED_VARIABLE_RE = re.compile(r"\$\{\w+\}")
+_SHARED_ADDRESS_SPACE = ipaddress.IPv4Network("100.64.0.0/10")
 
 
 def get_overrides():
@@ -44,27 +45,23 @@ def quote_arg(arg):
     return '"' + re.sub(r'(\\*)"', lambda m: m.group(1) * 2 + '\\"', arg) + '"'
 
 
-def is_ipv6(host, strip_brackets=True, is_local=False):
+def is_ipv6(host, strip_brackets=True):
     """Check if a string is an IPv6 address (may include port)."""
     if strip_brackets and host.startswith("[") and "]" in host:
         host = host.split("]", 1)[0][1:]
     try:
-        ip_obj = ipaddress.IPv6Address(host)
-        if is_local:
-            return ip_obj.is_loopback or ip_obj.is_link_local or ip_obj.is_private
+        ipaddress.IPv6Address(host)
         return True
     except ValueError:
         return False
 
 
-def is_ipv4(host, strip_port=True, is_local=False):
+def is_ipv4(host, strip_port=True):
     """Check if a string is an IPv4 address (may include port)."""
     if strip_port:
         host = host.rsplit(":", 1)[0]
     try:
-        ip_obj = ipaddress.IPv4Address(host)
-        if is_local:
-            return ip_obj.is_loopback or ip_obj.is_private or ip_obj.is_link_local
+        ipaddress.IPv4Address(host)
         return True
     except ValueError:
         return False
@@ -379,11 +376,8 @@ class ResolverDirective(Directive):
                     0
                 ]  # 1.2.3.4:53 -> 1.2.3.4 (or name:53 -> name)
 
-            if is_ipv4(addr, is_local=True) or is_ipv6(addr, is_local=True):
-                continue
-
             try:
-                ipaddress.ip_address(ip_candidate)  # is it even an ip address?
+                ip = ipaddress.ip_address(ip_candidate)  # is it even an ip address?
             except ValueError:
                 host = ip_candidate.rstrip(".")  # example.com. -> example.com
                 suffix = suffix_cache.get(host)
@@ -395,7 +389,9 @@ class ResolverDirective(Directive):
                 external_nameservers.append(addr)
                 continue
 
-            external_nameservers.append(addr)
+            ip = getattr(ip, "ipv4_mapped", None) or ip
+            if ip.is_global and ip not in _SHARED_ADDRESS_SPACE:
+                external_nameservers.append(addr)
         return external_nameservers
 
     def __init__(self, name, args):
