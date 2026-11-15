@@ -19,6 +19,7 @@ The only operations that are considered consistently safe inside an `if` in a lo
 - `rewrite ... last;`
 - `rewrite ... redirect;`
 - `rewrite ... permanent;`
+- `rewrite` to an absolute URL (`http://`, `https://` or `$scheme`), which always redirects
 
 ## Bad configuration
 
@@ -51,7 +52,7 @@ location /if-try-files {
 }
 ```
 
-The presence of `if` can change how the location behaves, and can break things you would not expect to be related.
+When the `if` matches, its own configuration replaces the location's, so `try_files` does not run.
 
 ## Better configuration
 
