@@ -1,41 +1,30 @@
 ---
 title: "Unanchored Regex Pattern"
-description: "Detects regex locations or matches that are not anchored with ^ and/or $. Unanchored patterns can match unintended URLs and slow request processing."
+description: "Detects regular expressions on the request URI or host name that are not anchored with ^ or $, so they also match requests they were not written for."
 ---
 
-# [unanchored_regex] Regular expression without anchors
+# [unanchored_regex] Unanchored regular expressions
 
 ## What this check looks for
 
-This plugin flags regular expressions (commonly in `location ~` blocks) that are not anchored to the start and/or end of the string.
+A regular expression matched against the request URI or host name that is not anchored with `^` or `$`. In an alternation, every branch needs its own anchor. The plugin checks:
+
+- `location ~` and `location ~*` patterns,
+- `if` tests of `$uri`, `$document_uri` or `$request_uri`, and regex keys of a `map` on one of them,
+- `rewrite` patterns,
+- `server_name` regular expressions.
 
 ## Why this is a problem
 
-Without anchors, the regex engine can match anywhere inside the input. That has two downsides:
-
-- you may match URLs you did not intend to match,
-- the engine has to work harder because it can try many starting positions.
+An unanchored pattern matches anywhere in the input. `location ~ \.php` also handles `/foo.php/x`, `server_name ~example\.com` also selects the server for `notexample.com.attacker.net`, and `if ($request_uri !~ "/api/") { return 403; }` lets `/x/api/y` through.
 
 ## Bad configuration
 
 ```nginx
-# Matches any URL that contains /v1/ anywhere
-location ~ /v1/ {
-    # ...
-}
-```
-
-Another common example:
-
-```nginx
-# Matches /foo.php and also /foo.phpanything
 location ~ \.php {
     # ...
 }
 ```
-
-In alternations, every branch needs its own anchor — `^/foo|/bar` anchors
-only the first branch, so the second still matches anywhere:
 
 ```nginx
 # Matches /bar, /x/bar, /foo/bar/baz, ...
@@ -44,15 +33,21 @@ location ~ ^/foo|/bar {
 }
 ```
 
+```nginx
+server {
+    server_name ~example\.com;
+
+    location / {
+        if ($request_uri !~ "/api/") {
+            return 403;
+        }
+    }
+}
+```
+
 ## Better configuration
 
-Anchor patterns to reflect what you really mean:
-
 ```nginx
-location ~ ^/v1/ {
-    # ...
-}
-
 location ~ \.php$ {
     # ...
 }
@@ -62,8 +57,21 @@ location ~ ^/foo$|^/bar$ {
 }
 ```
 
+```nginx
+server {
+    server_name ~^(www\.)?example\.com$;
+
+    location / {
+        if ($request_uri !~ "^/api/") {
+            return 403;
+        }
+    }
+}
+```
+
 ## Additional notes
 
-PCRE atomic groups (`(?>...)`) and possessive quantifiers (`a++`, `a*+`, `a?+`, `a{n,m}+`) are read like their non-capturing and greedy equivalents, so `location ~ (?>\.php)` is reported just like `location ~ \.php`. A pattern using syntax gixy cannot parse at all — branch reset `(?|...)`, recursion `(?R)` or `(?1)` — is skipped, so the absence of a finding there says *nothing* about its anchors.
-
-It's also worth considering whether your regular expressions are vulnerable to ReDoS. See the [regex_redos](https://gixy.io/plugins/regex_redos/) plugin for more information.
+- Not reported, because matching anywhere is the intent: a `location` or positive `if` whose block only rejects (`deny`, `internal`, or a 4xx or 5xx `return`, optionally with `access_log` and `log_not_found`), such as `location ~ /\.ht { deny all; }`, and a positive `if` whose block only sets variables. A negated `if` is still reported.
+- A `rewrite` whose leading text the enclosing `location` path already starts with, such as `rewrite /app(.*) $1 break;` in `location ^~ /app/`, is not reported, because it can only match at the start.
+- A pattern of only `.` wildcards, such as `server_name ~.;`, matches anything and is not reported. Neither are tests of other variables, such as `if ($http_user_agent ~* bot)`.
+- A pattern gixy cannot parse, such as branch reset `(?|...)` or recursion `(?R)`, is skipped, so no finding there says nothing about its anchors.
