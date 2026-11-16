@@ -10,14 +10,14 @@ description: "Detects valid_referers entries that accept a Referer an attacker c
 This plugin warns when `valid_referers` includes:
 
 - the `none` or `blocked` keyword;
-- a regular expression (`~...`) that is not anchored with `^`, or that does not end the host name;
+- a regular expression (`~...`) that is not anchored with `^`, that does not end the host name, or that leaves part of the host's registrable domain to the client, such as the unescaped dots in `~^www.example.com/`;
 - a name with a trailing wildcard, such as `example.*`.
 
 ## Why this is a problem
 
 Any page can make the browser leave out the `Referer`, for example with `referrerpolicy="no-referrer"`, and `none` accepts that. `blocked` accepts a `Referer` that does not start with `http://` or `https://`, which browsers rarely send.
 
-NGINX matches a regular expression anywhere in the `Referer` after its scheme. `~\.example\.com` also accepts `https://www.example.com.evil.net/`, and `https://evil.net/www.example.com` when the attacker's page sends its full URL (`referrerpolicy="unsafe-url"`). `~^www\.example\.com` still accepts `www.example.com.evil.net`, and `example.*` accepts `example.evil.net`.
+NGINX matches a regular expression anywhere in the `Referer` after its scheme. `~\.example\.com` also accepts `https://www.example.com.evil.net/`, and `https://evil.net/www.example.com` when the attacker's page sends its full URL (`referrerpolicy="unsafe-url"`). `~^www\.example\.com` still accepts `www.example.com.evil.net`, `~^www.example.com/` accepts `wwwxexample.com`, and `example.*` accepts `example.evil.net`.
 
 ## Bad configuration
 

@@ -3,27 +3,19 @@ import string
 
 import gixy
 import gixy.core.sre_parse.sre_parse as sre_parse
-from gixy.core.regexp import (
-    AtToken,
-    BranchToken,
-    GroupRefToken,
-    InternalSubpatternToken,
-    LiteralToken,
-    MaxRepeatToken,
-    MinRepeatToken,
-    PARSE_ERRORS,
-    Regexp,
-    RegexpTooComplex,
-    SubpatternToken,
+from gixy.core.regexp import PARSE_ERRORS, Regexp, RegexpTooComplex
+from gixy.core.utils import (
+    PASS_DIRECTIVES,
+    default_listens,
+    parse_listen_key_and_default,
+    pins_registrable_domain,
+    resolve_inherited_single,
 )
-from gixy.core.utils import PASS_DIRECTIVES, default_listens, parse_listen_key_and_default, resolve_inherited_single
 from gixy.core.variable import compile_hash_entry, compile_script
 from gixy.plugins.plugin import Plugin
 
 
 HOST_NAME_CHARS = string.ascii_lowercase + string.digits + "-."
-LABEL_CHARS = HOST_NAME_CHARS.replace(".", "")
-END_ANCHOR_RE = re.compile(r"(?<!\\)((?:\\\\)*)\\[zZ]")
 
 
 def _is_catch_all_name(name):
@@ -40,97 +32,13 @@ def _is_catch_all_name(name):
         return False
 
 
-def _flatten(tokens):
-    """Every way to read `tokens` as a list of literal characters and other tokens."""
-    results = [[]]
-    for token in tokens:
-        if isinstance(token, LiteralToken):
-            options = [[token.char.lower()]]
-        elif isinstance(token, (SubpatternToken, InternalSubpatternToken)):
-            options = _flatten(token.childs)
-        elif isinstance(token, BranchToken):
-            options = [items for child in token.childs for items in _flatten(child.childs or [])]
-        else:
-            options = [[token]]
-        results = [done + items for done in results for items in options]
-        if len(results) > 256:
-            raise RegexpTooComplex()
-    return results
-
-
-def _can_contain(token, char):
-    return token.can_contain(char, skip_literal=False) or token.can_contain(char.upper(), skip_literal=False)
-
-
-def _walk(items, labels):
-    """Which labels, counted from the end of the name, the text left of `items` can belong to when
-    `items` is read right to left from `labels`; True once the label before the last can be chosen by
-    the client."""
-    for item in items:
-        if isinstance(item, AtToken):
-            if item.begin:
-                return set()
-            continue
-        if isinstance(item, (MaxRepeatToken, MinRepeatToken, GroupRefToken)):
-            labels = _repeat(item, labels)
-        else:
-            if isinstance(item, str):
-                dot, label, fixed = item == ".", item != ".", True
-            else:
-                dot = _can_contain(item, ".")
-                label = any(_can_contain(item, char) for char in LABEL_CHARS)
-                fixed = False
-            if not dot and not label:
-                continue
-            if label and not fixed and 2 in labels:
-                return True
-            following = {2} if dot and 1 in labels else set()
-            if label:
-                following |= labels
-            labels = following
-        if labels is True or not labels:
-            return labels
-    return labels
-
-
-def _repeat(token, labels):
-    if isinstance(token, GroupRefToken):
-        options, low, high = _flatten(token.group.root.childs), 1, 1
-    else:
-        options, low, high = _flatten(token.childs), token.min, token.max
-    result = labels if low == 0 else set()
-    for count in range(1, min(high, low + 4) + 1):
-        following = set()
-        for items in options:
-            step = _walk(reversed(items), labels)
-            if step is True:
-                return True
-            following |= step
-        labels = following
-        if count >= low:
-            result |= labels
-        if not labels:
-            break
-    return result
-
-
-def _open_tail(items):
-    """True if a name matched by `items` can end in a domain the client registers: one where the label
-    before the last is not fixed."""
-    if not items or not (isinstance(items[-1], AtToken) and items[-1].end):
-        return True
-    labels = _walk(reversed(items[:-1]), {1})
-    return labels is True or bool(labels)
-
-
 def _is_open_suffix_name(name):
-    """A `server_name` such as `example.*`, `~^api\\.` or `~^api\\.(.+)$` that also matches names under a domain
-    the client registers."""
+    """A `server_name` such as `example.*`, `~^api\\.` or `~^(.+)\\.co\\.uk$` that also matches names under a
+    domain the client registers."""
     if not name.startswith("~"):
         return name.endswith(".*")
     try:
-        regexp = Regexp(END_ANCHOR_RE.sub(r"\1$", name[1:]), case_sensitive=False)
-        return any(_open_tail(items) for items in _flatten(regexp.root.childs))
+        return not pins_registrable_domain(name[1:])
     except (*PARSE_ERRORS, RegexpTooComplex):
         return False
 

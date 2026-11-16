@@ -2,6 +2,10 @@ import ipaddress
 import re
 from collections import deque
 
+import tldextract
+
+from gixy.core.regexp import Regexp
+
 AUTH_DIRECTIVES = ("auth_basic", "auth_request", "auth_jwt", "auth_oidc")
 PASS_DIRECTIVES = ("proxy_pass", "fastcgi_pass", "uwsgi_pass", "scgi_pass", "grpc_pass")
 TLS_LISTEN_FLAGS = ("ssl", "quic")
@@ -18,6 +22,9 @@ REGEX_ARGUMENT_DIRECTIVES = frozenset((
 
 _UPPERCASE_RE = re.compile(r"[A-Z]")
 _BARE_VARIABLE_RE = re.compile(r"\$(?:([a-z_][a-z0-9_]*)|\{([a-z_][a-z0-9_]*)\})", re.IGNORECASE)
+_END_ANCHOR_RE = re.compile(r"(?<!\\)((?:\\\\)*)\\[zZ]")
+_EXTRACT = tldextract.TLDExtract(include_psl_private_domains=True, suffix_list_urls=(), cache_dir=None)
+HOST_PROBES = "b1"
 
 
 def is_indexed_name(name):
@@ -214,6 +221,33 @@ def regex_arguments(directive):
     elif name in ("proxy_cookie_domain", "proxy_cookie_flags"):
         if args and args[0].startswith("~"):
             yield args[0][1:], True
+
+
+def registrable_domain(name):
+    """`example.co.uk` for `www.example.co.uk`, lowercased, with the public suffix list's private
+    suffixes such as `github.io` counted; the whole name when its last label is on no list, since
+    nothing then says where registration starts."""
+    name = name.strip(".").lower()
+    return _EXTRACT(name).top_domain_under_public_suffix or name
+
+
+def pins_registrable_domain(pattern, probes=HOST_PROBES, host=lambda text: text):
+    """True when every name the case-insensitive regex `pattern` matches has the same registrable
+    domain, so no name under a domain the client registers matches. Each probe character fills the
+    wildcards and classes of one round of candidates and stands in for the text an unanchored end
+    leaves open; the rounds must agree. `HOST_PROBES` are host characters no common class lists
+    first, so a class yields different text per round. `host` reads the host name out of a
+    candidate. Raises PARSE_ERRORS or RegexpTooComplex."""
+    regexp = Regexp(_END_ANCHOR_RE.sub(r"\1$", pattern), case_sensitive=False)
+    rounds = set()
+    for probe in probes:
+        domains = set()
+        for candidate in regexp.generate(probe, anchored=True):
+            text = candidate if candidate.startswith("^") else probe + candidate
+            text = text if text.endswith("$") else text + probe
+            domains.add(registrable_domain(host(text.strip("^$"))))
+        rounds.add(frozenset(domains))
+    return len(rounds) == 1 and all(rounds.pop())
 
 
 def bare_variable_name(value):
