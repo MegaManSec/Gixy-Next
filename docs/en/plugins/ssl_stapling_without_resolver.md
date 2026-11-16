@@ -9,7 +9,7 @@ description: "Detects SSL servers with ssl_stapling on but no resolver in scope,
 
 This plugin flags `server` blocks where all of the following are true:
 
-- The server handles TLS: one of its `listen` directives has `ssl`, `quic` or `http3`, or another server has `listen ... ssl` on the same address and port
+- The server handles TLS: one of its `listen` directives has `ssl` or `quic`, or another server has `listen ... ssl` on the same address and port
 - `ssl_stapling on;` is in effect, in the server or inherited from the enclosing `http {}` block
 - No `resolver` is set in the server or an enclosing block
 - No `ssl_stapling_file` is set, since a pre-loaded OCSP response needs no resolver
