@@ -16,40 +16,42 @@ When an incoming request does not match any `server_name`, NGINX still has to pi
 ## Bad configuration
 
 ```nginx
-# HTTP vhosts share :80, but no default_server
-server {
-    listen 80;
-    server_name a.test;
+http {
+    # HTTP vhosts share :80, but no default_server
+    server {
+        listen 80;
+        server_name a.test;
 
-    return 301 https://a.test$request_uri;
-}
+        return 301 https://a.test$request_uri;
+    }
 
-server {
-    listen 80;
-    server_name b.test;
+    server {
+        listen 80;
+        server_name b.test;
 
-    return 301 https://b.test$request_uri;
-}
+        return 301 https://b.test$request_uri;
+    }
 
-# HTTPS vhosts share :443, but no default_server
-server {
-    listen 443 ssl;
-    server_name a.test;
+    # HTTPS vhosts share :443, but no default_server
+    server {
+        listen 443 ssl;
+        server_name a.test;
 
-    ssl_certificate     /etc/ssl/a.test.crt;
-    ssl_certificate_key /etc/ssl/a.test.key;
+        ssl_certificate     /etc/ssl/a.test.crt;
+        ssl_certificate_key /etc/ssl/a.test.key;
 
-    location / { return 200 "a\n"; }
-}
+        location / { return 200 "a\n"; }
+    }
 
-server {
-    listen 443 ssl;
-    server_name b.test;
+    server {
+        listen 443 ssl;
+        server_name b.test;
 
-    ssl_certificate     /etc/ssl/b.test.crt;
-    ssl_certificate_key /etc/ssl/b.test.key;
+        ssl_certificate     /etc/ssl/b.test.crt;
+        ssl_certificate_key /etc/ssl/b.test.key;
 
-    location / { return 200 "b\n"; }
+        location / { return 200 "b\n"; }
+    }
 }
 ```
 
@@ -60,68 +62,72 @@ Requests for an unknown hostname will be handled by whichever server ends up bei
 Pick the server you want as the catch-all and mark it explicitly:
 
 ```nginx
-# Explicit default for HTTP :80
-server {
-    listen 80 default_server;
-    server_name _;
+http {
+    # Explicit default for HTTP :80
+    server {
+        listen 80 default_server;
+        server_name _;
 
-    return 444;
-}
+        return 444;
+    }
 
-# Explicit default for HTTPS :443
-server {
-    listen 443 ssl default_server;
-    server_name _;
+    # Explicit default for HTTPS :443
+    server {
+        listen 443 ssl default_server;
+        server_name _;
 
-    # A dedicated/default cert (self-signed or otherwise) for unknown names
-    ssl_certificate     /etc/ssl/default.crt;
-    ssl_certificate_key /etc/ssl/default.key;
+        # A dedicated/default cert (self-signed or otherwise) for unknown names
+        ssl_certificate     /etc/ssl/default.crt;
+        ssl_certificate_key /etc/ssl/default.key;
 
-    return 444;
-}
+        return 444;
+    }
 
-# a.test
-server {
-    listen 80;
-    server_name a.test;
+    # a.test
+    server {
+        listen 80;
+        server_name a.test;
 
-    return 301 https://a.test$request_uri;
-}
+        return 301 https://a.test$request_uri;
+    }
 
-server {
-    listen 443 ssl;
-    server_name a.test;
+    server {
+        listen 443 ssl;
+        server_name a.test;
 
-    ssl_certificate     /etc/ssl/a.test.crt;
-    ssl_certificate_key /etc/ssl/a.test.key;
+        ssl_certificate     /etc/ssl/a.test.crt;
+        ssl_certificate_key /etc/ssl/a.test.key;
 
-    location / { return 200 "a\n"; }
-}
+        location / { return 200 "a\n"; }
+    }
 
-# b.test
-server {
-    listen 80;
-    server_name b.test;
+    # b.test
+    server {
+        listen 80;
+        server_name b.test;
 
-    return 301 https://b.test$request_uri;
-}
+        return 301 https://b.test$request_uri;
+    }
 
-server {
-    listen 443 ssl;
-    server_name b.test;
+    server {
+        listen 443 ssl;
+        server_name b.test;
 
-    ssl_certificate     /etc/ssl/b.test.crt;
-    ssl_certificate_key /etc/ssl/b.test.key;
+        ssl_certificate     /etc/ssl/b.test.crt;
+        ssl_certificate_key /etc/ssl/b.test.key;
 
-    location / { return 200 "b\n"; }
+        location / { return 200 "b\n"; }
+    }
 }
 ```
 
 ## Additional notes
 
-This plugin only runs when a scan of full configuration is performed, i.e. when the configuration scanned includes an `http { .. }` block.
+This plugin only runs on a full configuration, one with a top-level `http` or `events` block.
 
 Sockets are compared the way NGINX itself compares them. `listen 80`, `listen *:80`, `listen 0.0.0.0:80` and `listen 0.0.0.0` all name one socket, as do `listen [::]:80`, `listen [::0]:80` and `listen [::]`; an argument with no port implies port 80. The IPv4 and IPv6 wildcards on one port stay separate, and so do sockets of different types - `listen 443 ssl` and `listen 443 quic` each have their own default server, as do `listen 12345` and `listen 12345 udp` in `stream`.
+
+`listen localhost` is compared as `127.0.0.1`. Whether it also binds `[::1]` depends on the target's resolver, so that is not assumed. Other hostnames are compared by name.
 
 `listen unix:/path` sockets are not checked.
 

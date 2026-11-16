@@ -1,13 +1,15 @@
 ---
 title: "Host Header Spoofing"
-description: "Detects setting the Host from client-controlled values ($http_host, $http_x_forwarded_host, $cookie_*, $arg_*). Forwarding or trusting them can enable phishing, cache poisoning, and SSRF. Prefer $host and a strict server_name list."
+description: "Detects a proxied Host set from client-controlled values ($http_*, $cookie_*, $arg_*), which can enable phishing, cache poisoning and SSRF. Prefer $host with a strict server_name list."
 ---
 
 # [host_spoofing] Host header forgery
 
 ## What this check looks for
 
-This plugin flags configurations that set the `Host` from a client-controlled value — `$http_host`, `$http_x_forwarded_host` (the `X-Forwarded-Host` request header), a `$cookie_*` value, or a query-string `$arg_*` — especially when it is passed upstream or used to build redirects/URLs. The value is also followed through `set` directives in the same and enclosing blocks, wherever in the block they appear, so `set $upstream_host $http_host; proxy_set_header Host $upstream_host;` is reported as well.
+This plugin flags `proxy_set_header Host` and `grpc_set_header Host` (the gRPC `:authority`) when the value comes from the client: any `$http_*` request header such as `$http_host` or `$http_x_forwarded_host`, a `$cookie_*` value, or a query-string `$arg_*`.
+
+The value is followed through `set` directives in the same and enclosing blocks and through `map` blocks, so `set $h $http_host;` and `map $http_x_forwarded_host $best_http_host { default $http_x_forwarded_host; '' $host; }` are reported too. A `map` entry that passes its own source variable through is not followed for an exact or `*.example.com` key, but is for a regular expression or `example.*` key, which accept any domain.
 
 ## Why this is a problem
 
@@ -32,11 +34,16 @@ If a client sends `Host: evil.example`, the upstream receives it too.
 
 ## Better configuration
 
-Use `$host`, and make sure your `server_name` is strict:
+Use `$host`, list your names in `server_name`, and keep a separate default server:
 
 ```nginx
 server {
     listen 80 default_server;
+    return 444;
+}
+
+server {
+    listen 80;
     server_name example.com www.example.com;
 
     location / {
@@ -46,8 +53,8 @@ server {
 }
 ```
 
-`$host` is normalized by NGINX and tied into virtual host selection.
+A request only reaches the second server when its host name matches a `server_name` entry, so `$host` there is one of those names. In the default server, `$host` is whatever the client sent.
 
 ## Additional notes
 
-In general, apply the same rule to any client-controlled value used as the host — `$http_*` request headers (such as `$http_x_forwarded_host`), `$cookie_*`, and `$arg_*`: they should all be considered untrusted. Only `$host` is normalized by NGINX and tied to `server_name` selection.
+- A value that also uses `$host`, such as `$host:$http_x_forwarded_port`, is still reported: the client chooses the rest of it.

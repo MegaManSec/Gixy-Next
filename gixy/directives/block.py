@@ -1,9 +1,10 @@
 from functools import cached_property
 
+import gixy.core.sre_parse.sre_parse as sre_parse
 from gixy.core.exceptions import MalformedDirective
 from gixy.core.regexp import Regexp
 from gixy.core.variable import Variable, compile_script
-from gixy.directives.directive import Directive, MapDirective, quote_arg
+from gixy.directives.directive import Directive, MapDirective, RewriteDirective, quote_arg
 
 
 def get_overrides():
@@ -17,6 +18,15 @@ def get_overrides():
 
         result[klass.nginx_name] = klass
     return result
+
+
+def resets_captures(block):
+    for child in block.children:
+        if isinstance(child, RewriteDirective) or isinstance(child, IfBlock) and child.is_regex:
+            return True
+        if child.is_block and not child.self_context and resets_captures(child):
+            return True
+    return False
 
 
 class Block(Directive):
@@ -108,12 +118,30 @@ class HttpBlock(Block):
 
 class ServerBlock(Block):
     nginx_name = "server"
+    provide_variables = True
+    HOST_BOUNDARY = Regexp(r"[^\x00-\x20\x7f/A-Z]*")
 
     def __init__(self, name, args):
         super(ServerBlock, self).__init__(name, args)
 
     def get_names(self):
         return self.find("server_name")
+
+    @cached_property
+    def variables(self):
+        numbered = not resets_captures(self)
+        result = []
+        for server_name in self.get_names():
+            for name in server_name.args:
+                if not name.startswith("~"):
+                    continue
+                regexp = Regexp(name[1:], case_sensitive=False)
+                result.extend(
+                    Variable(name=group_name, value=group, boundary=self.HOST_BOUNDARY, provider=self)
+                    for group_name, group in regexp.groups.items()
+                    if numbered or not isinstance(group_name, int)
+                )
+        return result
 
     def __str__(self):
         server_names = [str(sn) for sn in self.find("server_name")]
@@ -246,6 +274,14 @@ class IncludeBlock(Block):
         return "include {0};".format(quote_arg(self.file_path))
 
 
+def _key_parses(entry):
+    try:
+        entry.regex.groups
+    except (sre_parse.error, OverflowError, RecursionError):
+        return False
+    return True
+
+
 class MapBlock(Block):
     """
     map $source $destination { <- this part is the block
@@ -280,7 +316,7 @@ class MapBlock(Block):
             src_val = child.src_val
             dest_val = child.dest_val
 
-            if not child.is_regex:
+            if not child.is_regex or not _key_parses(child):
                 vars.append(
                     Variable(
                         name=src_val,

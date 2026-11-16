@@ -339,6 +339,9 @@ def test_negative_must_startswith(regexp, char, strict):
     (r'foo(^bar|baz)', ['foobaz']),
     # Redundant trailing `$` collapses to one.
     (r'^foo$$', ['^foo$']),
+    (r'(a)\1', ['aa']),
+    (r'(^a)\1', ['^aa']),
+    (r'(?P<n>x)(?P=n)', ['xx']),
 ))
 def test_generate(regexp, values):
     reg = Regexp(regexp)

@@ -22,6 +22,20 @@ LITERAL_PATH_DIRECTIVES = frozenset((
     "scgi_cache_path",
 ))
 LIMIT_ZONE_DIRECTIVES = ("limit_req_zone", "limit_conn_zone")
+HIDE_HEADER_DIRECTIVES = frozenset((
+    "proxy_hide_header",
+    "fastcgi_hide_header",
+    "uwsgi_hide_header",
+    "scgi_hide_header",
+    "grpc_hide_header",
+))
+PROXY_REWRITE_DIRECTIVES = {
+    "proxy_redirect": "the redirect is never rewritten",
+    "proxy_cookie_domain": "the cookie domain is never rewritten",
+    "proxy_cookie_path": "the cookie path is never rewritten",
+    "proxy_cookie_flags": "the cookie flags are never applied",
+}
+GZIP_DISABLE_MASKS = frozenset(("msie6", "degradation"))
 DENYING_RETURN_CODES = frozenset(("401", "403", "444"))
 
 _PCRE_QUOTE_RE = re.compile(r"(?<!\\)((?:\\\\)*)\\Q")
@@ -102,15 +116,15 @@ class non_expanding_variable(Plugin):
     summary = "Variable used where NGINX does not expand variables."
     severity = gixy.severity.MEDIUM
     description = (
-        "NGINX expands variables in some directive arguments but not others. In geo and "
-        "split_clients values, location prefixes, server_name and map keys, the auth_request "
-        "URI, and paths such as error_log, a variable is literal text. In a regular expression, "
-        "`$name` is an end-of-string anchor followed by `name`, which can never match."
+        "NGINX takes some directive arguments literally, such as geo values, location prefixes, "
+        "map keys, header names and paths, so a variable there is plain text. In a regular "
+        "expression, `$name` is an end-of-string anchor followed by `name`, which can never match."
     )
     help_url = "https://gixy.io/plugins/non_expanding_variable/"
     directives = [
         "geo", "split_clients", "map", "location", "if", "server_name", "rewrite", "auth_request",
-    ] + sorted(LITERAL_PATH_DIRECTIVES)
+        "valid_referers", "fastcgi_split_path_info", "gzip_disable",
+    ] + sorted(LITERAL_PATH_DIRECTIVES) + sorted(HIDE_HEADER_DIRECTIVES) + sorted(PROXY_REWRITE_DIRECTIVES)
 
     def audit(self, directive):
         if directive.name in LITERAL_PATH_DIRECTIVES:
@@ -131,6 +145,22 @@ class non_expanding_variable(Plugin):
             self._audit_rewrite(directive)
         elif directive.name == "auth_request":
             self._audit_auth_request(directive)
+        elif directive.name == "valid_referers":
+            self._audit_valid_referers(directive)
+        elif directive.name in HIDE_HEADER_DIRECTIVES:
+            self._audit_hide_header(directive)
+        elif directive.name in PROXY_REWRITE_DIRECTIVES:
+            self._audit_proxy_rewrite(directive)
+        elif directive.name == "fastcgi_split_path_info":
+            variable = directive.args and _regex_variable(directive.args[0])
+            if variable:
+                self._report_regex(directive, variable, "the path is never split")
+        elif directive.name == "gzip_disable":
+            for arg in directive.args:
+                variable = arg not in GZIP_DISABLE_MASKS and _regex_variable(arg)
+                if variable:
+                    self._report_regex(directive, variable, "it never disables gzip", severity=gixy.severity.LOW)
+                    return
 
     def _audit_path(self, directive):
         variable = directive.args and _variable_in(directive.args[0])
@@ -269,6 +299,42 @@ class non_expanding_variable(Plugin):
         if variable:
             self._report_regex(directive, variable, "the rewrite never applies")
 
+    def _audit_valid_referers(self, directive):
+        for name in directive.args:
+            if name.startswith("~"):
+                variable = _regex_variable(name[1:])
+                if variable:
+                    self._report_regex(directive, variable, "this referer pattern never matches")
+                    return
+                continue
+            variable = _variable_in(name)
+            if variable:
+                self.add_issue(
+                    directive=directive,
+                    reason="`valid_referers` matches the literal host `{0}`; NGINX does not expand `{1}` there.".format(
+                        name, variable
+                    ),
+                )
+                return
+
+    def _audit_hide_header(self, directive):
+        variable = directive.args and _variable_in(directive.args[0])
+        if variable:
+            self.add_issue(
+                directive=directive,
+                reason="`{0}` hides the header literally named `{1}`; NGINX does not expand `{2}` there.".format(
+                    directive.name, directive.args[0], variable
+                ),
+            )
+
+    def _audit_proxy_rewrite(self, directive):
+        pattern = directive.args[0] if directive.args else ""
+        if not pattern.startswith("~"):
+            return
+        variable = _regex_variable(pattern[2:] if pattern.startswith("~*") else pattern[1:])
+        if variable:
+            self._report_regex(directive, variable, PROXY_REWRITE_DIRECTIVES[directive.name])
+
     def _audit_auth_request(self, directive):
         uri = directive.args[0] if directive.args else "off"
         variable = uri != "off" and _variable_in(uri)
@@ -279,7 +345,7 @@ class non_expanding_variable(Plugin):
                 "`{1}` there.".format(uri, variable),
             )
 
-    def _report_regex(self, directive, variable, consequence, guards=False):
+    def _report_regex(self, directive, variable, consequence, guards=False, severity=None):
         restricted = guards and _restricts_access(directive)
         reason = "`{0}` in this regex is an end-of-string anchor followed by `{1}`, not a variable, so {2}.".format(
             variable, variable.strip("${}"), consequence
@@ -288,6 +354,6 @@ class non_expanding_variable(Plugin):
             reason += " Its access control never applies."
         self.add_issue(
             directive=directive,
-            severity=gixy.severity.HIGH if restricted else self.severity,
+            severity=gixy.severity.HIGH if restricted else severity or self.severity,
             reason=reason,
         )

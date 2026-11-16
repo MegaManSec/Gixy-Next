@@ -7,7 +7,7 @@ description: "Detects ssl_ecdh_curve group lists that stop NGINX from loading it
 
 ## What this check looks for
 
-This plugin reads the group list in `ssl_ecdh_curve` and flags:
+This plugin reads the group list in `ssl_ecdh_curve` and in `ssl_conf_command Groups` (or `Curves`) and flags:
 
 - a post-quantum group without the `?` prefix (anything containing `MLKEM` or `KYBER`, such as `X25519MLKEM768`, `SecP256r1MLKEM768`, or the pre-standard `X25519Kyber768Draft00`), which stops NGINX from loading the configuration on OpenSSL older than 3.5, or on any OpenSSL for the Kyber drafts,
 - a list of only post-quantum groups, which does not load before OpenSSL 3.5 and on OpenSSL 3.5+ locks out clients that do not support a hybrid,
@@ -15,7 +15,7 @@ This plugin reads the group list in `ssl_ecdh_curve` and flags:
 - a list that offers no ML-KEM group, ranks every one below a classical group, or removes `X25519MLKEM768` from `DEFAULT`, which turns post-quantum key exchange off on OpenSSL 3.5+,
 - a list that puts post-quantum and classical groups in the same preference tier, so that on OpenSSL 3.5+ a client that sends its X25519 key share first negotiates classical X25519.
 
-When an `ssl_conf_command Groups` applies to the same block, only the problems that stop NGINX from starting are reported, because that command replaces the `ssl_ecdh_curve` list.
+The last two cases are only reported for the list in effect for the default server of a TLS `listen` socket, which NGINX uses for every server on that socket. An `ssl_ecdh_curve` that an `ssl_conf_command Groups` replaces, and the groups that `proxy_ssl_conf_command`, `grpc_ssl_conf_command` and `uwsgi_ssl_conf_command` offer to TLS upstreams, are only checked for startup failures.
 
 ## Why this is a problem
 
@@ -131,7 +131,7 @@ $ openssl s_client -connect example.com:443 -groups X25519MLKEM768:X25519 </dev/
 Peer Temp Key: X25519, 253 bits
 ```
 
-A list that puts the post-quantum groups in a lower tier, such as `X25519/?X25519MLKEM768`, behaves the same way for every client that also supports `X25519`.
+A list that puts the post-quantum groups in a lower tier, such as `X25519/?X25519MLKEM768`, behaves the same way for every client that also supports `X25519`. So does `ssl_conf_command Groups X25519:prime256v1;`.
 
 ### post-quantum and classical groups in one tier
 
@@ -206,4 +206,5 @@ By OpenSSL version:
 - A `-` prefix removes a group, including one listed earlier, so `-X25519MLKEM768` never counts as offering one.
 - Spaces around group names and separators are ignored, as OpenSSL ignores them.
 - `X25519Kyber768Draft00` and the other pre-standard Kyber draft names were never accepted by upstream OpenSSL at all — not even 3.5+ — so they are flagged regardless of how new the library is. With `?` they are skipped, so `?X25519Kyber768Draft00:X25519` counts as a list with no ML-KEM group.
-- `ssl_conf_command Groups` (or `Curves`) is applied after `ssl_ecdh_curve` and replaces its list. It is in effect for a block when that block, or the nearest enclosing level that has any `ssl_conf_command`, sets it, because a level with its own `ssl_conf_command` directives does not inherit the enclosing ones. The `ssl_conf_command` list itself is not inspected.
+- `ssl_conf_command Groups` (or `Curves`) is applied after `ssl_ecdh_curve` and replaces its list. It is in effect for a block when that block, or the nearest enclosing level that has any `ssl_conf_command`, sets it, because a level with its own `ssl_conf_command` directives does not inherit the enclosing ones. NGINX does not treat `auto` specially there: `ssl_conf_command Groups auto;` fails to load.
+- Switching to the server named by SNI swaps only the certificate, so a list in any other `server` on the socket changes nothing, in `http` and `stream` alike. A `listen` without `ssl` is TLS when another server's `listen` on the same address and port has it. In a file with no `http` or `stream` block the default server is unknown, so the list is still reported, with a note in the reason.

@@ -7,7 +7,7 @@ description: "Detects patterns that allow CRLF injection into response or upstre
 
 ## What this check looks for
 
-This plugin looks for cases where user-controlled input can end up inside response headers (`add_header`, `return`, `rewrite`) or inside the request NGINX sends upstream (`proxy_set_header`, `proxy_pass`), through variables that can contain newline characters:
+This plugin looks for user-controlled input in response headers or trailers (`add_header`, `add_trailer`, `more_set_headers`, and redirect URLs from `return`, `rewrite` and `error_page`) or in the request NGINX sends upstream (`proxy_set_header`, `proxy_pass`, `more_set_input_headers`), through variables that can contain newline characters:
 
 - regex captures that are not restricted to a safe character set,
 - `$uri` and `$document_uri`, which hold the decoded URI, so `%0d%0a` becomes a line break,
@@ -90,3 +90,6 @@ location / {
 
 - `$remote_user` is not reported when `auth_basic` (not `off`) and `auth_basic_user_file` are both in effect for the directive and `satisfy` is `all` (the default). The user name then has to match an entry in the password file before the request is proxied or answered. With `satisfy any`, clients that pass another access check skip the password check, so the finding stays; without `auth_basic_user_file` the module does not enforce anything.
 - `$request` (the request line) and `$content_type` (the request `Content-Type` header) are client-controlled but cannot contain line breaks, so they are not reported here.
+- NGINX URL-escapes numbered captures (`$1` to `$9`) in a `rewrite` replacement, and when `set` copies one from the URI before any `rewrite` in the location, so those are not reported. Named captures are copied raw.
+- An internal `rewrite` is checked only after its `?`, since NGINX escapes the rewritten path when proxying it.
+- Directives inside `stream {}` are not checked: no HTTP message is built there.

@@ -109,8 +109,16 @@ class allow_without_deny(Plugin):
         for name in AUTH_DIRECTIVES:
             auth = resolve_inherited_single(scope, name)
             if auth is not None and auth.args[0].lower() != "off":
+                if name == "auth_basic" and self._lacks_user_file(scope):
+                    continue
                 return True
         return False
+
+    @staticmethod
+    def _lacks_user_file(scope):
+        if resolve_inherited_single(scope, "auth_basic_user_file") is not None:
+            return False
+        return scope.name == "http" or any(parent.name == "http" for parent in scope.parents)
 
     @staticmethod
     def _simulate(rules):

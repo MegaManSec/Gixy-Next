@@ -1,6 +1,6 @@
 ---
 title: "Variables That NGINX Does Not Expand"
-description: "Detects variables written where NGINX takes the text literally: geo and split_clients values, location prefixes, server_name and map keys, the auth_request URI, paths such as error_log, and regular expressions."
+description: "Detects variables written where NGINX takes the text literally, such as geo values, location prefixes, map keys, header names, paths and regular expressions."
 ---
 
 # [non_expanding_variable] Variable used where NGINX does not expand variables
@@ -11,11 +11,12 @@ This plugin flags variables in places where NGINX does not expand them. In these
 
 - the values of `geo` and `split_clients` blocks,
 - location prefixes, including `location = ...` and `location ^~ ...`,
-- `server_name` entries and `map` keys,
+- `server_name` entries, `valid_referers` host names and `map` keys,
 - the URI of `auth_request`,
+- the header name of `proxy_hide_header` and the other `*_hide_header` directives,
 - the path of `error_log`, the `*_temp_path` directives and the `*_cache_path` directives.
 
-In a regular expression, `$name` is not a variable either. `$` is the end-of-string anchor, so `^/$admin/` asks for the end of the string followed by `admin/`, which can never happen. The plugin checks the regular expressions in `location`, `if`, `rewrite`, `server_name` and `map`.
+In a regular expression, `$name` is not a variable either. `$` is the end-of-string anchor, so `^/$admin/` asks for the end of the string followed by `admin/`, which can never happen. The plugin checks the regular expressions in `location`, `if`, `rewrite`, `server_name`, `map`, `valid_referers`, `gzip_disable`, `fastcgi_split_path_info`, and the `~` forms of `proxy_redirect` and `proxy_cookie_*`.
 
 ## Why this is a problem
 
@@ -115,8 +116,8 @@ server {
 ## How severity is determined
 
 - **HIGH**: a `geo` or `split_clients` value that a `limit_req_zone` or `limit_conn_zone` key depends on entirely, directly or through `map`. Also a location or `if` that never matches the requests it was written for, because of a literal prefix or a regular expression that can never match, but that contains access control: `deny`, `auth_basic`, `auth_request`, `auth_jwt`, `auth_oidc`, or `return` with `401`, `403` or `444`.
-- **MEDIUM**: any other value, location, `server_name`, `map`, `rewrite`, `if` or `auth_request` finding.
-- **LOW**: a path, since it only changes where NGINX writes files.
+- **MEDIUM**: any other finding.
+- **LOW**: a path, since it only changes where NGINX writes files, and a `gzip_disable` regular expression, since gzip only stays on.
 
 ## Additional notes
 

@@ -18,20 +18,10 @@ class overlapping_captures(Plugin):
     )
     severity = gixy.severity.INFORMATION
     description = (
-        "CVE-2026-9256 is a bug in nginx itself: when a `rewrite` regex contains "
-        "overlapping (nested) captures and its replacement references multiple of "
-        "those captures by `$N` in a redirect or arguments context, nginx allocates "
-        "a buffer sized for the raw capture bytes but writes URI-escaped bytes (which "
-        "can be several times longer), overflowing the buffer. On unpatched nginx "
-        "(< 1.30.2/1.31.1) a crafted request triggers a heap buffer overflow in the "
-        "worker process. The only real fix is upgrading nginx. As a workaround, "
-        "remove the `$N` references from the replacement: convert the captures to "
-        "named ones (`(?<name>...)`) and reference them by `$name` instead of `$N`. "
-        "PCRE numbers named captures alongside unnamed ones, so switching the regex "
-        "syntax alone is not enough; the replacement must stop using `$N`. Because "
-        "Gixy-Next cannot determine the nginx version from the configuration, any "
-        "matching pattern is reported as INFORMATION. If you are already on a "
-        "patched version, no action is required."
+        "On nginx before 1.30.2/1.31.1, a `rewrite` that escapes two overlapping captures by `$N` "
+        "(in a redirect or after `?`) overflows a heap buffer (CVE-2026-9256). Upgrade nginx, or "
+        "reference named captures (`$name`) instead of `$N`; this is INFORMATION because the nginx "
+        "version is unknown."
     )
     help_url = "https://gixy.io/plugins/overlapping_captures/"
     directives = ["rewrite"]
@@ -108,9 +98,11 @@ class overlapping_captures(Plugin):
 
     def _referenced_captures_overlap(self, regex, referenced):
         # True iff any pair of referenced groups is syntactically nested
-        # (one is an ancestor of the other). Sibling pairs like
+        # (one is an ancestor of the other), or one sits in a positive
+        # lookahead and the other follows it, or one sits in a positive
+        # lookbehind and the other precedes it. Sibling pairs like
         # `((.*))/((.*))` with `$1$3` are not reported.
-        parent, total = self._capture_parent_map(regex)
+        parent, total, lookarounds = self._capture_parent_map(regex)
         ancestors = {g: self._chain_ancestors(parent, g) for g in parent}
         refs = sorted(g for g in referenced if g <= total)
         for idx, g1 in enumerate(refs):
@@ -118,7 +110,16 @@ class overlapping_captures(Plugin):
             for g2 in refs[idx + 1:]:
                 if g1 in ancestors.get(g2, set()) or g2 in anc1:
                     return True
+                if any(self._looks_across(look, g1, g2) for look in lookarounds):
+                    return True
         return False
+
+    @staticmethod
+    def _looks_across(lookaround, low, high):
+        kind, first, last = lookaround
+        if kind == "ahead":
+            return first <= low <= last < high
+        return low < first <= high <= last
 
     def _chain_ancestors(self, parent, g):
         chain = set()
@@ -129,12 +130,15 @@ class overlapping_captures(Plugin):
         return chain
 
     def _capture_parent_map(self, regex):
-        # Walk `regex` once. Return (parent, total) where parent maps each
-        # capturing group number to its nearest capturing ancestor (or
-        # None at top level), and total is the number of capturing groups.
+        # Walk `regex` once. Return (parent, total, lookarounds) where
+        # parent maps each capturing group number to its nearest capturing
+        # ancestor (or None at top level), total is the number of capturing
+        # groups, and lookarounds lists (kind, first, last) for every
+        # positive lookahead/lookbehind holding captures first..last.
         # Groups are numbered in declaration order, named or unnamed.
         parent = {}
-        stack = []   # cap_num if capturing else None
+        lookarounds = []
+        stack = []   # (cap_num if capturing else None, lookaround frame)
         cap = 0
         i = 0
         n = len(regex)
@@ -150,15 +154,26 @@ class overlapping_captures(Plugin):
                 if self._is_capturing_paren(regex, i):
                     cap += 1
                     parent[cap] = next(
-                        (x for x in reversed(stack) if x is not None), None
+                        (x for x, _ in reversed(stack) if x is not None), None
                     )
-                    stack.append(cap)
+                    stack.append((cap, None))
                 else:
-                    stack.append(None)
+                    kind = self._lookaround_kind(regex, i)
+                    stack.append((None, [kind, cap + 1] if kind else None))
             elif c == ")" and stack:
-                stack.pop()
+                _, frame = stack.pop()
+                if frame and cap >= frame[1]:
+                    lookarounds.append((frame[0], frame[1], cap))
             i += 1
-        return parent, cap
+        return parent, cap, lookarounds
+
+    @staticmethod
+    def _lookaround_kind(regex, i):
+        if regex.startswith("(?=", i):
+            return "ahead"
+        if regex.startswith("(?<=", i):
+            return "behind"
+        return None
 
     def _skip_char_class(self, regex, i):
         # Advance past a `[...]` character class, honoring escapes.

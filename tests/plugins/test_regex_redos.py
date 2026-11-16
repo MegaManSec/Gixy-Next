@@ -25,6 +25,10 @@ def _regexes(config, name):
     ("server_name ~* ^(a+)+\\.ex$ www.ex.com;", "server_name", [("^(a+)+\\.ex$", "i")]),
     ("server_name ~^(a+)+x;", "server_name", [("^(a+)+x", "")]),
     ("map $uri $x { ~*^(a+)+$ 1; ~^/b 2; default 0; }", "map", [("^(a+)+$", "i"), ("^/b", "")]),
+    # gzip_disable and valid_referers regexes are always case-insensitive
+    ('gzip_disable msie6 "^(a+)+x";', "gzip_disable", [("^(a+)+x", "i")]),
+    ("valid_referers none blocked ~^(a+)+\\.ex/ www.ex.com;", "valid_referers", [("^(a+)+\\.ex/", "i")]),
+    ("fastcgi_split_path_info ^(.+\\.php)(/.+)$;", "fastcgi_split_path_info", [("^(.+\\.php)(/.+)$", "")]),
 ])
 def test_regexes_extracted(config, name, expected):
     assert _regexes(config, name) == expected
@@ -35,6 +39,8 @@ def test_regexes_extracted(config, name, expected):
     ("if ($request_method = POST) { }", "if"),             # comparison, no regex
     ("server_name example.com *.example.com;", "server_name"),  # plain/wildcard names
     ("map $uri $x { /a 1; default 0; }", "map"),           # literal keys, no regex
+    ("gzip_disable msie6 degradation;", "gzip_disable"),   # built-in masks, no regex
+    ("valid_referers none blocked server_names *.ex.com;", "valid_referers"),  # names only
 ])
 def test_no_regexes_for_non_regex_forms(config, name):
     assert _regexes(config, name) == []

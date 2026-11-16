@@ -7,7 +7,7 @@ from gixy.core import builtin_variables as builtins
 from gixy.core.config import Config
 from gixy.core.context import get_context, pop_context, purge_context, push_context
 from gixy.core.plugins_manager import PluginsManager
-from gixy.directives.block import GeoBlock, IfBlock, LocationBlock, MapBlock
+from gixy.directives.block import GeoBlock, IfBlock, LocationBlock, MapBlock, ServerBlock, resets_captures
 from gixy.directives.directive import (
     AuthRequestSetDirective,
     MapDirective,
@@ -201,6 +201,11 @@ class Manager(object):
 
     def _update_variables(self, directive):
         # TODO(buglloc): finish him!
+        if isinstance(directive, LocationBlock) and (directive.is_regex or resets_captures(directive)):
+            context = get_context()
+            context.variables["index"] = {
+                k: v for k, v in context.variables["index"].items() if not isinstance(v.provider, ServerBlock)
+            }
         if not directive.provide_variables:
             return
 

@@ -5,6 +5,7 @@ import tldextract
 import gixy
 import gixy.core.builtin_variables as builtins
 from gixy.core.variable import compile_script
+from gixy.directives.block import MapBlock
 from gixy.directives.directive import is_ipv4, is_ipv6
 from gixy.plugins.plugin import Plugin
 
@@ -18,16 +19,15 @@ class stale_dns_cache(Plugin):
         proxy_pass https://example.com;
     """
 
-    summary = "proxy_pass may use stale IP addresses for hostnames that are only resolved at start-up."
+    summary = "proxy_pass (or another *_pass) may use stale IPs for hostnames that are only resolved at start-up."
     severity = gixy.severity.LOW
     description = (
-        "Using proxy_pass with a static hostname (or an upstream with hostname servers "
-        "without 'resolve') results in DNS resolution only at startup, risking "
-        "proxying to stale IPs. Use a variable in proxy_pass (resolver-based), or "
-        "use upstream 'server ... resolve' (nginx>=1.27.3) so TTLs are respected."
+        "A hostname in proxy_pass or another *_pass, or in an upstream server without 'resolve', "
+        "is resolved only at startup, so its IPs can go stale. Use a variable with a resolver, "
+        "or upstream 'server ... resolve' (nginx>=1.27.3)."
     )
     help_url = "https://gixy.io/plugins/stale_dns_cache/"
-    directives = ["proxy_pass"]
+    directives = ["proxy_pass", "fastcgi_pass", "uwsgi_pass", "scgi_pass", "grpc_pass"]
 
     def __init__(self, config):
         super(stale_dns_cache, self).__init__(config)
@@ -42,6 +42,22 @@ class stale_dns_cache(Plugin):
             return False
         host = host.lower().rstrip(".")
         return host not in ("localhost", "ip6-localhost") and not host.endswith(".localhost")
+
+    def _is_address(self, value):
+        if _UNIX_SOCKET_RE.match(value):
+            return True
+        parsed = self.parse_uri_re.match(value)
+        return bool(parsed) and (is_ipv6(parsed.group("host")) or is_ipv4(parsed.group("host"), False))
+
+    @staticmethod
+    def _option_values(option):
+        if not isinstance(option.provider, MapBlock):
+            return [option.final_value]
+        entries = [d for d in option.provider.gather_map_directives(option.provider.children) if d.dest_val is not None]
+        values = [d.dest_val for d in entries]
+        if not any(d.src_val == "default" for d in entries):
+            values.append("")
+        return values
 
     def audit(self, directive):
         if not getattr(directive, "args", None):
@@ -68,7 +84,7 @@ class stale_dns_cache(Plugin):
         for var in parsed_host_compiled:
             if var.name and builtins.is_builtin(var.name):
                 break
-            values = [option.final_value for option in var.options]
+            values = [value for option in var.options for value in self._option_values(option)]
             if not all(isinstance(value, str) for value in values):
                 break
             upstream_name_candidates.update(values)
@@ -76,7 +92,7 @@ class stale_dns_cache(Plugin):
             if len(values) > 1:
                 break
 
-        if not any(self._needs_dns(host) for host in parsed_hosts):
+        if not any(self._needs_dns(host) and not self._is_address(host) for host in parsed_hosts):
             return
 
         severity = self.severity
@@ -146,9 +162,9 @@ class stale_dns_cache(Plugin):
                     severity=gixy.severity.MEDIUM,
                     directive=directive,
                     reason=(
-                        "proxy_pass uses variables, but no `resolver` is configured. "
+                        "{} uses variables, but no `resolver` is configured. "
                         "Requests will fail because nginx cannot resolve the upstream "
-                        "at runtime."
+                        "at runtime.".format(directive.name)
                     ),
                 )
             return
@@ -168,5 +184,5 @@ class stale_dns_cache(Plugin):
         self.add_issue(
             severity=severity,
             directive=[directive] + upstream_directives,
-            reason="The proxy_pass directive should use a variable for the hostname.",
+            reason="The {} directive should use a variable for the hostname.".format(directive.name),
         )

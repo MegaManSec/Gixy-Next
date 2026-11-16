@@ -1,17 +1,20 @@
 ---
 title: "Proxy Buffering Disabled"
-description: "Flags proxy_buffering off. Disabling buffering can make slow-client behavior tie up upstream connections and worker resources."
+description: "Flags proxy_buffering off, its fastcgi, uwsgi and scgi equivalents, and the request_buffering directives set to off. Without buffering, a slow client holds the backend worker serving it for the whole transfer."
 ---
 
-# [proxy_buffering_off] Disabling `proxy_buffering`
+# [proxy_buffering_off] Disabling upstream buffering
 
 ## What this check looks for
 
-This plugin looks for `proxy_buffering` directives that are explicitly set to `off`.
+This plugin reports these directives when they are explicitly set to `off`:
+
+- response buffering: `proxy_buffering`, `fastcgi_buffering`, `uwsgi_buffering`, `scgi_buffering`;
+- request body buffering: `proxy_request_buffering`, `fastcgi_request_buffering`, `uwsgi_request_buffering`, `scgi_request_buffering`.
 
 ## Why this is a problem
 
-When `proxy_buffering` is disabled, NGINX streams the upstream response directly to the client. That means a slow client can keep an upstream connection and NGINX worker resources occupied for longer than necessary, increasing the risk of slow-client (bandwidth-drip) DoS and upstream backpressure issues.
+Without buffering, NGINX passes the response or request body at the client's pace, so a slow download or upload keeps the upstream connection, and the backend worker serving it, busy for the whole transfer. Backends with a fixed number of workers, such as PHP-FPM, can be exhausted by a handful of slow clients.
 
 ## Bad configuration
 
@@ -31,21 +34,14 @@ location /api/ {
 }
 ```
 
-Buffering lets NGINX absorb differences between upstream speed and client speed, reducing resource pressure.
+Both kinds of buffering are on by default, so removing the `off` lines is enough.
 
-## Safe exception
+## How severity is determined
 
-If you are intentionally streaming (for example SSE, long polling, or large downloads) and you need low-latency forwarding, disabling buffering can be appropriate. When you do, apply tight timeouts and limits:
+- **MEDIUM**: response buffering is off.
+- **LOW**: request body buffering is off. Large uploads are often streamed on purpose.
 
-```nginx
-location /events/ {
-    proxy_pass http://upstream;
-    proxy_buffering off;
+## Additional notes
 
-    # Add guardrails so slow clients do not hold resources forever
-    send_timeout 10s;
-    proxy_read_timeout 60s;
-}
-```
-
-The plugin still reports this location. If the streaming endpoint is intentional, skip the check with `--skips proxy_buffering_off`.
+- Disabling buffering can be intentional for streaming (SSE, long polling, large transfers). The plugin still reports it; skip the check with `--skips proxy_buffering_off`.
+- `grpc_pass` always streams and has no buffering directive, so it is not checked.

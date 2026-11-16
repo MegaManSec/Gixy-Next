@@ -94,6 +94,8 @@ def normalize_address(address):
     """Collapse the spellings nginx treats as one listen address."""
     if address in ("", "*", "0.0.0.0"):
         return "*"
+    if address.lower() == "localhost":
+        return "127.0.0.1"
     try:
         parsed = ipaddress.ip_address(address)
     except ValueError:

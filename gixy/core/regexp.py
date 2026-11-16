@@ -885,7 +885,10 @@ class GroupRefToken(Token):
         return self.group.must_startswith(char, strict=strict)
 
     def generate(self, context):
-        return self.group.generate(context)
+        return [
+            value.replace(_AT_BEGIN_SENTINEL, "").replace(_AT_END_SENTINEL, "")
+            for value in self.group.root.generate(context)
+        ]
 
     def __str__(self):
         return "\\\\{0}".format(self.id)
