@@ -7,10 +7,9 @@ from gixy.core import builtin_variables as builtins
 from gixy.core.config import Config
 from gixy.core.context import get_context, pop_context, purge_context, push_context
 from gixy.core.plugins_manager import PluginsManager
-from gixy.directives.block import GeoBlock, IfBlock, LocationBlock, MapBlock, ServerBlock, resets_captures
+from gixy.directives.block import GeoBlock, IfBlock, LocationBlock, MapBlock
 from gixy.directives.directive import (
     AuthRequestSetDirective,
-    MapDirective,
     PerlSetDirective,
     RewriteDirective,
     RootDirective,
@@ -107,7 +106,7 @@ class Manager(object):
                 push_context(directive)
             if isinstance(directive, LocationBlock) and directive.path.startswith("@"):
                 self._add_location_captures(directive.parent)
-            before = copy.deepcopy(get_context()) if isinstance(directive, IfBlock) else None
+            before = self._before_if(directive)
             self._update_variables(directive)
             self.auditor.audit(directive)
             if directive.is_block:
@@ -179,7 +178,7 @@ class Manager(object):
                 for var in self._provided_variables(directive):
                     context.add_var(var.name, var)
             elif directive.is_block and not directive.self_context:
-                before = copy.deepcopy(context) if isinstance(directive, IfBlock) else None
+                before = self._before_if(directive)
                 if directive.provide_variables:
                     for var in self._provided_variables(directive):
                         context.add_var(var.name, var)
@@ -199,22 +198,29 @@ class Manager(object):
             before = context.variables[kind].get(name) or Variable(name=name, value="", have_script=False)
             context.add_var(name, Variable(name=name, alternatives=(before,) + tuple(options)))
 
+    @staticmethod
+    def _evaluates_regex(directive):
+        if isinstance(directive, (LocationBlock, IfBlock)):
+            return directive.is_regex
+        return isinstance(directive, RewriteDirective)
+
+    def _before_if(self, directive):
+        if not isinstance(directive, IfBlock):
+            return None
+        before = copy.deepcopy(get_context())
+        if directive.is_regex:
+            before.clear_index_vars()
+        return before
+
     def _update_variables(self, directive):
         # TODO(buglloc): finish him!
-        if isinstance(directive, LocationBlock) and (directive.is_regex or resets_captures(directive)):
-            context = get_context()
-            context.variables["index"] = {
-                k: v for k, v in context.variables["index"].items() if not isinstance(v.provider, ServerBlock)
-            }
         if not directive.provide_variables:
             return
 
         context = get_context()
-        variables = self._provided_variables(directive)
-        has_captures = any(var.name == 1 for var in variables)
-        if has_captures and not isinstance(directive, MapDirective):
+        if self._evaluates_regex(directive):
             context.clear_index_vars()
-        for var in variables:
+        for var in self._provided_variables(directive):
             context.add_var(var.name, var)
 
     def __enter__(self):
