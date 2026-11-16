@@ -58,7 +58,6 @@ class worker_rlimit_nofile_vs_connections(Plugin):
         if self.has_directive:
             return
 
-        # If worker_connections isn't set for some reason, compare against the default value.
         worker_connections = self.DEFAULT_WORKER_CONNECTIONS
 
         worker_rlimit_nofile_directive = root.some("worker_rlimit_nofile")
@@ -68,22 +67,6 @@ class worker_rlimit_nofile_vs_connections(Plugin):
                 self.add_issue(
                     directive=worker_rlimit_nofile_directive,
                     reason=(
-                        "`worker_rlimit_nofile` should be at least twice the "
-                        f"default `worker_connections` ({worker_connections})."
-                    ),
-                )
-        else:
-            # In the current code, this can never happen, since 1024 < 1024 is always false.
-            # We keep this code around just in case we ever want to change the defaults, though.
-            worker_rlimit_nofile = self.DEFAULT_WORKER_RLIMIT_NOFILE
-            if worker_rlimit_nofile < worker_connections * 2:
-                self.add_issue(
-                    directive=root,
-                    severity=gixy.severity.LOW,
-                    reason=(
-                        "Missing `worker_rlimit_nofile` and `worker_connections`. "
-                        "Assuming default `worker_rlimit_nofile`="
-                        f"{worker_rlimit_nofile}, "
                         "`worker_rlimit_nofile` should be at least twice the "
                         f"default `worker_connections` ({worker_connections})."
                     ),
