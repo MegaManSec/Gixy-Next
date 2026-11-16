@@ -109,7 +109,7 @@ Gixy-Next can detect a wide range of NGINX security and performance misconfigura
 - [[quic_bpf_reuseport] QUIC connections silently dropped after reload](https://gixy.io/plugins/quic_bpf_reuseport/)
 - [[regex_redos] Regular expression denial of service (ReDoS)](https://gixy.io/plugins/regex_redos/)
 - [[resolver_external] Using external DNS nameservers](https://gixy.io/plugins/resolver_external/)
-- [[return_bypasses_allow_deny] Return directive bypasses allow/deny restrictions](https://gixy.io/plugins/return_bypasses_allow_deny/)
+- [[return_bypasses_allow_deny] `return` bypasses `allow`/`deny` and the auth modules](https://gixy.io/plugins/return_bypasses_allow_deny/)
 - [[ssl_ecdh_curve] Group lists that break startup or post-quantum key exchange](https://gixy.io/plugins/ssl_ecdh_curve/)
 - [[ssl_stapling_letsencrypt] OCSP stapling does nothing for a Let's Encrypt certificate](https://gixy.io/plugins/ssl_stapling_letsencrypt/)
 - [[ssl_stapling_without_resolver] OCSP responder never re-resolved without a resolver](https://gixy.io/plugins/ssl_stapling_without_resolver/)
