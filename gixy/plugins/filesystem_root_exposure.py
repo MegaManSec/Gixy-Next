@@ -58,7 +58,6 @@ class filesystem_root_exposure(Plugin):
                 literal.endswith("/")
                 and not posixpath.normpath(literal).strip("/")
                 and part.provider is location
-                and part.can_contain("/")
             )
         return False
 
