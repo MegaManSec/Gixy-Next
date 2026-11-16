@@ -24,6 +24,7 @@ def test_back_reference_in_server_name_is_not_an_error():
 
 
 @pytest.mark.parametrize("start,count", [("a", 0), ("$arg_a", 1)])
+@pytest.mark.timeout(60)
 def test_chained_conditional_assignments_are_audited_in_linear_time(start, count):
     branches = " ".join('if ($arg_%d) { set $value "${value}%d"; }' % (i, i) for i in range(64))
     config = "http { server { listen 80; set $value %s; %s location / { proxy_pass http://$value; } } }" % (

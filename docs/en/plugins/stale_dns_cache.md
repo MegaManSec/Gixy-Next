@@ -126,5 +126,6 @@ http {
 ## Additional notes
 
 - IP addresses and `unix:` sockets need no lookup and are not reported, nor is a variable whose values are all of those, such as a `map` or `geo` that picks a PHP-FPM socket, or a value that passes through `set` in either direction.
+- A target selects an `upstream` the way NGINX does: by host name, case-insensitively, whatever the scheme, and only without an explicit port. `proxy_pass http://$up:8080` never selects the upstream named by `$up`, so it needs a `resolver`.
 - `localhost` is exempt only in a literal target, which NGINX resolves at startup through the system resolver. Once the target contains a variable, even just in the path, NGINX resolves the host at request time through `resolver`, and `localhost` counts like any other name.
 - For more information about this issue, read [this post](https://joshua.hu/nginx-dns-caching).
