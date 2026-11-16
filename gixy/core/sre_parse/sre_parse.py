@@ -14,6 +14,7 @@ from __future__ import print_function
 
 """Internal support module for sre"""
 
+import string
 import unicodedata
 
 from gixy.core.sre_parse.sre_constants import *
@@ -77,6 +78,23 @@ CLASS_CATEGORIES = {
         IN,
         [(RANGE, (0x01, 0x09)), (RANGE, (0x0E, 0x7E)), (RANGE, (0x80, 0x84)), (RANGE, (0x86, 0xFF))],
     ),
+}
+
+POSIX_CLASSES = {
+    "alnum": string.ascii_letters + string.digits,
+    "alpha": string.ascii_letters,
+    "ascii": "".join(map(chr, range(0x80))),
+    "blank": " \t",
+    "cntrl": "".join(map(chr, range(0x20))) + "\x7F",
+    "digit": DIGITS,
+    "graph": "".join(map(chr, range(0x21, 0x7F))),
+    "lower": string.ascii_lowercase,
+    "print": "".join(map(chr, range(0x20, 0x7F))),
+    "punct": string.punctuation,
+    "space": WHITESPACE,
+    "upper": string.ascii_uppercase,
+    "word": string.ascii_letters + string.digits + "_",
+    "xdigit": HEXDIGITS,
 }
 
 FLAGS = {
@@ -302,6 +320,18 @@ def _property_chars(name):
     return [c for c in chars if unicodedata.category(c)[0] in "LM"]
 
 
+def _char_set(chars, negate):
+    if negate:
+        chars = set(_property_chars("any")) - set(chars)
+    items = []
+    for c in sorted(ord(c) for c in chars):
+        if items and items[-1][1] == c - 1:
+            items[-1][1] = c
+        else:
+            items.append([c, c])
+    return IN, [(LITERAL, lo) if lo == hi else (RANGE, (lo, hi)) for lo, hi in items]
+
+
 def _property(source, escape):
     if source.match("{"):
         name = ""
@@ -317,16 +347,34 @@ def _property(source, escape):
     if name.startswith("^"):
         negate = not negate
         name = name[1:]
-    chars = set(_property_chars(name))
-    if negate:
-        chars = set(_property_chars("any")) - chars
-    items = []
-    for c in sorted(ord(c) for c in chars):
-        if items and items[-1][1] == c - 1:
-            items[-1][1] = c
-        else:
-            items.append([c, c])
-    return IN, [(LITERAL, lo) if lo == hi else (RANGE, (lo, hi)) for lo, hi in items]
+    return _char_set(_property_chars(name), negate)
+
+
+def _posix_class(source):
+    here = source.tell()
+    if not source.match(":"):
+        return None
+    name = ""
+    while source.next and source.next not in ("[", "]"):
+        this = source.get()
+        if this == ":" and source.match("]"):
+            negate = name.startswith("^")
+            if negate:
+                name = name[1:]
+            if name not in POSIX_CLASSES:
+                raise error("unknown POSIX class name")
+            return _char_set(POSIX_CLASSES[name], negate)
+        name = name + this
+    source.seek(here)
+    return None
+
+
+def _class_item(source, this):
+    if this[0] == "\\":
+        return _class_escape(source, this)
+    if this == "[":
+        return _posix_class(source) or (LITERAL, ord(this))
+    return LITERAL, ord(this)
 
 
 def _group_reference(source, escape, state):
@@ -575,10 +623,15 @@ def _parse(source, state):
 
         elif this == "[":
             # character set
+            if source.next == "[" and source.string.startswith(("[:<:]]", "[:>:]]"), source.index - 1):
+                for _ in range(6):
+                    sourceget()
+                subpatternappend(CATEGORIES[r"\b"])
+                continue
             set = []
             setappend = set.append
-            ##          if sourcematch(":"):
-            ##              pass # handle character classes
+            if _posix_class(source):
+                raise error("POSIX named classes are supported only within a class")
             if sourcematch("^"):
                 setappend((NEGATE, None))
             # check remaining characters
@@ -593,10 +646,8 @@ def _parse(source, state):
                     continue
                 elif this == "\\E":
                     continue
-                elif this and this[0] == "\\":
-                    code1 = _class_escape(source, this)
                 elif this:
-                    code1 = LITERAL, ord(this)
+                    code1 = _class_item(source, this)
                 else:
                     raise error("unexpected end of regular expression")
                 if sourcematch("-"):
@@ -610,10 +661,7 @@ def _parse(source, state):
                         setappend((LITERAL, ord("-")))
                         break
                     elif this:
-                        if this[0] == "\\":
-                            code2 = _class_escape(source, this)
-                        else:
-                            code2 = LITERAL, ord(this)
+                        code2 = _class_item(source, this)
                         if code1[0] != LITERAL or code2[0] != LITERAL:
                             raise error("bad character range")
                         lo = code1[1]
