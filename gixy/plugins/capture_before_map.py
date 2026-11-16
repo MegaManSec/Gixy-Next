@@ -1,14 +1,13 @@
 import re
 
 import gixy
-from gixy.core.utils import REGEX_ARGUMENT_DIRECTIVES
+from gixy.core.utils import script_arguments
 from gixy.directives.block import GeoBlock, MapBlock
 from gixy.directives.directive import MapDirective
 from gixy.plugins.plugin import Plugin
 
 # nginx parses only single-digit `$1`..`$9`.
 REFERENCE_RE = re.compile(r"\$(?:([1-9])|([A-Za-z_][A-Za-z0-9_]*)|\{([A-Za-z0-9_]+)\})")
-IF_FILE_OPERATORS = frozenset(("-f", "!-f", "-d", "!-d", "-e", "!-e", "-x", "!-x"))
 
 
 class capture_before_map(Plugin):
@@ -61,23 +60,14 @@ class capture_before_map(Plugin):
 
     @staticmethod
     def _values(directive):
-        args = directive.args
         if isinstance(directive, MapDirective):
             parent = directive.parent
             while parent is not None and not isinstance(parent, (MapBlock, GeoBlock)):
                 parent = parent.parent
-            return args if isinstance(parent, MapBlock) else []
-        if directive.name == "if":
-            if len(args) == 3 and args[1] in ("=", "!="):
-                return args[2:]
-            if len(args) == 2 and args[0] in IF_FILE_OPERATORS:
-                return args[1:]
+            return directive.args if isinstance(parent, MapBlock) else []
+        if directive.is_block and directive.name != "if":
             return []
-        if directive.is_block or directive.name in REGEX_ARGUMENT_DIRECTIVES:
-            return []
-        if directive.name == "rewrite":
-            return args[1:2]
-        return args
+        return script_arguments(directive)
 
     def _regex_map_groups(self, directive):
         root = directive

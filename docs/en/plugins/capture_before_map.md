@@ -7,7 +7,7 @@ description: "Detects a value that reads a numbered capture before a variable fr
 
 ## What this check looks for
 
-A value with variables (`return`, `set`, `add_header`, `proxy_pass`, a `rewrite` replacement, an `if` comparison, a `map` value, and so on) where:
+A value with variables (`return`, `set`, `add_header`, `proxy_pass`, a `rewrite`, `proxy_redirect` or `proxy_cookie_*` replacement, an `if` comparison, a `map` value, and so on) where:
 
 - a numbered capture (`$1`, `$2`, ...) comes first,
 - a variable from a `map` with regex keys comes later,

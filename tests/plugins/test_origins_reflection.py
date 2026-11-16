@@ -72,14 +72,42 @@ def test_map_default_hop_is_followed(default, reflected):
     """ % default) == reflected
 
 
-def test_map_default_hop_requires_an_origin_keyed_map():
-    assert not _reflected("""
+@pytest.mark.parametrize("flag_map,cors_map,reflected", [
+    ("default 1;", "default $http_origin;", True),
+    ("default 0; ~^https://trusted\\.example$ 1;", 'default $tmp; 0 "";', False),
+    ("default 0; ~^https://trusted\\.example$ 1;", '1 $http_origin; default "";', False),
+    ("default 0; ~^https://trusted\\.example$ 1;", '0 $tmp; default "";', True),
+    ("default OFF;", "off $http_origin;", True),
+    ("https://trusted.example 1;", '1 $http_origin; default "";', False),
+    ("default 1;", "0 $http_origin;", False),
+])
+def test_origin_flag_map_is_followed_through_the_entry_an_untrusted_origin_selects(flag_map, cors_map, reflected):
+    assert _reflected("""
         http {
-            map $http_origin $allowed { default 0; ~^https://trusted\\.example$ 1; }
-            map $allowed $cors { default $tmp; 0 ""; }
+            map $http_origin $allowed { %s }
+            map $allowed $cors { %s }
             server { set $tmp $http_origin; add_header Access-Control-Allow-Origin $cors; }
         }
-    """)
+    """ % (flag_map, cors_map)) == reflected
+
+
+@pytest.mark.parametrize("ret,reflected", [
+    ('200 "secret"', True),
+    ("302 /login", True),
+    ("https://trusted.example/", True),
+    ("403", False),
+    ("444", False),
+    ("503", False),
+    ('200 "first"; return 403', True),
+    ('403; return 200 "x"', False),
+])
+def test_only_an_error_return_guards_reflection(ret, reflected):
+    assert _reflected("""
+        http { server { location / {
+            if ($http_origin != https://trusted.example) { return %s; }
+            add_header Access-Control-Allow-Origin $http_origin always;
+        } } }
+    """ % ret) == reflected
 
 
 def test_chain_report_lists_every_hop():

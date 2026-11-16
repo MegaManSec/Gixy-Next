@@ -4,7 +4,7 @@ from itertools import takewhile
 import gixy
 import gixy.core.sre_parse.sre_parse as sre_parse
 from gixy.core.regexp import PARSE_ERRORS, Regexp
-from gixy.core.utils import AUTH_DIRECTIVES, regex_arguments
+from gixy.core.utils import enforced_auth, regex_arguments
 from gixy.core.variable import EXTRACT_RE
 from gixy.directives.block import GeoBlock, IfBlock, LocationBlock, MapBlock
 from gixy.plugins.plugin import Plugin
@@ -97,14 +97,11 @@ def _regex_variable(pattern):
 
 
 def _restricts_access(block):
+    auth = enforced_auth(block)
     for child in block.children:
-        if child.name == "deny" or (child.is_block and _restricts_access(child)):
+        if child.name == "deny" or child.name in auth or (child.is_block and _restricts_access(child)):
             return True
-        if not child.args:
-            continue
-        if child.name in AUTH_DIRECTIVES and child.args[0] != "off":
-            return True
-        if child.name == "return" and child.args[0] in DENYING_RETURN_CODES:
+        if child.name == "return" and child.args and child.args[0] in DENYING_RETURN_CODES:
             return True
     return False
 

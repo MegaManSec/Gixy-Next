@@ -4,12 +4,19 @@ from urllib.parse import urlparse
 
 import gixy
 from gixy.core.regexp import PARSE_ERRORS, Regexp, RegexpTooComplex
-from gixy.core.utils import bare_variable_name, registrable_domain, resolve_inherited_list, resolve_variable_chain
+from gixy.core.utils import (
+    bare_variable_name,
+    is_error_return,
+    registrable_domain,
+    resolve_inherited_list,
+    resolve_variable_chain,
+)
 from gixy.core.variable import EXTRACT_RE
 from gixy.directives.block import MapBlock
 from gixy.directives.directive import (
     AddHeaderDirective,
     MapDirective,
+    MoreClearHeadersDirective,
     MoreSetHeadersDirective,
     SetDirective,
 )
@@ -378,16 +385,28 @@ class origins(Plugin):
     def _allows_credentials(self, node):
         """True when `Access-Control-Allow-Credentials: true` is also set on a response `node`
         adds its header to: in its block or any block below it that still inherits `node`,
-        by the `add_header` list in effect there or a `more_set_headers` there or above."""
+        by the `add_header` list in effect there or the last headers-more command for it."""
         for block in self._blocks_below(node.parent):
             headers = resolve_inherited_list(block, "add_header", "add_header_inherit")
-            headers += [msh for scope in (block, *block.parents) for msh in scope.find("more_set_headers")]
-            if node in headers and any(
-                value.strip().strip("\"'") == "true"
-                for _, value in self._header_directives(headers, "access-control-allow-credentials")
-            ):
+            more = self._more_headers(block)
+            if node not in headers and node not in more:
+                continue
+            values = [value for _, value in self._header_directives(headers, "access-control-allow-credentials")]
+            more_values = [value for _, value in self._header_directives(more, "access-control-allow-credentials")]
+            if any(value.strip().strip("\"'") == "true" for value in values + more_values[-1:]):
                 return True
         return False
+
+    @staticmethod
+    def _more_headers(block):
+        """headers-more commands run for a response from `block`: those of enclosing scopes first, then its own."""
+        scopes = (*reversed(list(block.parents)), block)
+        return [
+            directive
+            for scope in scopes
+            for directive in scope.children
+            if isinstance(directive, (MoreSetHeadersDirective, MoreClearHeadersDirective))
+        ]
 
     @classmethod
     def _blocks_below(cls, block):
@@ -415,7 +434,7 @@ class origins(Plugin):
         return self._has_origin_guard(directive)
 
     def _has_origin_guard(self, directive):
-        """An `if` in the serving location or its server that returns for every origin outside an allowlist."""
+        """An `if` in the serving location or its server that returns an error for every origin outside an allowlist."""
         scopes = [
             next((parent for parent in directive.parents if parent.name == name), None)
             for name in ("location", "server")
@@ -424,7 +443,8 @@ class origins(Plugin):
             if scope.name == "location" and scope.find_recursive("location"):
                 continue
             for block in scope.children:
-                if block.name != "if" or not block.variable or not block.find("return"):
+                returns = block.find("return") if block.name == "if" else []
+                if not returns or not block.variable or not is_error_return(returns[0]):
                     continue
                 if not self._is_origin_reflection(block.variable):
                     if self._origin_flag_rejects(block):
@@ -469,12 +489,14 @@ class origins(Plugin):
 
     @staticmethod
     def _header_directives(directives, header):
-        """(directive, value) for every add_header/more_set_headers among `directives` that sets `header`."""
+        """(directive, value) for every header directive among `directives` that sets or clears `header`."""
         for node in directives:
-            if not isinstance(node, (AddHeaderDirective, MoreSetHeadersDirective)):
+            if not isinstance(node, (AddHeaderDirective, MoreSetHeadersDirective, MoreClearHeadersDirective)):
                 continue
+            wildcard = isinstance(node, MoreClearHeadersDirective)
             for name, value in node.headers.items():
-                if name.strip().lower() == header:
+                name = name.strip().lower()
+                if name == header or (wildcard and name.endswith("*") and header.startswith(name[:-1])):
                     yield node, value
 
     @staticmethod
@@ -526,21 +548,35 @@ class origins(Plugin):
         except (*PARSE_ERRORS, RegexpTooComplex):
             return False
 
+    @staticmethod
+    def _selected_entry(mb, key):
+        """The entry of `mb` that a literal `key` selects: the matching literal key, else `default`."""
+        literal = {md.src_val.lower(): md for md in mb.entries if not md.is_regex}
+        return literal.get(key.lower(), literal.get("default"))
+
     def _origin_assignments(self, root, sets, name):
         """Unguarded `set $name ...` directives, `default` entries of maps keyed on $http_origin,
-        and every entry of maps keyed on variables unrelated to the Origin."""
+        the entry an untrusted Origin selects in a map keyed on such a map's variable, and
+        every entry of maps keyed on variables unrelated to the Origin."""
         for sd in sets:
             if sd.variable != name or self._has_origin_allowlist(sd):
                 continue
             yield sd, sd.value
         maps = [mb for mb in root.find_recursive("map") if isinstance(mb, MapBlock)]
         copies = self._origin_copies(root)
-        origin_keyed = {mb.variable for mb in maps if self._source_variables(mb) & copies}
+        origin_keyed = {mb.variable: mb for mb in maps if self._source_variables(mb) & copies}
         for mb in maps:
             if mb.variable != name:
                 continue
             sources = self._source_variables(mb)
-            if sources & origin_keyed:
+            flag = origin_keyed.get(bare_variable_name(mb.source))
+            if flag is not None:
+                untrusted = next((md.dest_val for md in flag.entries if md.src_val == "default"), "")
+                md = self._selected_entry(mb, untrusted)
+                if md is not None:
+                    yield md, md.dest_val
+                continue
+            if sources & origin_keyed.keys():
                 continue
             keyed_on_origin = bool(sources & copies)
             for md in mb.entries:
