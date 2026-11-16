@@ -25,8 +25,8 @@ class alias_traversal(Plugin):
     summary = "Path traversal via misconfigured alias."
     severity = gixy.severity.HIGH
     description = (
-        "Using alias in a prefixed location that doesn't end with a directory "
-        "separator could lead to path traversal vulnerability."
+        "A prefix location whose path or alias lacks a trailing slash, or an alias path built from a "
+        "request-controlled variable or capture, lets a request reach files outside the aliased directory."
     )
     help_url = "https://gixy.io/plugins/alias_traversal/"
     directives = ["alias"]
@@ -35,28 +35,20 @@ class alias_traversal(Plugin):
         for location in directive.parents:
             if location.name != "location":
                 continue
+            if location.path.startswith("@"):
+                return
 
-            if location.modifier in ("~", "~*"):
-                self.check_regex_location(directive, location)
-            elif not location.modifier or location.modifier == "^~":
-                self.check_prefix_location(directive, location)
-
+            alias_parts = compile_script(directive.path)
+            severities = list(self._variable_severities(directive, location, alias_parts))
+            if not location.modifier or location.modifier == "^~":
+                tail = self._literal_tail(alias_parts[-1]) if alias_parts else None
+                if not location.path.endswith("/"):
+                    severities.append(gixy.severity.HIGH if tail == "/" else gixy.severity.MEDIUM)
+                elif tail not in (None, "/"):
+                    severities.append(gixy.severity.MEDIUM)
+            if severities:
+                self.add_issue(severity=max(severities, key=gixy.severity.ALL.index), directive=directive)
             return
-
-    def check_prefix_location(self, directive, location):
-        alias_parts = compile_script(directive.path)
-        severities = list(self._variable_severities(directive, location, alias_parts))
-        tail = self._literal_tail(alias_parts[-1]) if alias_parts else None
-        if not location.path.endswith("/"):
-            severities.append(gixy.severity.HIGH if tail == "/" else gixy.severity.MEDIUM)
-        elif tail not in (None, "/"):
-            severities.append(gixy.severity.MEDIUM)
-        if severities:
-            self.report_issue(directive, location, max(severities, key=gixy.severity.ALL.index))
-
-    def check_regex_location(self, directive, location):
-        for severity in self._variable_severities(directive, location, compile_script(directive.path)):
-            self.report_issue(directive, location, severity)
 
     @staticmethod
     def _literal_tail(part):
@@ -111,8 +103,12 @@ class alias_traversal(Plugin):
                         # location /site([^/]*) ~ { alias /lol/$1; }
                         yield gixy.severity.MEDIUM
             elif not part.must_startswith("/"):
+                # location /files/ { alias /home$arg_dir/; } with ?dir=/../../etc
+                raw = part.can_startswith("/") and any(
+                    source.provider is None and self._can_be_parent_dir(source) for source in sources
+                )
                 # location /site/(.*) ~ { alias /lol$1; }
-                yield gixy.severity.MEDIUM
+                yield gixy.severity.HIGH if raw else gixy.severity.MEDIUM
 
             prev_part = part
 
@@ -164,9 +160,3 @@ class alias_traversal(Plugin):
             if prev is not _NOT_FOUND:
                 return prev
         return _NOT_FOUND
-
-    def report_issue(self, directive, location, severity):
-        self.add_issue(
-            severity=severity,
-            directive=directive,
-        )
