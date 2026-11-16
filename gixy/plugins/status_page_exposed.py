@@ -183,20 +183,20 @@ class status_page_exposed(Plugin):
             return
 
         has_allow, has_deny_all = self._effective_access(directive)
+        if has_deny_all:
+            return
 
-        if not has_allow or not has_deny_all:
-            reasons = []
-            if has_auth:
-                reasons.append(
-                    "under `satisfy any` an `allow` covering every address lets "
-                    "clients through before the configured authentication runs"
-                )
-            if not has_allow:
-                reasons.append("no allow directive to whitelist trusted IPs")
-            if not has_deny_all:
-                reasons.append("no 'deny all' to block unauthorized access")
-
-            self.add_issue(
-                directive=directive,
-                reason="stub_status exposed: " + "; ".join(reasons),
+        reasons = []
+        if has_auth:
+            reasons.append(
+                "under `satisfy any` an `allow` covering every address lets "
+                "clients through before the configured authentication runs"
             )
+        if not has_allow:
+            reasons.append("no allow directive to whitelist trusted IPs")
+        reasons.append("no effective 'deny all' to block unauthorized access")
+
+        self.add_issue(
+            directive=directive,
+            reason="stub_status exposed: " + "; ".join(reasons),
+        )

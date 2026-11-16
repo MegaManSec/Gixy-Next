@@ -42,4 +42,4 @@ server {
 ## Additional notes
 
 - This applies to every variable: those defined with `set`, `map` and `geo`, built-in ones such as `$http_*` and `$arg_*`, and named captures. A capture `(?<Name>...)` is lowercased too, so `$Name` and `$name` are the same variable.
-- Regular expressions are not checked: `location ~`, `if (... ~ ...)`, `rewrite` patterns and every `~` argument such as `server_name ~` or `proxy_redirect ~`. There `$Name` is an end-of-string anchor followed by `Name`, and `\$Name` a literal dollar sign. In a value, `"\$Name"` still references `$name`, because the backslash does not escape `$`.
+- Only values NGINX expands are checked. Regular expressions (`location ~`, `if (... ~ ...)`, `rewrite` patterns, `server_name ~` and the `~` pattern of `proxy_redirect` and `proxy_cookie_*`) are skipped: there `$Name` is an end-of-string anchor followed by `Name`, and `\$Name` a literal dollar sign. Literal names (`server_name`, `valid_referers`) are skipped too. A value is checked even when it starts with `~`, and `"\$Name"` in a value still references `$name`, because the backslash does not escape `$`.

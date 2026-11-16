@@ -5,7 +5,7 @@ import tldextract
 import gixy
 import gixy.core.builtin_variables as builtins
 from gixy.core.utils import PASS_DIRECTIVES
-from gixy.core.variable import compile_script
+from gixy.core.variable import compile_hash_entry, compile_script
 from gixy.directives.directive import is_ipv4, is_ipv6
 from gixy.plugins.plugin import Plugin
 
@@ -46,11 +46,26 @@ class stale_dns_cache(Plugin):
         host = host.lower().rstrip(".")
         return not startup or (host not in ("localhost", "ip6-localhost") and not host.endswith(".localhost"))
 
-    @staticmethod
-    def _option_values(option):
-        if not isinstance(option.value, list):
-            return [option.final_value]
-        return [entry.provider.dest_val for entry in option.value]
+    def _targets(self, script, seen=()):
+        targets = [""]
+        for var in script:
+            options = var.options
+            if not options or var in seen or (var.name and builtins.is_builtin(var.name)):
+                break
+            values = [value for option in options for value in self._option_values(option, seen + (var,))]
+            if not all(isinstance(value, str) for value in values):
+                break
+            targets = [target + value for target in targets for value in values]
+            if len(values) > 1:
+                break
+        return targets
+
+    def _option_values(self, option, seen):
+        if isinstance(option.value, list):
+            return [target for entry in option.value for target in self._targets(compile_hash_entry(entry) or [], seen)]
+        if option.depends:
+            return self._targets(option.depends, seen)
+        return [option.final_value]
 
     def audit(self, directive):
         if not getattr(directive, "args", None):
@@ -69,21 +84,7 @@ class stale_dns_cache(Plugin):
         if not raw_host:
             return
 
-        parsed_host_compiled = compile_script(
-            raw_host
-        )  # proxy_pass $var <- $var may be a variable to an upstream (ugly, but valid).
-        parsed_hosts = [""]  # this is fine, just ugly; parsed_hosts are only really used for upstream anyways
-        upstream_name_candidates = set()
-        for var in parsed_host_compiled:
-            if var.name and builtins.is_builtin(var.name):
-                break
-            values = [value for option in var.options for value in self._option_values(option)]
-            if not all(isinstance(value, str) for value in values):
-                break
-            upstream_name_candidates.update(values)
-            parsed_hosts = [host + value for host in parsed_hosts for value in values]
-            if len(values) > 1:
-                break
+        parsed_hosts = self._targets(compile_script(raw_host))
 
         if not any(self._needs_dns(host, startup="$" not in proxy_target) for host in parsed_hosts):
             return
@@ -100,10 +101,7 @@ class stale_dns_cache(Plugin):
             upstream_name = (
                 upstream_args[0] if upstream_args and len(upstream_args) == 1 else None
             )
-            if upstream_name and (
-                upstream_name in parsed_hosts
-                or upstream_name in upstream_name_candidates
-            ):
+            if upstream_name and upstream_name in parsed_hosts:
                 found_upstream = True
                 for child in upstream.children:
                     if child.name != "server":
