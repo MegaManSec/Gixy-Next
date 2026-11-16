@@ -99,7 +99,7 @@ class proxy_pass_normalized(Plugin):
     directives = PASS_DIRECTIVES
 
     @classmethod
-    @memoize_query(on_cycle=True)
+    @memoize_query(on_cycle=False)
     def _carries_decoded_path(cls, var):
         if var.alternatives:
             return any(cls._carries_decoded_path(option) for option in var.alternatives)

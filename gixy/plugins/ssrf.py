@@ -119,7 +119,7 @@ class ssrf(Plugin):
                 return True
         return False
 
-    @memoize_query(on_cycle=True)
+    @memoize_query(on_cycle=False)
     def _host_tainted(self, var):
         """True if the host part of `var` can carry user input, None if the
         variable ends the host part with a mandatory `/` before any such
