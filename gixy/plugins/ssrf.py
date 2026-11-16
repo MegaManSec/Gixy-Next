@@ -143,14 +143,6 @@ def _hash_values(var):
     return values
 
 
-def _depends_on_host(var):
-    if var.name == "host":
-        return True
-    if isinstance(var.value, list):
-        return any(_depends_on_host(dep) for parts in _hash_values(var) for dep in parts)
-    return any(_depends_on_host(dep) for dep in var.depends or var.alternatives or ())
-
-
 def _literal_start(location):
     if not location.is_regex:
         return location.path
@@ -242,7 +234,7 @@ class ssrf(Plugin):
                 reason = "Variable `${var}` can contain untrusted user input.".format(
                     var=var.name
                 )
-                if self._host_explanation and _depends_on_host(var):
+                if self._host_explanation and var.depends_on({"host"}):
                     reason += " " + self._host_explanation
                 self.add_issue(directive=[directive] + var.providers, reason=reason)
 

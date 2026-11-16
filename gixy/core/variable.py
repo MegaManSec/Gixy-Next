@@ -376,3 +376,16 @@ class Variable(object):
 
         collect(self)
         return result
+
+    def depends_on(self, names):
+        """
+        Checks if the variable is one of `names` or is built from one, through `set`, `map` and `geo` values.
+
+        :param collection names: variable names.
+        :return: True if the variable can carry one of them.
+        """
+        if self.name in names:
+            return True
+        if isinstance(self.value, list):
+            return any(dep.depends_on(names) for entry in self.value for dep in compile_hash_entry(entry) or ())
+        return any(dep.depends_on(names) for dep in self.depends or self.alternatives or ())
