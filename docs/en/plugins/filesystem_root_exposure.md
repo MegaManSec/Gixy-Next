@@ -10,7 +10,7 @@ description: "Detects root and alias directives that resolve to /, which let cli
 This plugin flags:
 
 - a `root` or `alias` whose path resolves to `/`: the bare `/`, and spellings of it such as `//`, `/./` or `/usr/..`;
-- an `alias` in a regex location that puts a capture able to contain `/` right after a leading `/`, such as `alias /$1;`.
+- an `alias` in a regex location whose path is `/` followed directly by a capture that can contain `/`, such as `alias /$1;`.
 
 ## Why this is a problem
 
@@ -60,7 +60,7 @@ If the location only proxies or returns and never serves files, it does not need
 
 ## Additional notes
 
-- Paths containing variables are not checked, since their value is only known at request time, except a location capture right after `/` in an `alias`, as above.
+- Paths containing variables are not checked, since their value is only known at request time, except the `alias /$1;` case above.
 - `..` is resolved textually, so `/usr/..` counts as `/`. If a directory before `..` is a symlink, the operating system resolves `..` from the symlink's target instead: on macOS `/tmp` points to `/private/tmp`, so `root /tmp/..;` serves `/private`, not `/`.
 - NGINX joins the `alias` and the rest of the URI as text. Under `location /files/`, `alias /.;` maps `/files/etc/passwd` to `/.etc/passwd`, not `/etc/passwd`, so in a location ending in `/` an `alias` is only flagged when it also ends in `/`. Under `location /files`, the same alias maps the request to `/./etc/passwd` and is flagged; [alias_traversal](alias_traversal.md) reports that location too.
 - A plain `alias /;` is only flagged in a prefix location (no modifier, or `^~`). In a regex or exact-match (`=`) location, `alias` replaces the whole request path, so every request maps to `/` itself rather than to a file under it.

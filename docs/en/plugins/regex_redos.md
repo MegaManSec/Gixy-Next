@@ -1,6 +1,6 @@
 ---
 title: "Regex Denial of Service"
-description: "Detects regular expressions that can backtrack catastrophically (ReDoS), so each crafted request costs a worker CPU until PCRE2's match limit stops it."
+description: "Detects regular expressions that can backtrack catastrophically (ReDoS), so each crafted request burns worker CPU until PCRE2's match limit stops it."
 ---
 
 # [regex_redos] Regular expression denial of service (ReDoS)
@@ -14,7 +14,7 @@ Regular expressions that may backtrack catastrophically ([ReDoS](https://en.wiki
 
 ## Why this is a problem
 
-An ambiguous pattern, such as nested quantifiers, can take exponential time on crafted input. NGINX uses PCRE2's default match limit, so each such request costs the worker about 0.1 s of CPU (less with `pcre_jit`) and logs `pcre2_match() failed: -47`. A `location` or `if` match that hits the limit also fails the request with 500.
+An ambiguous pattern, such as one with nested quantifiers, can take exponential time on crafted input. NGINX uses PCRE2's default match limit, so each such request costs the worker about 0.1 s of CPU (less with `pcre_jit`) and logs `pcre2_match() failed: -47`. A `location` or `if` match that hits the limit also fails the request with 500.
 
 ## Bad configuration
 

@@ -1,6 +1,6 @@
 ---
 title: "Alias Path Traversal"
-description: "Detects alias locations that can be abused for directory traversal when the location and alias trailing slashes do not match."
+description: "Detects alias directives that let a request escape the aliased directory: a location and alias that disagree on a trailing slash, or a capture or request variable in the alias path."
 ---
 
 # [alias_traversal] Path traversal via misconfigured alias
@@ -15,7 +15,7 @@ This plugin flags an `alias` that lets a request reach files outside the aliased
 
 ## Why this is a problem
 
-NGINX replaces the matched location prefix with the alias and appends the rest of the URI as text, and it only collapses `..` when it is a whole path segment of the URI.
+NGINX replaces the matched location prefix with the alias and appends the rest of the URI as text. It collapses `..` only when it is a whole URI segment, so `/i../` passes through unchanged, and a `..` inside a variable is never checked.
 
 ## Bad configuration
 
@@ -85,3 +85,9 @@ location = /i.gif {
 
 - **HIGH**: the path can climb out of the directory, e.g. from `/var/www/` to `/var/www/../../etc/passwd`.
 - **MEDIUM**: only a restricted escape is possible, e.g. from `/var/www` to `/var/www-anything-except-dot`.
+
+## Additional notes
+
+- A capture that follows a `/` in the location regex, such as `^/images/(.*)$`, is not reported: NGINX has already collapsed `..` segments in the URI. Nor is a capture that cannot form `..`, such as `(\.[a-z]+)`.
+- `$host`, `$http_host` and `server_name` captures are not reported, since NGINX rejects a Host header containing `/` or `..`.
+- `$remote_user` is not reported while `auth_basic` with an `auth_basic_user_file` is in effect and `satisfy` is not `any`: only user names listed in the file get through. Under `satisfy any`, a client from an allowed address can send any user name, so it is reported.

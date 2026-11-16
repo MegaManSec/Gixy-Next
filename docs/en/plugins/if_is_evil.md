@@ -37,7 +37,7 @@ location /only-one-if {
 }
 ```
 
-This is a classic foot-gun: you expect both headers, but you will typically only see one, because `add_header` is not "safe" inside this style of `if` usage.
+You expect both headers but get only the second: each matching `if` replaces the location's configuration with its own, and an `add_header` set in one `if` block is not inherited by the next.
 
 Another common pitfall:
 

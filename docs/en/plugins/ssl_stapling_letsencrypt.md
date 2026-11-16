@@ -1,5 +1,5 @@
 ---
-title: "OCSP Stapling With a Let's Encrypt Certificate"
+title: "OCSP Stapling With Let's Encrypt"
 description: "Let's Encrypt retired its OCSP responders on 2025-08-06, so ssl_stapling on with a certbot certificate staples nothing and is dead configuration."
 ---
 
@@ -9,21 +9,13 @@ description: "Let's Encrypt retired its OCSP responders on 2025-08-06, so ssl_st
 
 This plugin flags `server` blocks where all of the following are true:
 
-- The server handles SSL/TLS connections: a `listen` of its own has `ssl`, `quic` or `http3`, or shares its address and port with another server's `listen ... ssl`
-- `ssl_stapling on;` is in effect — declared directly in the server or inherited from an enclosing block
-- The `ssl_certificate` in effect for the server (its own, or the enclosing block's when it has none) points under `/etc/letsencrypt/`, certbot's default layout. An `ssl_trusted_certificate` there counts only when no certificate from another path is in effect, because NGINX takes the OCSP URL from the certificate
+- The server handles TLS: one of its `listen` directives has `ssl`, `quic` or `http3`, or another server has `listen ... ssl` on the same address and port
+- `ssl_stapling on;` is in effect, in the server or inherited from an enclosing block
+- The `ssl_certificate` in effect for the server (its own, or the enclosing block's) points under `/etc/letsencrypt/`, certbot's default layout. An `ssl_trusted_certificate` under that path counts too, unless the `ssl_certificate` in effect is a fixed path elsewhere, since the OCSP URL comes from the certificate
 
 ## Why this is a problem
 
-Nearly every NGINX TLS guide written before 2025 ends with the same three lines:
-
-```nginx
-ssl_stapling on;
-ssl_stapling_verify on;
-ssl_trusted_certificate /etc/letsencrypt/live/example.com/chain.pem;
-```
-
-For a Let's Encrypt certificate those lines now do nothing. Let's Encrypt stopped including OCSP URLs in new certificates on **2025-05-07** and shut its responders down on **2025-08-06**; it relies on short certificate lifetimes and CRLs instead. With no OCSP URL in the certificate, NGINX has nothing to fetch and logs a warning at startup:
+Let's Encrypt stopped including OCSP URLs in new certificates on **2025-05-07** and shut its responders down on **2025-08-06**; it relies on short certificate lifetimes and CRLs instead. The `ssl_stapling on;` and `ssl_trusted_certificate` lines that TLS guides written before then recommend now do nothing for its certificates: with no OCSP URL in the certificate, NGINX has nothing to fetch, logs a warning at startup and staples nothing:
 
 ```console
 $ nginx -t
@@ -82,6 +74,6 @@ server {
 ## Additional notes
 
 - Detection is by path, so the reason says "appears to be": certbot can write to `/etc/letsencrypt/` for another ACME server with `--server`.
-- The check is deliberately narrow. Other ACME CAs, such as ZeroSSL, Google Trust Services and Buypass, still run OCSP responders, so a broader ACME-path heuristic would produce false positives.
+- The check is deliberately narrow: other ACME CAs, such as ZeroSSL, Google Trust Services and Buypass, still run OCSP responders, so a broader ACME-path heuristic would produce false positives.
 - Let's Encrypt certificates kept somewhere else (`acme.sh` in `~/.acme.sh`, `lego`, certbot with a custom `--config-dir`) are not detected.
 - A Let's Encrypt server with stapling on and no `resolver` is also reported by [ssl_stapling_without_resolver](ssl_stapling_without_resolver.md), which cannot see that the certificate has no OCSP URL. Removing the stapling directives resolves both.

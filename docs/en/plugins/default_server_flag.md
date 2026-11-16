@@ -11,7 +11,7 @@ This plugin reports when multiple `server` blocks share the same `listen` addres
 
 ## Why this is a problem
 
-When an incoming request does not match any `server_name`, NGINX still has to pick a server block. Without an explicit default, selection becomes harder to reason about and may change when configs are refactored or include order changes. That can lead to requests landing on the wrong virtual host, exposing unintended content or certificates.
+When a request's host name matches no `server_name`, NGINX routes it to the default server for that socket. Without the flag, that is whichever `server` was declared first, so the choice changes when files are reordered or included differently, and requests can land on the wrong virtual host and get its content or certificate.
 
 ## Bad configuration
 
@@ -55,7 +55,7 @@ http {
 }
 ```
 
-Requests for an unknown hostname will be handled by whichever server ends up being the default implicitly.
+Requests for an unknown host name go to whichever server is declared first on each socket.
 
 ## Better configuration
 
@@ -82,50 +82,16 @@ http {
 
         return 444;
     }
-
-    # a.test
-    server {
-        listen 80;
-        server_name a.test;
-
-        return 301 https://a.test$request_uri;
-    }
-
-    server {
-        listen 443 ssl;
-        server_name a.test;
-
-        ssl_certificate     /etc/ssl/a.test.crt;
-        ssl_certificate_key /etc/ssl/a.test.key;
-
-        location / { return 200 "a\n"; }
-    }
-
-    # b.test
-    server {
-        listen 80;
-        server_name b.test;
-
-        return 301 https://b.test$request_uri;
-    }
-
-    server {
-        listen 443 ssl;
-        server_name b.test;
-
-        ssl_certificate     /etc/ssl/b.test.crt;
-        ssl_certificate_key /etc/ssl/b.test.key;
-
-        location / { return 200 "b\n"; }
-    }
 }
 ```
+
+The `a.test` and `b.test` servers stay as they are.
 
 ## Additional notes
 
 This plugin only runs on a full configuration, one with a top-level `http` or `events` block.
 
-Sockets are compared the way NGINX itself compares them. `listen 80`, `listen *:80`, `listen 0.0.0.0:80` and `listen 0.0.0.0` all name one socket, as do `listen [::]:80`, `listen [::0]:80` and `listen [::]`; an argument with no port implies port 80. The IPv4 and IPv6 wildcards on one port stay separate, and so do sockets of different types - `listen 443 ssl` and `listen 443 quic` each have their own default server, as do `listen 12345` and `listen 12345 udp` in `stream`.
+Sockets are compared the way NGINX itself compares them. `listen 80`, `listen *:80`, `listen 0.0.0.0:80` and `listen 0.0.0.0` all name one socket, as do `listen [::]:80`, `listen [::0]:80` and `listen [::]`; an argument with no port implies port 80. The IPv4 and IPv6 wildcards on one port stay separate, and so do sockets of different types: `listen 443 ssl` and `listen 443 quic` each have their own default server, as do `listen 12345` and `listen 12345 udp` in `stream`.
 
 `listen localhost` is compared as `127.0.0.1`. Whether it also binds `[::1]` depends on the target's resolver, so that is not assumed. Other hostnames are compared by name.
 

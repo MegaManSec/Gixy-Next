@@ -14,9 +14,9 @@ This plugin warns when the `resolver` directive points to a nameserver outside y
 
 ## Why this is a problem
 
-NGINX caches the answers its resolver gets at request time. The resolver sends every query from one long-lived UDP socket, so the only thing an off-path attacker has to guess is a 16-bit query ID. An attacker who can trigger lookups, for example through a `proxy_pass` with variables, can race spoofed answers into the cache and redirect traffic. Spoofing a loopback or private nameserver from outside is much harder.
+NGINX caches the answers its resolver gets at request time, and the resolver is easy to spoof: it sends every query to a nameserver from one long-lived UDP socket, so an off-path attacker only has to guess a 16-bit query ID. An attacker who can trigger lookups, for example through a `proxy_pass` with variables, can race spoofed answers into the cache and send traffic to a host they control. Spoofing a nameserver on loopback or a private network from outside is much harder.
 
-Various vulnerabilities have been [discovered](https://web.archive.org/web/20250317201620/https://blog.zorinaq.com/nginx-resolver-vulns/) in Nginx's dns resolver, with some of them still unfixed.
+Several vulnerabilities have been [found](https://web.archive.org/web/20250317201620/https://blog.zorinaq.com/nginx-resolver-vulns/) in NGINX's DNS resolver, some of them still unfixed.
 
 ## Bad configuration
 

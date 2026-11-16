@@ -1,27 +1,20 @@
 ---
-title: "Map Default Value Missing"
-description: "Detects hash/geo blocks that omit a default. Missing defaults can cause unexpected fall-through behavior that weakens access control, routing, and rate-limit logic."
+title: "Missing Map/Geo Default"
+description: "Detects map and geo blocks without a default, which give every unmatched input an empty string and can disable rate limits or skip access and routing logic."
 ---
 
-# [hash_without_default] Missing `default` in hash blocks (`map`, `geo`)
+# [hash_without_default] Missing `default` in `map` and `geo` blocks
 
 ## What this check looks for
 
-This plugin checks hash-like blocks such as `map` and `geo` and warns when they do not define a `default` value.
+This plugin flags:
 
-### Map special-case
-
-For `map`, the check intentionally ignores a very common pattern of when a `map` has exactly one mapping entry and no explicit `default`. This configuration is often meant to return an empty string for all other inputs, and is used with `limit_req` and `limit_conn`, where an empty key disables limits.
-
-Therefore, this plugin only really warns for `map` when there are two or more mapping entries (not counting `hostnames` and `volatile`) and no explicit `default`. It warns for all cases with `geo`, unless both `0.0.0.0/0` and `::/0` are listed, which is what `default` stands for.
+- a `map` with two or more entries and no `default`,
+- a `geo` with no `default`.
 
 ## Why this is a problem
 
-A `map` or `geo` without a default gives unmatched inputs an empty string, which `if` treats like `0`. That is harmless when the empty value is also the safe one, but when the safe fallback is non-empty, every input you did not list gets the unsafe value:
-
-- an empty rate-limit key turns `limit_req` and `limit_conn` off for that request,
-- an empty value can skip security or routing logic that only acts on a non-empty one,
-- or it can let a request through that should have been denied.
+A `map` or `geo` without a `default` gives every input you did not list an empty string. When empty is also the safe value, that is fine. When it is not, every unlisted input gets the unsafe behavior: an empty `limit_req` or `limit_conn` key disables the limit for that request, and `if ($var)` treats an empty value as false, so a check that acts on a non-empty value is skipped.
 
 ## Bad configuration
 
@@ -61,6 +54,5 @@ geo $block_client {
 
 ## Additional notes
 
-- If the variable controls an allow/deny decision, prefer deny-by-default and add allow rules narrowly.
-- For routing decisions, choose a safe fallback upstream and keep it explicit.
-- If you rely on the "empty disables behavior" pattern (for example, rate limiting keys), keep the `map` minimal and document the intent.
+- A `map` with a single entry and no `default` is not reported. That pattern usually means "empty for everything else", for example a `limit_req` key that only applies to one kind of request. `hostnames` and `volatile` do not count as entries.
+- A `geo` that lists both `0.0.0.0/0` and `::/0` is not reported, since that is what `default` stands for. `0.0.0.0/0` alone still leaves IPv6 clients with the empty value.

@@ -93,5 +93,5 @@ server {
     | `listen [::]:80 ipv6only=off;` | IPv4 and IPv6, as IPv4-mapped addresses            |
     | `listen example.com:80;`       | assumed both; resolution at startup decides        |
 
-- Servers that listen only on `unix:` sockets, loopback addresses or `localhost` are ignored.
+- Servers that listen only on `unix:` sockets, loopback addresses or `localhost` cannot be reached from the network and are ignored, as is a location marked `internal`.
 - Prefer keeping the endpoint unadvertised (non-obvious path) in addition to access control, but do not rely on obscurity alone.
