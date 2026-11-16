@@ -32,9 +32,9 @@ class add_header_content_type(Plugin):
 
         families = self._upstream_families(directive)
         if families is not None:
+            blocks = [directive.parent]
             families = {family for family in families if not self._hides_content_type(directive, family)}
-            if not families:
-                return
+            hidden = not families
         else:
             blocks = list(self._inheriting_blocks(directive, directive.parent))
             families = {
@@ -44,8 +44,8 @@ class add_header_content_type(Plugin):
                 if not self._hides_content_type(pass_directive, family)
             }
             hidden = any(self._hides_content_type(directive, family) for family in UPSTREAM_FAMILIES)
-            if hidden and not families and not any(self._answers_locally(block) for block in blocks):
-                return
+        if hidden and not families and not any(self._answers_locally(block, directive.always) for block in blocks):
+            return
 
         if families:
             hide = " / ".join("`{0}_hide_header Content-Type;`".format(family) for family in sorted(families))
@@ -92,13 +92,15 @@ class add_header_content_type(Plugin):
                 yield from cls._inheriting_blocks(directive, child)
 
     @staticmethod
-    def _answers_locally(block):
+    def _answers_locally(block, always):
         """Whether `block` builds a typed response itself that `add_header` is applied to"""
         if block.find("empty_gif", flat=True) or block.find("stub_status", flat=True):
             return True
-        return any(
-            not r.arg(0, "").isdigit() or r.arg(0) in TYPED_RETURN_STATUSES for r in block.find("return", flat=True)
-        )
+        for r in block.find("return", flat=True):
+            status = r.arg(0, "")
+            if not status.isdigit() or status in TYPED_RETURN_STATUSES or (always and status != "204"):
+                return True
+        return False
 
     @staticmethod
     def _nearest_header_list(directive, name):
