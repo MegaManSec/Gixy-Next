@@ -15,7 +15,7 @@ from gixy.core.regexp import (
     RegexpTooComplex,
     SubpatternToken,
 )
-from gixy.core.utils import default_listens, parse_listen_key_and_default, resolve_inherited_single
+from gixy.core.utils import PASS_DIRECTIVES, default_listens, parse_listen_key_and_default, resolve_inherited_single
 from gixy.core.variable import compile_script
 from gixy.plugins.plugin import Plugin
 
@@ -195,7 +195,7 @@ class ssrf(Plugin):
     severity = gixy.severity.HIGH
     description = "The configuration may allow an attacker to make arbitrary requests from the vulnerable server."
     help_url = "https://gixy.io/plugins/ssrf/"
-    directives = ["proxy_pass", "fastcgi_pass", "uwsgi_pass", "scgi_pass", "grpc_pass"]
+    directives = PASS_DIRECTIVES
 
     def __init__(self, config):
         super(ssrf, self).__init__(config)

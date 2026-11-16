@@ -1,8 +1,10 @@
+from itertools import takewhile
 from urllib.parse import urlparse
 
 import gixy
 import gixy.core.sre_parse.sre_parse as sre_parse
 from gixy.core.regexp import Regexp
+from gixy.core.utils import PASS_DIRECTIVES
 from gixy.core.variable import compile_script, memoize_query
 from gixy.directives.directive import RewriteDirective
 from gixy.plugins.plugin import Plugin
@@ -21,6 +23,25 @@ def _flatten(seq, group=None):
             yield op, av, group
 
 
+def _is_literal(token):
+    """A literal, or an optional one such as `/?`."""
+    op, av, _ = token
+    return op == sre_parse.LITERAL or (
+        op == sre_parse.MAX_REPEAT and av[:2] == (0, 1) and all(o == sre_parse.LITERAL for o, _ in av[2])
+    )
+
+
+def _is_rest(token, end_anchored):
+    """`.*` or `.*?`; before a `$` only `[\\s\\S]*`, as `.` stops at a decoded `%0A`."""
+    op, av, _ = token
+    return (
+        op in (sre_parse.MAX_REPEAT, sre_parse.MIN_REPEAT)
+        and av[:2] == (0, sre_parse.MAXREPEAT)
+        and len(av[2]) == 1
+        and av[2][0][0] in ((sre_parse.ANY_ALL,) if end_anchored else (sre_parse.ANY, sre_parse.ANY_ALL))
+    )
+
+
 def _rest_capture(pattern, prefix):
     """For a `rewrite` regex that matches every URI under `prefix`, the literal it matches, the group capturing the
     rest and the literal that capture starts with: ("/api", 1, "") for `^/api(.*)`, ("/api/", 1, "/") for
@@ -32,27 +53,16 @@ def _rest_capture(pattern, prefix):
     anchored = bool(seq) and seq[0][:2] == (sre_parse.AT, sre_parse.AT_BEGINNING)
     end_anchored = bool(seq) and seq[-1][:2] == (sre_parse.AT, sre_parse.AT_END)
     seq = seq[anchored:len(seq) - end_anchored]
-    literal, inner, rest = "", {}, []
-    for i, (op, av, group) in enumerate(seq):
-        if op == sre_parse.LITERAL:
-            literal += chr(av)
-            inner[group] = inner.get(group, "") + chr(av)
-        elif op != sre_parse.MAX_REPEAT or av[:2] != (0, 1) or any(o != sre_parse.LITERAL for o, _ in av[2]):
-            rest = seq[i:]
-            break
-    any_char = (sre_parse.ANY_ALL,) if end_anchored else (sre_parse.ANY, sre_parse.ANY_ALL)
-    if (end_anchored and not rest) or not all(
-        op in (sre_parse.MAX_REPEAT, sre_parse.MIN_REPEAT)
-        and av[:2] == (0, sre_parse.MAXREPEAT)
-        and len(av[2]) == 1
-        and av[2][0][0] in any_char
-        for op, av, _ in rest
-    ):
+    head = list(takewhile(_is_literal, seq))
+    rest = seq[len(head):]
+    if (end_anchored and not rest) or not all(_is_rest(token, end_anchored) for token in rest):
         return None
+    literal = "".join(chr(av) for op, av, _ in head if op == sre_parse.LITERAL)
     if not (prefix.startswith(literal) if anchored else literal in prefix):
         return None
     group = rest[0][2] if rest else None
-    return literal, group, inner.get(group, "")
+    inner = "".join(chr(av) for op, av, g in head if op == sre_parse.LITERAL and g == group)
+    return literal, group, inner
 
 
 class proxy_pass_normalized(Plugin):
@@ -72,6 +82,11 @@ class proxy_pass_normalized(Plugin):
             return 400;
             proxy_pass http://backend;
         }
+
+        location /api {
+            rewrite ^/api(.*) /$1 break;
+            fastcgi_pass 127.0.0.1:9000;
+        }
     """
 
     summary = "proxy_pass can send an unintended path upstream."
@@ -82,7 +97,7 @@ class proxy_pass_normalized(Plugin):
         "and unescaped, or when a raw path from `rewrite ^ $request_uri` is escaped twice."
     )
     help_url = "https://gixy.io/plugins/proxy_pass_normalized/"
-    directives = ["proxy_pass"]
+    directives = PASS_DIRECTIVES
 
     @classmethod
     @memoize_query
@@ -147,6 +162,10 @@ class proxy_pass_normalized(Plugin):
         if effective_location.modifier == "=":
             return
 
+        if directive.name != "proxy_pass":
+            self._audit_uri_part(directive, effective_location, None)
+            return
+
         # proxy_pass requires an upstream argument; its absence is malformed
         # input (handled gracefully), not a crash.
         proxy_pass_arg = directive.arg(0)
@@ -206,13 +225,14 @@ class proxy_pass_normalized(Plugin):
                         "`proxy_pass` escapes again, so `%2F` reaches the upstream as `%252F`."
                     ),
                 )
-        elif path and "$" not in directive.arg(0) and directive.parent is location:
-            self._audit_uri_part(directive, location, path)
+        elif ("$" not in directive.arg(0) or not path) and not any(v.can_contain("/") for v in host_vars):
+            self._audit_uri_part(directive, location, path or None)
 
     @staticmethod
     def _rewritten_in_place(location):
         """The unconditional `rewrite ... break` (or `rewrite` and later `break`) in the location or its server that
-        makes NGINX ignore the URI part of `proxy_pass`, with its rest capture, or None."""
+        makes NGINX send the rewritten URI upstream and ignore the URI part of `proxy_pass`, with its rest capture,
+        or None."""
         scopes = [location] + [parent for parent in location.parents if parent.name == "server"][:1]
         for scope in scopes:
             for i, child in enumerate(scope.children):
@@ -231,9 +251,9 @@ class proxy_pass_normalized(Plugin):
         return None
 
     def _audit_uri_part(self, directive, location, uri):
-        if location.modifier not in (None, "^~") or location.path.startswith("@"):
+        if location.modifier not in (None, "^~") or location.path.startswith("@") or directive.parent is not location:
             return
-        directives = [directive]
+        directives, what = [directive], "`proxy_pass` URI"
         rewritten = self._rewritten_in_place(location)
         if rewritten is not None:
             rewrite, (literal, group, inner) = rewritten
@@ -245,25 +265,23 @@ class proxy_pass_normalized(Plugin):
             uri += inner
             directives.append(rewrite)
             what = "`rewrite` replacement"
-        else:
-            what = "`proxy_pass` URI"
-        if location.path.endswith("/") == uri.endswith("/"):
+        if uri is None or location.path.endswith("/") == uri.endswith("/"):
             return
 
         if uri.endswith("/"):
             severity = gixy.severity.MEDIUM
             reason = (
                 "Location `{loc}` has no trailing slash but the {what} `{uri}` does, "
-                "so `{loc}../x` is sent upstream as `{uri}../x`."
+                "so `{name}` sends `{loc}../x` upstream as `{uri}../x`."
             )
         else:
             severity = gixy.severity.LOW
             reason = (
                 "Location `{loc}` ends with a slash but the {what} `{uri}` does not, "
-                "so `{loc}x` is sent upstream as `{uri}x`."
+                "so `{name}` sends `{loc}x` upstream as `{uri}x`."
             )
         self.add_issue(
             directive=directives,
             severity=severity,
-            reason=reason.format(loc=location.path, what=what, uri=uri),
+            reason=reason.format(loc=location.path, what=what, uri=uri, name=directive.name),
         )
