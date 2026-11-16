@@ -1,7 +1,7 @@
 import gixy
 from gixy.core.utils import basic_auth_enforced
 from gixy.core.variable import compile_script
-from gixy.directives.directive import MoreSetHeadersDirective
+from gixy.directives.directive import REDIRECT_PREFIXES, MoreSetHeadersDirective
 from gixy.plugins.plugin import Plugin
 
 
@@ -138,10 +138,6 @@ def _line_break_sources(var):
     return names
 
 
-# nginx treats a lone `return` argument and a `rewrite` replacement as a redirect
-# URL when it starts with one of these; the prefix check is case-sensitive
-# (ngx_http_rewrite_return, ngx_http_rewrite).
-REDIRECT_PREFIXES = ("http://", "https://", "$scheme")
 # ngx_http_send_response() puts the value in Location for these statuses only;
 # for every other status it is the response body.
 REDIRECT_STATUSES = ("301", "302", "303", "307", "308")
@@ -178,14 +174,10 @@ def _get_return_location(directive):
 
 def _get_rewrite_target(directive):
     """The whole replacement of a redirect, the arguments of an internal rewrite."""
-    if len(directive.args) < 2:
-        return None
-    replace = directive.args[1]
-    flag = directive.args[2] if len(directive.args) > 2 else None
-    if replace.startswith(REDIRECT_PREFIXES) or flag in ("redirect", "permanent"):
-        return replace
-    if "?" in replace:
-        return replace.split("?", 1)[1]
+    if directive.redirects:
+        return directive.replace
+    if "?" in directive.replace:
+        return directive.replace.split("?", 1)[1]
     return None
 
 

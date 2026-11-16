@@ -163,12 +163,9 @@ def _reached_by_rewrite(location):
         return False
     start = _literal_start(location)
     for rewrite in server.find_recursive("rewrite"):
-        if len(rewrite.args) < 2 or rewrite.args[2:] not in ([], ["last"]):
+        if rewrite.flag not in (None, "last") or rewrite.redirects or "$" not in rewrite.replace:
             continue
-        replacement = rewrite.args[1]
-        if "$" not in replacement or replacement.startswith(("http://", "https://", "$scheme")):
-            continue
-        prefix = replacement.split("$", 1)[0]
+        prefix = rewrite.replace.split("$", 1)[0]
         if location.modifier == "~*":
             prefix = prefix.lower()
         if start.startswith(prefix) or prefix.startswith(start):

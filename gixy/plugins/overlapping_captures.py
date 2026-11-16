@@ -26,10 +26,6 @@ class overlapping_captures(Plugin):
     help_url = "https://gixy.io/plugins/overlapping_captures/"
     directives = ["rewrite"]
 
-    _REDIRECT_FLAGS = frozenset(("redirect", "permanent"))
-    # An `http://` / `https://` prefix is an implicit redirect, even
-    # without a `redirect`/`permanent` flag.
-    _IMPLICIT_REDIRECT_PREFIXES = ("http://", "https://")
     # nginx parses only single-digit `$1`..`$9`; `$10` is `$1` followed
     # by literal `0`.
     _NUMERIC_CAPTURE = re.compile(r"\$([1-9])")
@@ -38,12 +34,8 @@ class overlapping_captures(Plugin):
     _NGINX_VARIABLE = re.compile(r"\$[A-Za-z_]\w*|\$\{[^}]+\}")
 
     def audit(self, directive):
-        if len(directive.args) < 2:
-            return
-
-        regex = directive.args[0]
-        replacement = directive.args[1]
-        flag = directive.args[2].lower() if len(directive.args) > 2 else ""
+        regex = directive.pattern
+        replacement = directive.replace
 
         # nginx strips a sole trailing `?` from the replacement (it
         # means "drop the original arguments"), so a trailing-only `?`
@@ -56,11 +48,6 @@ class overlapping_captures(Plugin):
         if self._NGINX_VARIABLE.search(replacement):
             return
 
-        is_redirect = (
-            flag in self._REDIRECT_FLAGS
-            or replacement.startswith(self._IMPLICIT_REDIRECT_PREFIXES)
-        )
-
         # A duplicate `$N` reference anywhere in the replacement forces
         # nginx onto its safe length-calc path.
         all_refs = self._NUMERIC_CAPTURE.findall(replacement)
@@ -71,7 +58,7 @@ class overlapping_captures(Plugin):
         # of them. Otherwise only those after the first `?`; refs before
         # are written raw and a lone escaped capture stays within the
         # buggy length budget.
-        if is_redirect:
+        if directive.redirects:
             escaped_refs = all_refs
         else:
             q_idx = replacement.find("?")

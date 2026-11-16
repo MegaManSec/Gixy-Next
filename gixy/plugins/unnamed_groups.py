@@ -28,11 +28,6 @@ class unnamed_groups(Plugin):
     help_url = "https://gixy.io/plugins/unnamed_groups/"
     directives = ["rewrite"]
 
-    _TERMINATING_FLAGS = frozenset(("last", "break", "redirect", "permanent"))
-    _REDIRECT_FLAGS = frozenset(("redirect", "permanent"))
-    # An `http://` / `https://` / `$scheme` prefix on the replacement is
-    # an implicit redirect, which halts the engine on match.
-    _REDIRECT_PREFIXES = ("http://", "https://", "$scheme")
     _IF_FILE_OPS = frozenset(("-f", "-d", "-e", "-x", "!-f", "!-d", "!-e", "!-x"))
     _REGEX_OPERATORS = frozenset(("~", "~*", "!~", "!~*"))
     # nginx parses only single-digit `$1`..`$9`.
@@ -45,10 +40,10 @@ class unnamed_groups(Plugin):
 
         # A rewrite that halts on match cannot be followed by an
         # observable `set`/`if` execution.
-        if self._rewrite_is_terminator(directive):
+        if directive.stops_processing:
             return
 
-        groups = self._groups(directive.args[0])
+        groups = self._groups(directive.pattern)
         node = directive
         parent = node.parent
         while parent:
@@ -85,20 +80,9 @@ class unnamed_groups(Plugin):
             node = parent
             parent = parent.parent
 
-    def _rewrite_is_terminator(self, directive):
-        if len(directive.args) > 2 and directive.args[2].lower() in self._TERMINATING_FLAGS:
-            return True
-        return directive.args[1].startswith(self._REDIRECT_PREFIXES)
-
-    def _rewrite_redirects(self, directive):
-        if len(directive.args) > 2 and directive.args[2].lower() in self._REDIRECT_FLAGS:
-            return True
-        return directive.args[1].startswith(self._REDIRECT_PREFIXES)
-
     @staticmethod
     def _replacement(directive):
-        replacement = directive.args[1]
-        return replacement[:-1] if replacement.endswith("?") else replacement
+        return directive.replace[:-1] if directive.replace.endswith("?") else directive.replace
 
     @staticmethod
     def _groups(pattern):
@@ -117,7 +101,7 @@ class unnamed_groups(Plugin):
 
     def _groups_after(self, node, groups):
         if node.name == "rewrite":
-            return set() if len(node.args) >= 2 and self._rewrite_is_terminator(node) else None
+            return set() if node.stops_processing else None
         if self._is_regex_if(node):
             return self._regex_if_groups(node, inside=False)
         if node.is_block and not node.self_context:
@@ -156,7 +140,7 @@ class unnamed_groups(Plugin):
                 return self._reads_capture(node.args[2], groups)
             if len(node.args) >= 2 and node.args[0] in self._IF_FILE_OPS:
                 return self._reads_capture(node.args[1], groups)
-        if node.name == "rewrite" and len(node.args) >= 2 and not self._rewrite_redirects(node):
+        if node.name == "rewrite" and not node.redirects:
             replacement = self._replacement(node)
             refs = self._NUMERIC_CAPTURE.findall(replacement)
             if self._NGINX_VARIABLE.search(replacement) or len(refs) != len(set(refs)):

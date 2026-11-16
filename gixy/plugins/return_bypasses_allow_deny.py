@@ -26,11 +26,6 @@ class return_bypasses_allow_deny(Plugin):
     directives = list(ACCESS_RULES) + list(AUTH_DIRECTIVES)
     DENIAL_STATUSES = {"auth_basic": ("401",), "auth_jwt": ("401",), "auth_request": ("401", "403")}
 
-    REDIRECT_FLAGS = ("permanent", "redirect")
-    # nginx also redirects whenever the replacement is an absolute URL,
-    # regardless of flag; its prefix check is case-sensitive (ngx_http_rewrite).
-    REDIRECT_PREFIXES = ("http://", "https://", "$scheme")
-
     def __init__(self, config):
         super(return_bypasses_allow_deny, self).__init__(config)
         self._reported_parents = set()
@@ -51,17 +46,6 @@ class return_bypasses_allow_deny(Plugin):
         if getattr(node, "path", "").startswith("@"):
             return True
         return bool(getattr(node, "is_internal", False))
-
-    @classmethod
-    def _rewrite_emits_redirect(cls, directive):
-        """True when this rewrite responds with a redirect from the rewrite
-        phase: it carries a `permanent`/`redirect` flag, or its replacement
-        is an absolute URL — the latter redirects whatever the flag, `last`
-        and `break` included."""
-        args = directive.args
-        if len(args) >= 3 and args[-1].lower() in cls.REDIRECT_FLAGS:
-            return True
-        return len(args) >= 2 and args[1].startswith(cls.REDIRECT_PREFIXES)
 
     @staticmethod
     def _returns_unhandled_error(directive, denial_statuses=()):
@@ -133,7 +117,7 @@ class return_bypasses_allow_deny(Plugin):
             for d in self._find_descendants_excluding_internal_locations(
                 parent, "rewrite", overrides
             )
-            if self._rewrite_emits_redirect(d)
+            if d.redirects
         ]
         return [d for d in bypassing if id(d) not in self._reported_directives]
 
