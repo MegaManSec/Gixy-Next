@@ -98,6 +98,20 @@ class return_bypasses_allow_deny(Plugin):
             return False
         return any(parent.name == "http" for parent in directive.parents)
 
+    @classmethod
+    def _access_satisfied_for_all(cls, directive):
+        """True when `satisfy any` is in effect and the access rules in effect
+        start with `allow all`: the access module admits every client, so the
+        auth modules never run."""
+        satisfy = resolve_inherited_single(directive.parent, "satisfy")
+        if satisfy is None or satisfy.args[0].lower() != "any":
+            return False
+        for scope in directive.parents:
+            rules = [c for c in scope.children if c.name in cls.ACCESS_RULES]
+            if rules:
+                return rules[0].name == "allow" and rules[0].args[0] == "all"
+        return False
+
     def _find_descendants_excluding_internal_locations(self, node, name, overrides):
         result = []
         for child in node.children:
@@ -155,9 +169,10 @@ class return_bypasses_allow_deny(Plugin):
                 bypassing += found
         for name in AUTH_DIRECTIVES:
             auth = parent.some(name, flat=False)
-            if auth is None or not auth.args or auth.args[0].lower() == "off":
+            if auth is None or not auth.args or auth.args[0] == "off":
                 continue
             found = self._bypassing(parent, (name,), self.DENIAL_STATUSES.get(name, ()))
+            found = [d for d in found if not self._access_satisfied_for_all(d)]
             if name == "auth_basic":
                 found = [d for d in found if not self._lacks_user_file(d)]
             if found:
@@ -180,7 +195,7 @@ class return_bypasses_allow_deny(Plugin):
             directive=[d for _, ds in restrictions for d in ds] + unique,
             reason=(
                 "{0} cannot restrict responses produced by `return` "
-                "or by a redirecting `rewrite` in the same scope.".format(
+                "or by a redirecting `rewrite`, which run before the access phase.".format(
                     " and ".join(label for label, _ in restrictions)
                 )
             ),

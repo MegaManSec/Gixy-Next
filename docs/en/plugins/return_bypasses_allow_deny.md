@@ -3,17 +3,18 @@ title: "Return Bypasses Allow/Deny"
 description: "Detects return and redirecting rewrite directives next to allow/deny or an auth module. They respond in the rewrite phase, before access control runs."
 ---
 
-# [return_bypasses_allow_deny] `return` / redirecting `rewrite` bypass `allow`/`deny`
+# [return_bypasses_allow_deny] `return` bypasses `allow`/`deny` and the auth modules
 
 ## What this check looks for
 
-This plugin warns when `return`, or a `rewrite` that redirects, is in a context restricted by `allow`/`deny` or by `auth_basic`, `auth_request`, `auth_jwt` or `auth_oidc`, or in a context below it that inherits the restriction. A `rewrite` redirects when it has the `permanent` or `redirect` flag, or when its replacement starts with `http://`, `https://` or `$scheme`, whatever its flag.
+This plugin warns when `return`, or a `rewrite` that redirects, is in a context restricted by `allow`/`deny`, `auth_basic`, `auth_request`, `auth_jwt` or `auth_oidc`, or in a context below it that inherits the restriction. A `rewrite` redirects when it has the `permanent` or `redirect` flag, or when its replacement starts with `http://`, `https://` or `$scheme`, whatever its flag.
 
 It does not report:
 
 - `allow` rules without a `deny`, or, in a file with an `http` block, `auth_basic` without an `auth_basic_user_file`, since neither stops anyone;
-- a `location` with its own `allow`/`deny` or auth directive, which replaces the inherited one;
-- a bodyless error `return`, such as `return 404;`, unless an `error_page` in effect lists the status and a denied client would get a different one (`403` from `deny`, `401` from `auth_basic` or `auth_jwt`, `401` or `403` from `auth_request`);
+- an inherited restriction in a `location` that declares its own `allow`/`deny` or the same auth directive: the location's own rules replace it and are checked instead;
+- an auth module under `satisfy any` when `allow all` is in effect, since the auth modules then never run;
+- a `return` of an error status without body text, such as `return 404;`, which only produces NGINX's error page. It is reported when an `error_page` in effect lists the status, unless that status is the one the restriction answers with anyway: `403` for `deny`, `401` for `auth_basic` and `auth_jwt`, `401` or `403` for `auth_request`;
 - `stream` servers, where `return` runs after the access checks.
 
 ## Why this is a problem
@@ -49,7 +50,7 @@ A client without credentials receives `200` and the body.
 
 ### return in a named location
 
-Moving the `return` into a named location does **not** help: NGINX runs its access phase only after its rewrite phase, where the `return` has already responded.
+Moving the `return` into a named location does **not** help: the named location's access phase also runs after its rewrite phase, where the `return` has already responded.
 
 ```nginx
 location /admin/ {
@@ -87,5 +88,7 @@ location /admin/ {
 ## Additional notes
 
 To block everyone but X, `allow X; deny all;` is enough on its own: a denied client already gets `403`.
+
+A CORS preflight such as `if ($request_method = OPTIONS) { return 204; }` under an auth module is reported at LOW. Browsers send preflights without credentials, so that bypass is usually intended.
 
 For more information about this issue, see [this post](https://joshua.hu/nginx-return-allow-deny).

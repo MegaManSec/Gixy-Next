@@ -63,3 +63,16 @@ def test_auth_basic_needs_user_file(config, count):
 def test_auth_denial_status(auth, code, count):
     config = "server {{ error_page 401 403 /e.html; location /a {{ {0} return {1}; }} }}".format(auth, code)
     assert len(_issues(config)) == count
+
+
+@pytest.mark.parametrize("rules,count", [
+    ("allow all;", 0),
+    ("allow 10.0.0.0/8;", 1),
+    ("deny all;", 1),
+])
+def test_satisfy_any_allow_all_skips_auth(rules, count):
+    config = (
+        'server {{ satisfy any; auth_basic "x"; auth_basic_user_file /etc/htpasswd; '
+        "location /a {{ {0} return 200 hi; }} }}".format(rules)
+    )
+    assert len(_issues(config)) == count
