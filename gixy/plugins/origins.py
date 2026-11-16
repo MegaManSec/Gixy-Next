@@ -7,7 +7,7 @@ import tldextract
 import gixy
 import gixy.core.sre_parse.sre_parse as sre_parse
 from gixy.core.regexp import Regexp, RegexpTooComplex
-from gixy.core.utils import bare_variable_name, resolve_variable_chain
+from gixy.core.utils import bare_variable_name, resolve_inherited_list, resolve_variable_chain
 from gixy.core.variable import EXTRACT_RE
 from gixy.directives.block import MapBlock
 from gixy.directives.directive import (
@@ -57,6 +57,7 @@ class origins(Plugin):
     summary = 'Validation regex for "origin" or "referer" matches untrusted domain or invalid value.'
     severity_invalid_header = gixy.severity.LOW
     severity_insecure_referer = gixy.severity.MEDIUM
+    severity_reflection = gixy.severity.MEDIUM
     severity_insecure_origin = gixy.severity.HIGH
     description = "Improve the regular expression to match only correct and trusted referers and origins."
     help_url = "https://gixy.io/plugins/origins/"
@@ -388,17 +389,40 @@ class origins(Plugin):
         """True if a (quote-stripped) value is a bare reflection of $http_origin."""
         return value.lstrip("$").strip("{}").lower() == "http_origin"
 
-    def _report_reflection(self, directive):
-        """Flag unconditional reflection of the request Origin into Access-Control-Allow-Origin."""
+    def _report_reflection(self, node, hops=()):
+        """Flag unconditional reflection of the request Origin into Access-Control-Allow-Origin:
+        HIGH when the response also allows credentials, MEDIUM otherwise."""
+        credentials = self._allows_credentials(node)
         reason = (
-            "Reflecting `$http_origin` into `Access-Control-Allow-Origin` allows any "
-            "origin to pass the CORS check. Echo only origins from a trusted allowlist."
-        )
+            "Reflecting `$http_origin` into `Access-Control-Allow-Origin` allows any origin to pass the CORS "
+            "check{0}. Echo only origins from a trusted allowlist."
+        ).format(", and the response allows credentials" if credentials else "")
         self.add_issue(
-            directive=directive,
+            directive=[*hops, node],
             reason=reason,
-            severity=self.severity_insecure_origin,
+            severity=self.severity_insecure_origin if credentials else self.severity_reflection,
         )
+
+    def _allows_credentials(self, node):
+        """True when `Access-Control-Allow-Credentials: true` is also set on a response `node`
+        adds its header to: in its block or any block below it that still inherits `node`,
+        by the `add_header` list in effect there or a `more_set_headers` there or above."""
+        for block in self._blocks_below(node.parent):
+            headers = resolve_inherited_list(block, "add_header", "add_header_inherit")
+            headers += [msh for scope in (block, *block.parents) for msh in scope.find("more_set_headers")]
+            if node in headers and any(
+                value.strip().strip("\"'") == "true"
+                for _, value in self._header_directives(headers, "access-control-allow-credentials")
+            ):
+                return True
+        return False
+
+    @classmethod
+    def _blocks_below(cls, block):
+        yield block
+        for child in block.children:
+            if child.is_block:
+                yield from cls._blocks_below(child)
 
     def _has_origin_allowlist(self, directive):
         for parent in directive.parents:
@@ -476,15 +500,14 @@ class origins(Plugin):
         return False
 
     @staticmethod
-    def _cors_headers(root):
-        """(directive, value) for every add_header/more_set_headers that sets Access-Control-Allow-Origin."""
-        for name in ("add_header", "more_set_headers"):
-            for node in root.find_recursive(name):
-                if not isinstance(node, (AddHeaderDirective, MoreSetHeadersDirective)):
-                    continue
-                for header, value in node.headers.items():
-                    if header.strip().lower() == "access-control-allow-origin":
-                        yield node, value
+    def _header_directives(directives, header):
+        """(directive, value) for every add_header/more_set_headers among `directives` that sets `header`."""
+        for node in directives:
+            if not isinstance(node, (AddHeaderDirective, MoreSetHeadersDirective)):
+                continue
+            for name, value in node.headers.items():
+                if name.strip().lower() == header:
+                    yield node, value
 
     @staticmethod
     def _sets_in_scope(root, node):
@@ -567,7 +590,8 @@ class origins(Plugin):
         """Analyze CORS allowlists: map/set $http_origin -> $var; add_header Access-Control-Allow-Origin $var"""
         self._root = root
         cors_variables = set()
-        for node, value in self._cors_headers(root):
+        headers = root.find_recursive("add_header") + root.find_recursive("more_set_headers")
+        for node, value in self._header_directives(headers, "access-control-allow-origin"):
             value = value.strip().strip("\"'")
             dest_var = bare_variable_name(value)
             cors_variables.add(dest_var)
@@ -592,7 +616,7 @@ class origins(Plugin):
             ):
                 cors_variables.add(bare_variable_name(assigned))
                 if self._is_origin_reflection(assigned.strip().strip("\"'")):
-                    self._report_reflection(list(reversed(hops)) + [node])
+                    self._report_reflection(node, reversed(hops))
 
             # Find map blocks that populate this variable from $http_origin
             for mb in root.find_recursive("map"):

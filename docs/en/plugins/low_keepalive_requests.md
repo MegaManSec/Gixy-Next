@@ -8,7 +8,7 @@ description: "Detects keepalive_requests values that are likely too low for mode
 ## What this check looks for
 
 - `keepalive_requests` below 1000.
-- `keepalive_requests 0` or `keepalive_timeout 0` (in any unit, such as `0s`), which turn keep-alive off.
+- `keepalive_requests 0`, `keepalive_timeout 0` or `keepalive_time 0` (in any unit, such as `0s`), which turn keep-alive off.
 
 ## Why this is a problem
 
@@ -49,6 +49,6 @@ These are the defaults, so leaving both directives out works as well.
 
 ## Additional notes
 
-- Only the client-facing directives in the `http`, `server` and `location` contexts are checked. `keepalive_requests` and `keepalive_timeout` inside an `upstream` block are different directives (limits for cached upstream connections, NGINX 1.15.3+) where small values are normal, so they are not reported.
-- HTTP/2 and HTTP/3 use the `server`-level values, so a value set in a `location` only affects HTTP/1.x. On HTTP/3, `keepalive_requests 0` refuses every request and `keepalive_timeout 0` closes connections before they serve one.
+- Only the client-facing directives in the `http`, `server` and `location` contexts are checked. `keepalive_requests`, `keepalive_timeout` and `keepalive_time` inside an `upstream` block are different directives (limits for cached upstream connections, NGINX 1.15.3+) where small values are normal, so they are not reported.
+- HTTP/2 and HTTP/3 use the `server`-level values, so a value set in a `location` only affects HTTP/1.x. On HTTP/3, `keepalive_requests 0` refuses every request, `keepalive_timeout 0` closes connections before they serve one and `keepalive_time 0` after their first request.
 - In Burp Proxy, a too-low `keepalive_requests` shows up as "Stream failed to close correctly"; in mitmproxy as "HTTP/2 protocol error: Invalid ConnectionInputs.RECV_HEADERS in state ConnectionState.CLOSED". If you cannot change the server, disable HTTP/2 in the browser or proxy. For more information, read [this post](https://joshua.hu/http2-burp-proxy-mitmproxy-nginx-failing-load-resources-chromium).

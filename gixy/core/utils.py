@@ -3,7 +3,19 @@ import re
 from collections import deque
 
 AUTH_DIRECTIVES = ("auth_basic", "auth_request", "auth_jwt", "auth_oidc")
+TLS_LISTEN_FLAGS = ("ssl", "quic")
+REGEX_ARGUMENT_DIRECTIVES = frozenset((
+    "server_name",
+    "valid_referers",
+    "gzip_disable",
+    "fastcgi_split_path_info",
+    "proxy_redirect",
+    "proxy_cookie_domain",
+    "proxy_cookie_path",
+    "proxy_cookie_flags",
+))
 
+_UPPERCASE_RE = re.compile(r"[A-Z]")
 _BARE_VARIABLE_RE = re.compile(r"\$(?:([a-z_][a-z0-9_]*)|\{([a-z_][a-z0-9_]*)\})", re.IGNORECASE)
 
 
@@ -30,6 +42,25 @@ def resolve_inherited_single(scope, name):
             return matches[-1]
         current = getattr(current, "parent", None)
     return None
+
+
+def resolve_inherited_list(scope, name, inherit_name):
+    """Directives of an inheritable list such as `add_header` in effect at `scope`.
+
+    A scope that declares any replaces the inherited list, unless
+    `<inherit_name> merge` applies, which appends it; `<inherit_name> off`
+    stops inheritance (both nginx 1.29.3+).
+    """
+    result = []
+    while scope is not None:
+        own = scope.find(name)
+        result += own
+        mode = resolve_inherited_single(scope, inherit_name)
+        mode = mode.arg(0).lower() if mode else "on"
+        if mode == "off" or (own and mode != "merge"):
+            break
+        scope = scope.parent
+    return result
 
 
 def enforced_auth(scope):
@@ -74,7 +105,7 @@ def parse_listen_key_and_default(args):
     whether it contains the default flag.
 
     Returns: (key, is_default) where key is a string like "*:80",
-    "127.0.0.1:80", "[::]:443". If parsing fails, key is None.
+    "127.0.0.1:80", "[::]:443" or "unix:/path". If parsing fails, key is None.
     """
     if not args:
         return None, False
@@ -83,8 +114,7 @@ def parse_listen_key_and_default(args):
     is_default = any(p in ("default_server", "default") for p in params)
 
     if args[0].lower().startswith("unix:"):
-        # Not supported for ambiguity check
-        return None, is_default
+        return "unix:" + args[0][5:], is_default
 
     address, port = split_address_port(args[0])
     if address is None:
@@ -141,6 +171,40 @@ def normalize_address(address):
     return parsed.compressed
 
 
+def regex_arguments(directive):
+    """Yield (pattern, case_insensitive) for every regular expression among a
+    directive's arguments, as nginx compiles them."""
+    name, args = directive.name, directive.args
+    if name == "location":
+        if directive.is_regex:
+            yield directive.path, directive.modifier == "~*"
+    elif name == "if":
+        if directive.is_regex and directive.value:
+            yield directive.value, directive.operand.endswith("*")
+    elif name in ("rewrite", "fastcgi_split_path_info"):
+        if args:
+            yield args[0], False
+    elif name == "gzip_disable":
+        for arg in args:
+            if arg not in ("msie6", "degradation"):
+                yield arg, True
+    elif name == "valid_referers":
+        for arg in args:
+            if arg.startswith("~"):
+                yield arg[1:], True
+    elif name == "server_name":
+        for arg in args:
+            if arg.startswith("~"):
+                yield arg[1:], _UPPERCASE_RE.search(arg) is not None
+    elif name in ("proxy_redirect", "proxy_cookie_path"):
+        if args and args[0].startswith("~"):
+            caseless = args[0].startswith("~*")
+            yield args[0][2 if caseless else 1:], caseless
+    elif name in ("proxy_cookie_domain", "proxy_cookie_flags"):
+        if args and args[0].startswith("~"):
+            yield args[0][1:], True
+
+
 def bare_variable_name(value):
     """Name of the single variable a script consists of (`$var` or `${var}`),
     lowercased; None for literals, mixed scripts and empty values."""
@@ -172,24 +236,50 @@ def resolve_variable_chain(name, assignments):
                 pending.append((following, chain))
 
 
-def default_listens(servers):
-    """Map each server to the `listen` directives on whose socket it is the default server:
-    the one flagged `default_server`, otherwise the first server on that socket."""
+def listen_sockets(servers):
+    """Map each listen socket to its (server, listen, is_default) entries in configuration
+    order; a server without `listen` sits on `*:80` with listen None."""
     sockets = {}
-    defaults = {}
     for server in servers:
         listens = server.find("listen")
-        if not listens:
+        module = enclosing_module(server)
+        if not listens and (module is None or module.name == "http"):
             sockets.setdefault("*:80", []).append((server, None, False))
         for listen in listens:
             key, is_default = parse_listen_key_and_default(listen.args)
-            if key is None:
-                if is_default:
-                    defaults.setdefault(server, []).append(listen)
-                continue
-            sockets.setdefault(key, []).append((server, listen, is_default))
-    for entries in sockets.values():
+            if key is not None:
+                sockets.setdefault(key, []).append((server, listen, is_default))
+    return sockets
+
+
+def default_listens(servers):
+    """Map each server to the `listen` directives on whose socket it is the default server:
+    the one flagged `default_server`, otherwise the first server on that socket."""
+    defaults = {}
+    for entries in listen_sockets(servers).values():
         server, listen, _ = next((entry for entry in entries if entry[2]), entries[0])
         if listen is not None:
             defaults.setdefault(server, []).append(listen)
     return defaults
+
+
+def enclosing_module(directive):
+    """The `http`, `stream` or `mail` block holding `directive`, or None in a snippet."""
+    return next((parent for parent in directive.parents if parent.name in ("http", "stream", "mail")), None)
+
+
+def is_tls_listen(listen, sockets=()):
+    """Whether a `listen` accepts TLS: it carries `ssl` or `quic`, or its socket is in `sockets`,
+    since nginx applies those flags to every server on the address:port."""
+    if any(arg.lower() in TLS_LISTEN_FLAGS for arg in listen.args[1:]):
+        return True
+    return parse_listen_key_and_default(listen.args)[0] in sockets
+
+
+def tls_sockets(servers):
+    """Socket keys on which any of `servers` has a TLS `listen`."""
+    return {
+        key
+        for key, entries in listen_sockets(servers).items()
+        if any(listen is not None and is_tls_listen(listen) for _, listen, _ in entries)
+    }

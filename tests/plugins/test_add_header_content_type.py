@@ -52,6 +52,22 @@ def _reasons(config):
         "location / { add_header X-Other 1; proxy_pass http://127.0.0.1:8080; } }",
         "Use `types {} default_type text/plain;` instead of `add_header` to set Content-Type.",
     ),
+    (
+        "server { proxy_hide_header Content-Type; add_header Content-Type text/plain; "
+        "location / { proxy_hide_header X-Other; proxy_pass http://127.0.0.1:8080; } }",
+        "Also hide the upstream header with `proxy_hide_header Content-Type;`, "
+        "or the response carries two Content-Type headers.",
+    ),
+    (
+        "server { fastcgi_hide_header Content-Type; add_header Content-Type text/plain; "
+        "location / { proxy_pass http://127.0.0.1:8080; } }",
+        "Also hide the upstream header with `proxy_hide_header Content-Type;`, "
+        "or the response carries two Content-Type headers.",
+    ),
+    (
+        "location / { add_header Content-Type 'text/plain; charset=\"utf-8\"'; }",
+        'Use `types {} default_type "text/plain; charset=\\"utf-8\\"";` instead of `add_header` to set Content-Type.',
+    ),
 ])
 def test_reason(config, reason):
     assert _reasons(config) == [reason]

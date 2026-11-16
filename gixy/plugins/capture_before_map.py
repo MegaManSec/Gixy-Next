@@ -1,22 +1,13 @@
 import re
 
 import gixy
+from gixy.core.utils import REGEX_ARGUMENT_DIRECTIVES
 from gixy.directives.block import GeoBlock, MapBlock
 from gixy.directives.directive import MapDirective
 from gixy.plugins.plugin import Plugin
 
 # nginx parses only single-digit `$1`..`$9`.
 REFERENCE_RE = re.compile(r"\$(?:([1-9])|([A-Za-z_][A-Za-z0-9_]*)|\{([A-Za-z0-9_]+)\})")
-REGEX_ARGUMENT_DIRECTIVES = frozenset((
-    "server_name",
-    "valid_referers",
-    "gzip_disable",
-    "fastcgi_split_path_info",
-    "proxy_redirect",
-    "proxy_cookie_domain",
-    "proxy_cookie_path",
-    "proxy_cookie_flags",
-))
 IF_FILE_OPERATORS = frozenset(("-f", "!-f", "-d", "!-d", "-e", "!-e", "-x", "!-x"))
 
 

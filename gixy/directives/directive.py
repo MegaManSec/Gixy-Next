@@ -16,7 +16,6 @@ _NO_DEFAULT = object()
 _MISSING = object()
 
 _BRACED_VARIABLE_RE = re.compile(r"\$\{\w+\}")
-_SHARED_ADDRESS_SPACE = ipaddress.IPv4Network("100.64.0.0/10")
 
 REDIRECT_PREFIXES = ("http://", "https://", "$scheme")
 
@@ -403,7 +402,7 @@ class ResolverDirective(Directive):
                 continue
 
             ip = getattr(ip, "ipv4_mapped", None) or ip
-            if ip.is_global and ip not in _SHARED_ADDRESS_SPACE:
+            if ip.is_global:
                 external_nameservers.append(addr)
         return external_nameservers
 

@@ -1,5 +1,5 @@
 import gixy
-from gixy.core.utils import default_listens, parse_listen_key_and_default, resolve_inherited_single
+from gixy.core.utils import default_listens, enclosing_module, is_tls_listen, resolve_inherited_single, tls_sockets
 from gixy.plugins.plugin import Plugin
 
 PQ_GROUP_MARKERS = ("MLKEM", "KYBER")
@@ -12,7 +12,6 @@ GROUP_PREFIXES = "?*-"
 DEFAULT_KEYWORD = "DEFAULT"
 GROUPS_CONF_COMMANDS = ("groups", "curves")
 CLIENT_CONF_COMMANDS = ("proxy_ssl_conf_command", "grpc_ssl_conf_command", "uwsgi_ssl_conf_command")
-TLS_LISTEN_FLAGS = ("ssl", "quic", "http3")
 
 
 def _group_name(group):
@@ -90,10 +89,6 @@ def _effective_group_list(scope):
             break
         current = getattr(current, "parent", None)
     return resolve_inherited_single(scope, "ssl_ecdh_curve")
-
-
-def _is_tls_listen(listen):
-    return any(arg.lower() in TLS_LISTEN_FLAGS for arg in listen.args[1:])
 
 
 class ssl_ecdh_curve(Plugin):
@@ -265,24 +260,15 @@ class ssl_ecdh_curve(Plugin):
             )
 
     def _negotiation_scope(self, directive):
-        module = next((parent for parent in directive.parents if parent.name in ("http", "stream", "mail")), None)
+        module = enclosing_module(directive)
         if module is not None and module.name == "mail":
             return "" if _effective_group_list(directive.parent) is directive else None
         servers = list(module.find_all_contexts_of_type("server")) if module is not None else []
         defaults = default_listens(servers)
-        tls_sockets = {
-            parse_listen_key_and_default(listen.args)[0]
-            for server in servers
-            for listen in server.find("listen")
-            if _is_tls_listen(listen)
-        } - {None}
+        tls = tls_sockets(servers)
         tls_defaults = {}
         for server in servers:
-            listens = [
-                listen
-                for listen in defaults.get(server, ())
-                if _is_tls_listen(listen) or parse_listen_key_and_default(listen.args)[0] in tls_sockets
-            ]
+            listens = [listen for listen in defaults.get(server, ()) if is_tls_listen(listen, tls)]
             if listens:
                 tls_defaults[server] = listens
         if not tls_defaults:
