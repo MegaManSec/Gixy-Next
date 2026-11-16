@@ -1,4 +1,5 @@
 import gixy
+from gixy.core.utils import resolve_inherited_list, resolve_inherited_single
 from gixy.plugins.plugin import Plugin
 
 FIELD_FAMILIES = (
@@ -89,10 +90,11 @@ class add_header_redefinition(Plugin):
             self._audit_family(directive, field_directive, inherit_directive, kind)
 
     def _audit_family(self, directive, field_directive, inherit_directive, kind):
-        current_fields = self.get_fields(directive, field_directive)
-        mode = self.effective_inherit_mode(directive, inherit_directive)
-        if mode == "off" and self.declared_inherit_mode(directive, inherit_directive) is None:
-            self._audit_inherited_off(directive, current_fields, field_directive, inherit_directive, kind)
+        current_fields = self.field_names(directive.find(field_directive))
+        inherit = resolve_inherited_single(directive, inherit_directive)
+        mode = inherit.arg(0).lower() if inherit else "on"
+        if mode == "off" and inherit.parent is not directive:
+            self._audit_inherited_off(directive, current_fields, field_directive, inherit_directive, kind, inherit)
             return
 
         if not current_fields:
@@ -103,20 +105,14 @@ class add_header_redefinition(Plugin):
         if mode in ("merge", "off"):
             return
 
-        parent = getattr(directive, "parent", None)
-        if not parent:
-            return
-
+        parent = directive.parent
         parent_effective = self.effective_fields(parent, field_directive, inherit_directive)
         if not parent_effective:
             return
 
         if self.merge_reported_headers:
             # fields declared in ancestors (not including this directive)
-            declared_above = self.get_fields(parent, field_directive, inherited=True)
-            # fields actually effective here
-            current_effective = self.effective_fields(directive, field_directive, inherit_directive)
-            diff = declared_above - current_effective
+            diff = self.field_names(directive.find_imperative_directives_in_scope(field_directive)) - current_fields
         else:
             diff = parent_effective - current_fields
 
@@ -126,27 +122,20 @@ class add_header_redefinition(Plugin):
         if diff:
             self._report_issue(directive, parent, diff, field_directive, inherit_directive, kind)
 
-    def _audit_inherited_off(self, directive, current_fields, field_directive, inherit_directive, kind):
-        parent = getattr(directive, "parent", None)
-        if not parent:
-            return
-
+    def _audit_inherited_off(self, directive, current_fields, field_directive, inherit_directive, kind, inherit):
+        parent = directive.parent
         diff = self.effective_fields(parent, field_directive, inherit_directive) - current_fields
         if self.interesting_headers:
             diff = diff & self.interesting_headers
 
         if diff:
-            declaring = next(
-                node for node in directive.parents
-                if self.declared_inherit_mode(node, inherit_directive) is not None
-            )
             reason = "{kind}s `{fields}` from the level above are dropped here.".format(
                 kind=kind.capitalize(), fields="`, `".join(sorted(diff))
             )
             summary = 'Inherited "{inherit} off" drops parent {kind}s.'.format(inherit=inherit_directive, kind=kind)
             self._report_issue(
                 directive, parent, diff, field_directive, inherit_directive, kind,
-                reason=reason, extra=declaring.find(inherit_directive) + [directive], summary=summary,
+                reason=reason, extra=[inherit, directive], summary=summary,
             )
 
     def _report_issue(
@@ -198,66 +187,10 @@ class add_header_redefinition(Plugin):
             return directive.args[0].lower()
         return None
 
-    def get_fields(self, directive, field_directive, inherited=False):
-        """
-        Fields defined at this level.
-        If inherited=True, also include fields declared in the current scope (ancestors + current)
-        """
-        fields = []
-        if inherited:
-            fields.extend(directive.find_imperative_directives_in_scope(field_directive))
-        fields.extend(directive.find(field_directive))
-
-        if not fields:
-            return set()
-        return {self.field_name(d) for d in fields if self.field_name(d)}
-
-    @staticmethod
-    def declared_inherit_mode(node, inherit_directive):
-        """The inherit mode declared at this level, None when it declares none."""
-        mode = None
-        # If multiple are present at the same level, the last valid one wins.
-        for d in node.find(inherit_directive):
-            if getattr(d, "args", None):
-                v = d.args[0].lower()
-                if v in ("on", "off", "merge"):
-                    mode = v
-        return mode
-
-    def effective_inherit_mode(self, directive, inherit_directive):
-        """
-        The inherit directive itself is inherited "normally" (nearest definition wins).
-        """
-        node = directive
-        while node is not None:
-            mode = self.declared_inherit_mode(node, inherit_directive)
-            if mode is not None:
-                return mode
-            node = getattr(node, "parent", None)
-        return "on"
+    @classmethod
+    def field_names(cls, directives):
+        return {cls.field_name(d) for d in directives if cls.field_name(d)}
 
     def effective_fields(self, directive, field_directive, inherit_directive):
-        """
-        Effective field names at this level, respecting the inherit mode:
-          - on    : standard behavior (if any fields here, they replace inherited; else inherit)
-          - merge : inherit + append current
-          - off   : cancel inheritance entirely (only current fields apply)
-        """
-        if directive is None:
-            return set()
-
-        mode = self.effective_inherit_mode(directive, inherit_directive)
-        own = self.get_fields(directive, field_directive, inherited=False)
-        parent = getattr(directive, "parent", None)
-        inherited = (
-            self.effective_fields(parent, field_directive, inherit_directive)
-            if parent is not None
-            else set()
-        )
-
-        if mode == "off":
-            return set(own)
-        if mode == "merge":
-            return set(inherited) | set(own)
-        # mode == 'on'
-        return set(own) if own else set(inherited)
+        """Field names in effect at this level"""
+        return self.field_names(resolve_inherited_list(directive, field_directive, inherit_directive))
