@@ -98,55 +98,42 @@ class allow_without_deny(Plugin):
     def _simulate(rules):
         """Walk each family's rule list the way nginx does.
 
-        Returns (shadowed, effective): `shadowed` maps a rule that can never match in any of
-        its families to (opposite-kind rules that take its clients, mapped) where `mapped` says
-        the IPv4 list took them; `effective` holds the allows that let through some client a
-        later deny would otherwise have caught.
+        Returns (shadowed, effective): `shadowed` maps a rule that never matches in any of its
+        families to (opposite-kind rules that take its clients, mapped) where `mapped` says the
+        IPv4 list took them; `effective` holds the allows that let through some client a later
+        deny would otherwise have caught.
         """
         has_inet = any(INET in rule.families for rule in rules)
-        dead_in = {rule: {} for rule in rules}
-        effective = set()
+        live, mapped, effective = set(), set(), set()
+        shadows = {rule: [] for rule in rules}
         for family in (INET, INET6, UNIX):
             listed = [rule for rule in rules if family in rule.families]
             seen = [V4_MAPPED] if family == INET6 and has_inet else []
             for index, rule in enumerate(listed):
                 coverage = rule.coverage(family)
                 remaining = _exclude(coverage, seen)
-                if not remaining:
-                    shadows = [
-                        earlier
-                        for earlier in listed[:index]
-                        if earlier.allow != rule.allow and _overlaps(earlier.coverage(family), coverage)
-                    ]
-                    mapped = not shadows and family == INET6 and has_inet and _overlaps(coverage, [V4_MAPPED])
-                    if mapped:
-                        shadows += [
-                            other
-                            for other in rules
-                            if INET in other.families and other.allow != rule.allow
-                        ]
-                    dead_in[rule][family] = (shadows, mapped)
-                elif rule.allow:
+                seen = seen + remaining
+                if remaining:
+                    live.add(rule)
                     later = [
                         network
                         for other in listed[index + 1:]
                         if not other.allow
                         for network in other.coverage(family)
                     ]
-                    if _overlaps(remaining, later):
+                    if rule.allow and _overlaps(remaining, later):
                         effective.add(rule)
-                seen = seen + remaining
-        shadowed = {}
-        for rule in rules:
-            if len(dead_in[rule]) != len(rule.families):
-                continue
-            shadows = []
-            mapped = False
-            for family_shadows, family_mapped in dead_in[rule].values():
-                shadows += [shadow for shadow in family_shadows if shadow not in shadows]
-                mapped = mapped or family_mapped
-            if shadows:
-                shadowed[rule] = (shadows, mapped)
+                    continue
+                earlier = [
+                    other
+                    for other in listed[:index]
+                    if other.allow != rule.allow and _overlaps(other.coverage(family), coverage)
+                ]
+                if not earlier and family == INET6 and has_inet and _overlaps(coverage, [V4_MAPPED]):
+                    mapped.add(rule)
+                    earlier = [other for other in rules if INET in other.families and other.allow != rule.allow]
+                shadows[rule] += [other for other in earlier if other not in shadows[rule]]
+        shadowed = {rule: (shadows[rule], rule in mapped) for rule in rules if rule not in live and shadows[rule]}
         return shadowed, effective
 
     def audit(self, directive):
