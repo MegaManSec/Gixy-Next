@@ -116,7 +116,10 @@ class allow_without_deny(Plugin):
                 if remaining:
                     live.add(rule)
                     later = [
-                        network for other in listed[index + 1:] if not other.allow for network in other.coverage(family)
+                        network
+                        for other in listed[index + 1:]
+                        if not other.allow
+                        for network in other.coverage(family)
                     ]
                     if rule.allow and _overlaps(remaining, later):
                         effective.add(rule)
