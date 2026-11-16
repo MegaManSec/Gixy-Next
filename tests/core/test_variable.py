@@ -137,7 +137,7 @@ def test_regexp_boundary():
 def test_subject_boundary():
     assert not subject_boundary('$http_origin').can_contain('\n')
     assert subject_boundary('$uri').can_contain('\n')
-    assert subject_boundary('$host') is None
+    assert not subject_boundary('$host').can_contain('/')
     assert subject_boundary('$uri$args') is None
     assert subject_boundary('$unknown') is None
     get_context().add_var('copy', Variable(name='copy', value='$http_origin'))
@@ -200,8 +200,9 @@ def test_request_line_and_header_values_are_client_input_without_line_breaks(nam
     assert not var.can_contain("\n")
 
 
-def test_http_host_is_a_host_without_slash_or_controls():
-    var = builtins.builtin_var("http_host")
+@pytest.mark.parametrize("name", ["host", "http_host"])
+def test_host_is_a_host_without_slash_or_controls(name):
+    var = builtins.builtin_var(name)
     for char in ".:[]%A?@\\":
         assert var.can_contain(char)
     for char in "/ \t\r\n":
