@@ -1,10 +1,10 @@
 import gixy
 from gixy.core.utils import (
     default_listens,
+    error_page_for,
     is_tls_listen,
     listen_sockets,
     parse_listen_key_and_default,
-    resolve_inherited_all,
     resolve_inherited_single,
     tls_sockets,
 )
@@ -85,9 +85,9 @@ class http2_misdirected_request(Plugin):
         )
 
     def _rewrites_421(self, block):
-        return any(
-            "421" in page.args[:-1] and (page.args[-2].startswith("=") or not page.args[-1].startswith(("/", "@")))
-            for page in resolve_inherited_all(block, "error_page")
+        page = error_page_for(block, "421")
+        return page is not None and (
+            not page.args[-1].startswith(("/", "@")) or (page.args[-2].startswith("=") and page.args[-2] != "=421")
         )
 
     def _has_return_421(self, block):
