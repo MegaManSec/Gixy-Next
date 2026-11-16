@@ -9,7 +9,7 @@ description: "Flags setting Content-Type via add_header, which creates a duplica
 
 This plugin flags `add_header` directives that set the `Content-Type` response header. The header name is matched case-insensitively.
 
-A location that proxies to an upstream is not reported when the upstream's `Content-Type` is hidden by the `*_hide_header` directive of the module that does the proxying: `proxy_hide_header` for `proxy_pass`, `fastcgi_hide_header` for `fastcgi_pass`, and likewise for `uwsgi_pass`, `scgi_pass` and `grpc_pass`. When the scope has no `*_pass` directive, a `Content-Type` hidden by any of the five modules is accepted.
+A location that proxies to an upstream is not reported when the upstream's `Content-Type` is hidden by the `*_hide_header` directive of the module that does the proxying: `proxy_hide_header` for `proxy_pass`, `fastcgi_hide_header` for `fastcgi_pass`, and likewise for `uwsgi_pass`, `scgi_pass` and `grpc_pass`. When the scope has no `*_pass` directive, a `Content-Type` hidden by any of the five modules is accepted, unless a nested location that inherits the `add_header` proxies without hiding it.
 
 ## Why this is a problem
 
