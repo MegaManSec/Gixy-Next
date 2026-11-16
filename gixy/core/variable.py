@@ -89,16 +89,12 @@ def compile_hash_entry(var):
     provider = var.provider if isinstance(var, Variable) else None
     if not provider or provider.nginx_name != "map":
         return None
-    if provider.dest_val is None:
-        return None
 
     block = provider.parent
     if not block or block.nginx_name not in ("map", "geo"):
         return None
 
     if block.nginx_name == "geo":
-        if provider.src_val in GEO_PARAMETERS:
-            return None
         # ngx_http_geo_module stores values verbatim, they are not nginx scripts
         return [Variable(name=None, value=provider.dest_val, have_script=False)]
 

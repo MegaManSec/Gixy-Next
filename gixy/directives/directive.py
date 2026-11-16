@@ -447,6 +447,7 @@ class MapDirective(Directive):
             destination[0] if destination and len(destination) == 1 else None
         )
         self.regex = None
+        self.hostnames = False
 
         if self.is_regex:
             if self.src_val.startswith("~*"):

@@ -483,11 +483,7 @@ class origins(Plugin):
         for mb in self._root.find_recursive("map"):
             if not isinstance(mb, MapBlock) or mb.variable != name or not self._is_origin_reflection(mb.source):
                 continue
-            entries = [
-                md
-                for md in mb.gather_map_directives(mb.children)
-                if isinstance(md, MapDirective) and md.dest_val is not None
-            ]
+            entries = mb.entries
             if not rejects(next((md.dest_val for md in entries if md.src_val == "default"), "")):
                 return False
             for md in entries:
@@ -575,9 +571,7 @@ class origins(Plugin):
             if sources & origin_keyed:
                 continue
             keyed_on_origin = bool(sources & copies)
-            for md in mb.gather_map_directives(mb.children):
-                if not isinstance(md, MapDirective) or md.dest_val is None:
-                    continue
+            for md in mb.entries:
                 # A literal key (`https://trusted.example $http_origin;`) is an
                 # exact-match allowlist, so only `default` reflects unconditionally.
                 if keyed_on_origin and (md.is_regex or md.src_val != "default"):
