@@ -2,6 +2,7 @@ import re
 
 import gixy
 from gixy.core.regexp import Regexp
+from gixy.core.utils import PASS_DIRECTIVES
 from gixy.directives.directive import MapDirective
 from gixy.plugins.plugin import Plugin
 
@@ -30,11 +31,7 @@ class invalid_regex(Plugin):
         "rewrite",
         "set",
         "return",
-        "proxy_pass",
-        "fastcgi_pass",
-        "uwsgi_pass",
-        "scgi_pass",
-        "grpc_pass",
+        *PASS_DIRECTIVES,
         "add_header",
         "more_set_headers",
         "proxy_set_header",

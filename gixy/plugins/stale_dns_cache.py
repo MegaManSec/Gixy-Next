@@ -4,6 +4,7 @@ import tldextract
 
 import gixy
 import gixy.core.builtin_variables as builtins
+from gixy.core.utils import PASS_DIRECTIVES
 from gixy.core.variable import compile_script
 from gixy.directives.directive import is_ipv4, is_ipv6
 from gixy.plugins.plugin import Plugin
@@ -26,7 +27,7 @@ class stale_dns_cache(Plugin):
         "or upstream 'server ... resolve' (nginx>=1.27.3)."
     )
     help_url = "https://gixy.io/plugins/stale_dns_cache/"
-    directives = ["proxy_pass", "fastcgi_pass", "uwsgi_pass", "scgi_pass", "grpc_pass"]
+    directives = PASS_DIRECTIVES
 
     def __init__(self, config):
         super(stale_dns_cache, self).__init__(config)

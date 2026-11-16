@@ -3,6 +3,7 @@ import re
 from collections import deque
 
 AUTH_DIRECTIVES = ("auth_basic", "auth_request", "auth_jwt", "auth_oidc")
+PASS_DIRECTIVES = ("proxy_pass", "fastcgi_pass", "uwsgi_pass", "scgi_pass", "grpc_pass")
 TLS_LISTEN_FLAGS = ("ssl", "quic")
 REGEX_ARGUMENT_DIRECTIVES = frozenset((
     "server_name",
