@@ -3,7 +3,18 @@ import re
 from collections import deque
 
 AUTH_DIRECTIVES = ("auth_basic", "auth_request", "auth_jwt", "auth_oidc")
+REGEX_ARGUMENT_DIRECTIVES = frozenset((
+    "server_name",
+    "valid_referers",
+    "gzip_disable",
+    "fastcgi_split_path_info",
+    "proxy_redirect",
+    "proxy_cookie_domain",
+    "proxy_cookie_path",
+    "proxy_cookie_flags",
+))
 
+_UPPERCASE_RE = re.compile(r"[A-Z]")
 _BARE_VARIABLE_RE = re.compile(r"\$(?:([a-z_][a-z0-9_]*)|\{([a-z_][a-z0-9_]*)\})", re.IGNORECASE)
 
 
@@ -158,6 +169,40 @@ def normalize_address(address):
     if parsed.version == 6:
         return f"[{parsed.compressed}]"
     return parsed.compressed
+
+
+def regex_arguments(directive):
+    """Yield (pattern, case_insensitive) for every regular expression among a
+    directive's arguments, as nginx compiles them."""
+    name, args = directive.name, directive.args
+    if name == "location":
+        if directive.is_regex:
+            yield directive.path, directive.modifier == "~*"
+    elif name == "if":
+        if directive.is_regex and directive.value:
+            yield directive.value, directive.operand.endswith("*")
+    elif name in ("rewrite", "fastcgi_split_path_info"):
+        if args:
+            yield args[0], False
+    elif name == "gzip_disable":
+        for arg in args:
+            if arg not in ("msie6", "degradation"):
+                yield arg, True
+    elif name == "valid_referers":
+        for arg in args:
+            if arg.startswith("~"):
+                yield arg[1:], True
+    elif name == "server_name":
+        for arg in args:
+            if arg.startswith("~"):
+                yield arg[1:], _UPPERCASE_RE.search(arg) is not None
+    elif name in ("proxy_redirect", "proxy_cookie_path"):
+        if args and args[0].startswith("~"):
+            caseless = args[0].startswith("~*")
+            yield args[0][2 if caseless else 1:], caseless
+    elif name in ("proxy_cookie_domain", "proxy_cookie_flags"):
+        if args and args[0].startswith("~"):
+            yield args[0][1:], True
 
 
 def bare_variable_name(value):
