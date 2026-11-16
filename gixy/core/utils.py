@@ -33,20 +33,20 @@ def resolve_inherited_single(scope, name):
 
 
 def enforced_auth(scope):
-    """Authentication directives that restrict `scope`, by module name.
+    """Names of the authentication modules that restrict `scope`.
 
     A module is on when its nearest declaration is not exactly `off` (nginx
     compares case-sensitively). `auth_basic` restricts only with an
     `auth_basic_user_file` in effect; a file without an `http` block is
     assumed to get it from the main configuration.
     """
-    enforced = {}
+    enforced = set()
     for name in AUTH_DIRECTIVES:
         auth = resolve_inherited_single(scope, name)
         if auth is not None and auth.arg(0) != "off":
-            enforced[name] = auth
+            enforced.add(name)
     if not _user_file_in_effect(scope):
-        enforced.pop("auth_basic", None)
+        enforced.discard("auth_basic")
     return enforced
 
 
