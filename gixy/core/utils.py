@@ -3,7 +3,7 @@ import re
 from collections import deque
 
 import gixy.core.sre_parse.sre_parse as sre_parse
-from gixy.core.regexp import PARSE_ERRORS, Regexp
+from gixy.core.regexp import ANCHORS_BEGIN, PARSE_ERRORS, Regexp
 
 AUTH_DIRECTIVES = ("auth_basic", "auth_request", "auth_jwt", "auth_oidc")
 PASS_DIRECTIVES = ("proxy_pass", "fastcgi_pass", "uwsgi_pass", "scgi_pass", "grpc_pass")
@@ -331,7 +331,7 @@ def _literal_start(location):
         seq = list(Regexp(location.path).parsed)
     except PARSE_ERRORS:
         return ""
-    if not seq or seq[0] != (sre_parse.AT, sre_parse.AT_BEGINNING):
+    if not seq or seq[0][0] != sre_parse.AT or seq[0][1] not in ANCHORS_BEGIN:
         return ""
     start = ""
     for op, av in seq[1:]:

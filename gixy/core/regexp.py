@@ -136,8 +136,8 @@ def _merge_variants(variants):
     return "".join(result)
 
 
-_ANCHORS_BEGIN = frozenset((sre_parse.AT_BEGINNING, sre_parse.AT_BEGINNING_STRING))
-_ANCHORS_END = frozenset((sre_parse.AT_END, sre_parse.AT_END_STRING))
+ANCHORS_BEGIN = frozenset((sre_parse.AT_BEGINNING, sre_parse.AT_BEGINNING_STRING))
+ANCHORS_END = frozenset((sre_parse.AT_END, sre_parse.AT_END_STRING))
 
 
 def _seq_anchored(seq, anchors, last):
@@ -177,8 +177,8 @@ def _is_anchored(seq, both=False):
             # A group wrapping the whole pattern: each alternative inside
             # still picks its own side.
             return _is_anchored(list(_group_body(op, av)), both)
-    begin = _seq_anchored(seq, _ANCHORS_BEGIN, last=False)
-    end = _seq_anchored(seq, _ANCHORS_END, last=True)
+    begin = _seq_anchored(seq, ANCHORS_BEGIN, last=False)
+    end = _seq_anchored(seq, ANCHORS_END, last=True)
     return (begin and end) if both else (begin or end)
 
 
@@ -808,8 +808,8 @@ class AtToken(Token):
     type = sre_parse.AT
 
     def _parse(self):
-        self.begin = self.token[1] in _ANCHORS_BEGIN
-        self.end = self.token[1] in _ANCHORS_END
+        self.begin = self.token[1] in ANCHORS_BEGIN
+        self.end = self.token[1] in ANCHORS_END
 
     def can_contain(self, char, skip_literal=True):
         return False

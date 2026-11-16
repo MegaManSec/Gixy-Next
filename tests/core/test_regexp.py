@@ -596,6 +596,8 @@ def test_unsupported_pcre_constructs_fail_to_parse(regexp):
     (r'^\P{ASCII}+$', '\xe9', True),
     (r'^\P{ASCII}+$', 'a', False),
     (r'^\p{Greek}+$', '\r', True),
+    (r'^\p{SD}+$', '\r', True),
+    (r'^\p{Lt}+$', 'a', False),
     (r'^a\Kb$', 'b', True),
     (r'^a\yb$', 'y', True),
 ))
