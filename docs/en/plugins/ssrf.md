@@ -9,7 +9,7 @@ description: "Detects SSRF-prone proxy_pass, fastcgi_pass, uwsgi_pass, scgi_pass
 
 This plugin looks for `proxy_pass`, `fastcgi_pass`, `uwsgi_pass`, `scgi_pass`, or `grpc_pass` usage where the upstream address is built from variables that can be influenced by the client (host, port, and — for `proxy_pass`/`grpc_pass` — the scheme or path). That is the classic NGINX SSRF shape.
 
-`$host` counts as client input only where a request for any host name can reach the server: the default server of a `listen` socket (the one flagged `default_server`, or the first one declared on that socket), a server whose `server_name` is a catch-all regular expression such as `~.`, or, when a `resolver` is configured, a server whose `server_name` also matches domains the client can register, such as `example.*`, `~^api\.` or `~^api\.(.+)$`. Deciding that needs the full configuration, so `$host` is only considered when an `http` block is present.
+`$host` counts as client input only where a request for any host name can reach the server: the default server of a `listen` socket (the one flagged `default_server`, or the first one declared on that socket), or a server whose `server_name` is a catch-all regular expression such as `~.`. With a `resolver`, it also counts in a server whose `server_name` matches domains the client can register, such as `example.*`, `~^api\.` or `~^api\.(.+)$`. Deciding that needs the full configuration, so `$host` is only considered when an `http` block is present.
 
 ## Why this is a problem
 
@@ -42,7 +42,7 @@ location / {
 }
 ```
 
-Marking such a location `internal` stops clients from requesting it directly, so the plugin does not report it, or the nested locations and `limit_except` blocks inside it. An unsafe rewrite can still route a request into it:
+Marking such a location `internal` stops clients from requesting it directly, so the plugin does not report it, nor the nested locations and `limit_except` blocks inside it. A `rewrite` can still route a request into it:
 
 ```nginx
 server {
@@ -121,6 +121,8 @@ server {
 ```
 
 Because the variable always names an `upstream` block, NGINX needs no `resolver` to look it up.
+
+In `stream`, map `$ssl_preread_server_name` to a fixed set of upstreams with a `default` instead of proxying to it directly.
 
 If you cannot enumerate hosts, treat the upstream address as a signed token (HMAC) rather than raw client input, and verify it before proxying.
 

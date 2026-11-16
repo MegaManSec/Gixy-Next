@@ -49,8 +49,6 @@ def _flatten(tokens):
             options = _flatten(token.childs)
         elif isinstance(token, BranchToken):
             options = [items for child in token.childs for items in _flatten(child.childs or [])]
-        elif isinstance(token, (MaxRepeatToken, MinRepeatToken)) and token.max <= 1:
-            options = ([[]] if token.min == 0 else []) + (_flatten(token.childs) if token.max else [])
         else:
             options = [[token]]
         results = [done + items for done in results for items in options]
@@ -63,32 +61,65 @@ def _can_contain(token, char):
     return token.can_contain(char, skip_literal=False) or token.can_contain(char.upper(), skip_literal=False)
 
 
+def _walk(items, labels):
+    """Which labels, counted from the end of the name, the text left of `items` can belong to when
+    `items` is read right to left from `labels`; True once the label before the last can be chosen by
+    the client."""
+    for item in items:
+        if isinstance(item, AtToken):
+            if item.begin:
+                return set()
+            continue
+        if isinstance(item, (MaxRepeatToken, MinRepeatToken, GroupRefToken)):
+            labels = _repeat(item, labels)
+        else:
+            if isinstance(item, str):
+                dot, label, fixed = item == ".", item != ".", True
+            else:
+                dot = _can_contain(item, ".")
+                label = any(_can_contain(item, char) for char in LABEL_CHARS)
+                fixed = False
+            if not dot and not label:
+                continue
+            if label and not fixed and 2 in labels:
+                return True
+            following = {2} if dot and 1 in labels else set()
+            if label:
+                following |= labels
+            labels = following
+        if labels is True or not labels:
+            return labels
+    return labels
+
+
+def _repeat(token, labels):
+    if isinstance(token, GroupRefToken):
+        options, low, high = _flatten(token.group.root.childs), 1, 1
+    else:
+        options, low, high = _flatten(token.childs), token.min, token.max
+    result = labels if low == 0 else set()
+    for count in range(1, min(high, low + 4) + 1):
+        following = set()
+        for items in options:
+            step = _walk(reversed(items), labels)
+            if step is True:
+                return True
+            following |= step
+        labels = following
+        if count >= low:
+            result |= labels
+        if not labels:
+            break
+    return result
+
+
 def _open_tail(items):
     """True if a name matched by `items` can end in a domain the client registers: one where the label
     before the last is not fixed."""
     if not items or not (isinstance(items[-1], AtToken) and items[-1].end):
         return True
-    labels = {1}
-    for item in reversed(items[:-1]):
-        if isinstance(item, AtToken) and item.begin:
-            return False
-        if isinstance(item, str):
-            dot, label, fixed, many = item == ".", item != ".", True, False
-        else:
-            dot = _can_contain(item, ".")
-            label = any(_can_contain(item, char) for char in LABEL_CHARS)
-            fixed, many = False, isinstance(item, (MaxRepeatToken, MinRepeatToken, GroupRefToken))
-        if not dot and not label:
-            continue
-        if (many and dot and label) or (label and not fixed and 2 in labels):
-            return True
-        following = {2} if dot and 1 in labels else set()
-        if label or (many and item.min == 0):
-            following |= labels
-        labels = following
-        if not labels:
-            return False
-    return True
+    labels = _walk(reversed(items[:-1]), {1})
+    return labels is True or bool(labels)
 
 
 def _is_open_suffix_name(name):
@@ -99,7 +130,7 @@ def _is_open_suffix_name(name):
     try:
         regexp = Regexp(END_ANCHOR_RE.sub(r"\1$", name[1:]), case_sensitive=False)
         return any(_open_tail(items) for items in _flatten(regexp.root.childs))
-    except (sre_parse.error, OverflowError, RecursionError, RegexpTooComplex, TypeError):
+    except (sre_parse.error, OverflowError, RecursionError, RegexpTooComplex):
         return False
 
 
