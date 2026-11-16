@@ -45,7 +45,7 @@ def resolve_inherited_list(scope, name, inherit_name):
         result += own
         mode = resolve_inherited_single(scope, inherit_name)
         mode = mode.arg(0).lower() if mode else "on"
-        if mode == "off" or own and mode != "merge":
+        if mode == "off" or (own and mode != "merge"):
             break
         scope = scope.parent
     return result

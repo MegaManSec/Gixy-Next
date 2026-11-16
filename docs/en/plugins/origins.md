@@ -283,7 +283,7 @@ lower-hostname = true
 
 This plugin uses different severities depending on what it finds, and which header is involved. The logic is generally quite simple:
 
-- Reflecting the request Origin into `Access-Control-Allow-Origin` is HIGH when the response also carries `Access-Control-Allow-Credentials: true`, and MEDIUM otherwise: without it the browser does not let the attacker's page read the response, the same exposure as `Access-Control-Allow-Origin: *`.
+- Reflecting the request Origin into `Access-Control-Allow-Origin` is HIGH when the response also carries `Access-Control-Allow-Credentials: true`, and MEDIUM otherwise: without it the browser blocks only requests that carry the victim's cookies, the same exposure as `Access-Control-Allow-Origin: *`.
 - If the regex matches an *insecure* `Origin`, the severity is HIGH.
 - If the regex matches an *invalid* `Origin` or `Referer`, the severity is LOW.
 - If the regex matches an insecure `Referer`, the severity is MEDIUM.

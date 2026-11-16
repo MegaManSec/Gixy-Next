@@ -392,26 +392,37 @@ class origins(Plugin):
     def _report_reflection(self, node, hops=()):
         """Flag unconditional reflection of the request Origin into Access-Control-Allow-Origin:
         HIGH when the response also allows credentials, MEDIUM otherwise."""
+        credentials = self._allows_credentials(node)
         reason = (
-            "Reflecting `$http_origin` into `Access-Control-Allow-Origin` allows any "
-            "origin to pass the CORS check. Echo only origins from a trusted allowlist."
-        )
+            "Reflecting `$http_origin` into `Access-Control-Allow-Origin` allows any origin to pass the CORS "
+            "check{0}. Echo only origins from a trusted allowlist."
+        ).format(", and the response allows credentials" if credentials else "")
         self.add_issue(
             directive=[*hops, node],
             reason=reason,
-            severity=self.severity_insecure_origin if self._allows_credentials(node) else self.severity_reflection,
+            severity=self.severity_insecure_origin if credentials else self.severity_reflection,
         )
 
     def _allows_credentials(self, node):
-        """True when `Access-Control-Allow-Credentials: true` is also set on the responses `node`
-        adds its header to: by the `add_header` list its block ends up with, or by a
-        `more_set_headers` in its block or any enclosing one."""
-        headers = resolve_inherited_list(node.parent, "add_header", "add_header_inherit")
-        headers += [msh for block in node.parents for msh in block.find("more_set_headers")]
-        return any(
-            value.strip().strip("\"'") == "true"
-            for _, value in self._header_directives(headers, "access-control-allow-credentials")
-        )
+        """True when `Access-Control-Allow-Credentials: true` is also set on a response `node`
+        adds its header to: in its block or any block below it that still inherits `node`,
+        by the `add_header` list in effect there or a `more_set_headers` there or above."""
+        for block in self._blocks_below(node.parent):
+            headers = resolve_inherited_list(block, "add_header", "add_header_inherit")
+            headers += [msh for scope in (block, *block.parents) for msh in scope.find("more_set_headers")]
+            if node in headers and any(
+                value.strip().strip("\"'") == "true"
+                for _, value in self._header_directives(headers, "access-control-allow-credentials")
+            ):
+                return True
+        return False
+
+    @classmethod
+    def _blocks_below(cls, block):
+        yield block
+        for child in block.children:
+            if child.is_block:
+                yield from cls._blocks_below(child)
 
     def _has_origin_allowlist(self, directive):
         for parent in directive.parents:

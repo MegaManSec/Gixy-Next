@@ -31,6 +31,9 @@ def test_referrer_typo_is_low():
     ("reflect_more_set_headers_credentials.conf", "HIGH"),
     ("reflect_server_credentials_merged.conf", "HIGH"),
     ("reflect_server_more_credentials.conf", "HIGH"),
+    ("reflect_server_credentials_below_merged.conf", "HIGH"),
+    ("reflect_server_more_credentials_below.conf", "HIGH"),
+    ("reflect_if_credentials_replaced.conf", "MEDIUM"),
 ])
 def test_reflection_is_high_only_with_credentials(fixture, severity):
     assert _severities((FIXTURES / fixture).read_text()) == [severity]
