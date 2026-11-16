@@ -63,9 +63,13 @@ class stale_dns_cache(Plugin):
     def _option_values(self, option, seen):
         if isinstance(option.value, list):
             return [target for entry in option.value for target in self._targets(compile_hash_entry(entry) or [], seen)]
-        if option.depends:
+        if any(isinstance(dep.value, list) for dep in option.depends or ()):
             return self._targets(option.depends, seen)
         return [option.final_value]
+
+    def _upstream_host(self, target):
+        url = self.parse_uri_re.match(target)
+        return url.group("host").lower() if url and not url.group("port") else None
 
     def audit(self, directive):
         if not getattr(directive, "args", None):
@@ -73,26 +77,20 @@ class stale_dns_cache(Plugin):
 
         proxy_target = directive.args[0]
 
-        if _UNIX_SOCKET_RE.match(proxy_target):
+        if _UNIX_SOCKET_RE.match(proxy_target) or not self.parse_uri_re.match(proxy_target):
             return
 
-        parsed = self.parse_uri_re.match(proxy_target)
-        if not parsed:
-            return
+        _, scheme, rest = proxy_target.partition("://")
+        targets = self._targets(compile_script(rest if scheme else proxy_target))
 
-        raw_host = parsed.group("host")
-        if not raw_host:
-            return
-
-        parsed_hosts = self._targets(compile_script(raw_host))
-
-        if not any(self._needs_dns(host, startup="$" not in proxy_target) for host in parsed_hosts):
+        if not any(self._needs_dns(target, startup="$" not in proxy_target) for target in targets):
             return
 
         severity = self.severity
 
         resolver = directive.find_single_directive_in_scope("resolver")
 
+        upstream_hosts = {self._upstream_host(target) for target in targets}
         upstream_directives = []
         found_upstream = False
         found_bad_server = False
@@ -101,7 +99,7 @@ class stale_dns_cache(Plugin):
             upstream_name = (
                 upstream_args[0] if upstream_args and len(upstream_args) == 1 else None
             )
-            if upstream_name and upstream_name in parsed_hosts:
+            if upstream_name and upstream_name.lower() in upstream_hosts:
                 found_upstream = True
                 for child in upstream.children:
                     if child.name != "server":
@@ -155,7 +153,7 @@ class stale_dns_cache(Plugin):
 
         if not found_upstream:
             if any(
-                host and self.extract(host).suffix for host in parsed_hosts
+                target and self.extract(target).suffix for target in targets
             ):  # Registerable suffix (one way or another)
                 severity = gixy.severity.MEDIUM
 
