@@ -72,6 +72,18 @@ server {
     assert not variables['domain'].can_contain('A')
 
 
+def test_server_regex_name_captures_with_rewrite():
+    config = '''
+server {
+    server_name ~^(www\\.)?(?<domain>.+)$;
+    rewrite ^/old/(.*)$ /new/$1;
+}
+    '''
+
+    directive = _get_parsed(config)
+    assert {1, 2, 'domain'} <= {v.name for v in directive.variables}
+
+
 def test_location():
     config = '''
 location / {
