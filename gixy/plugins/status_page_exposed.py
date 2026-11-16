@@ -194,7 +194,7 @@ class status_page_exposed(Plugin):
             )
         if not has_allow:
             reasons.append("no allow directive to whitelist trusted IPs")
-        reasons.append("no 'deny all' to block unauthorized access")
+        reasons.append("no effective 'deny all' to block unauthorized access")
 
         self.add_issue(
             directive=directive,

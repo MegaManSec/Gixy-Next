@@ -7,7 +7,7 @@ description: "Detects stub_status locations that are reachable over the network 
 
 ## What this check looks for
 
-This plugin flags `stub_status` endpoints that clients outside the trusted `allow` ranges can reach, because no `deny all` ends the rule list.
+This plugin flags `stub_status` endpoints that clients outside the trusted `allow` ranges can reach: no `deny all` closes the rule list, or an `allow` covering every address comes first.
 
 ## Why this is a problem
 
