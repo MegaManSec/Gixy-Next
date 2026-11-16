@@ -1,30 +1,24 @@
 ---
 title: "Missing Worker Processes"
-description: "Detects configs where worker_processes is unset. When unset, NGINX defaults to a single worker process, which can limit concurrency and throughput on multi-core hosts. Recommends setting worker_processes to auto."
+description: "Detects configs where worker_processes is unset, which leaves NGINX with a single worker process and limits throughput on multi-core hosts. Set worker_processes to auto."
 ---
 
-# [missing_worker_processes] Unset `worker_processes` (defaults to 1)
+# [missing_worker_processes] Missing `worker_processes`
 
 ## What this check looks for
 
-This plugin warns when `worker_processes` is not set anywhere in the config.
+This plugin warns when `worker_processes` is not set at the top level of the configuration.
 
 ## Why this is a problem
 
-`worker_processes` controls how many worker processes NGINX starts to accept and process connections.
+When `worker_processes` is unset, NGINX starts a single worker, which runs on one CPU. On a multi-core host, CPU-bound work such as TLS and compression saturates that core while the others sit idle, which shows up as higher latency and lower throughput under load.
 
-When the directive is unset, NGINX defaults to 1. On a multi-core system, a single worker can become a bottleneck:
-
-- Only one worker -- working on a single CPU -- is available to accept and handle connections.
-- CPU-bound workloads (TLS, compression, heavy rewrite logic, etc.) can saturate a single core while other cores remain underutilized.
-- Under load, this often shows up as higher latency and reduced throughput.
-
-In most cases, running one worker per CPU core works well, and setting `worker_processes` to `auto` is the simplest way to achieve that.
+`worker_processes auto` starts one worker per CPU core, which suits most deployments.
 
 ## Bad configuration
 
 ```nginx
-# No worker_processes directive anywhere
+# No worker_processes directive
 events { }
 
 http {
@@ -34,8 +28,6 @@ http {
     }
 }
 ```
-
-This will run with the default of a single worker process.
 
 ## Better configuration
 
@@ -54,6 +46,6 @@ http {
 
 ## Additional notes
 
-This check cannot determine how many CPU cores the host has. On a single-core machine, the default of 1 may be fine, and this warning can be considered a false positive.
-
-`worker_processes auto` ignores CPU quotas such as `docker run --cpus` or a Kubernetes CPU limit, so in a CPU-limited container it can start far more workers than there are CPUs to run them; set an explicit number there. The official NGINX Docker image does this for you when `NGINX_ENTRYPOINT_WORKER_PROCESSES_AUTOTUNE` is set.
+- The check only runs on a full configuration, one with a top-level `http` or `events` block.
+- The check cannot tell how many CPU cores the host has. On a single-core machine, the default of 1 is fine.
+- `auto` counts the host's online CPUs and ignores CPU quotas such as `docker run --cpus` or a Kubernetes CPU limit, so in a CPU-limited container it can start far more workers than can run; set an explicit number there. The official NGINX Docker image does this when `NGINX_ENTRYPOINT_WORKER_PROCESSES_AUTOTUNE` is set.

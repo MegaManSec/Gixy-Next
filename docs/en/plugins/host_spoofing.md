@@ -7,13 +7,11 @@ description: "Detects a proxied Host set from client-controlled values ($http_*,
 
 ## What this check looks for
 
-This plugin flags `proxy_set_header Host` and `grpc_set_header Host` (the gRPC `:authority`) when the value comes from the client: any `$http_*` request header such as `$http_host` or `$http_x_forwarded_host`, a `$cookie_*` value, or a query-string `$arg_*`.
-
-The value is followed through `set` directives in the same and enclosing blocks and through `map` blocks, so `set $h $http_host;` and `map $http_x_forwarded_host $best_http_host { default $http_x_forwarded_host; '' $host; }` are reported too. A `map` entry that passes its own source variable through is not followed for an exact or `*.example.com` key, but is for a regular expression or `example.*` key, which accept any domain.
+This plugin flags `proxy_set_header Host` and `grpc_set_header Host` (the gRPC `:authority`) when the value comes from the client: any `$http_*` request header such as `$http_host` or `$http_x_forwarded_host`, a `$cookie_*` value, or a query-string `$arg_*`. The value is followed through `set` directives in the same and enclosing blocks and through `map` blocks.
 
 ## Why this is a problem
 
-`$http_host` comes directly from the client. Attackers can spoof it, and many applications use the host value for:
+The client chooses these values, and many applications use the host for:
 
 - absolute URL generation (links in emails, redirects),
 - tenant selection,
@@ -23,6 +21,8 @@ If the app trusts an attacker-controlled host, you can end up with phishing link
 
 ## Bad configuration
 
+### host copied from the request
+
 ```nginx
 location / {
     proxy_set_header Host $http_host;
@@ -31,6 +31,24 @@ location / {
 ```
 
 If a client sends `Host: evil.example`, the upstream receives it too.
+
+### host chosen by a map
+
+```nginx
+map $http_x_forwarded_host $best_http_host {
+    default $http_x_forwarded_host;
+    ''      $host;
+}
+
+server {
+    location / {
+        proxy_set_header Host $best_http_host;
+        proxy_pass http://backend;
+    }
+}
+```
+
+The `default` entry passes the client's `X-Forwarded-Host` through, so any client that sends that header picks the upstream `Host`.
 
 ## Better configuration
 
@@ -58,3 +76,4 @@ A request only reaches the second server when its host name matches a `server_na
 ## Additional notes
 
 - A value that also uses `$host`, such as `$host:$http_x_forwarded_port`, is still reported: the client chooses the rest of it.
+- A `map` keyed on a client value may pass that value through for an exact name or a `*.example.com` key, since only the listed names get through. A regular expression or (with `hostnames`) an `example.*` key accepts any domain, so such an entry is still reported.

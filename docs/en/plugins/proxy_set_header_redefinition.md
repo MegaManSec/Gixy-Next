@@ -7,7 +7,7 @@ description: "Detects proxy_set_header usage that unintentionally drops request 
 
 ## What this check looks for
 
-This plugin looks for nested contexts where `proxy_set_header` is used at a lower level and headers declared at higher levels are no longer effective. `grpc_set_header` follows the same rule and is checked the same way.
+This plugin looks for nested blocks whose `proxy_set_header` directives make the headers declared at higher levels ineffective there. `grpc_set_header` follows the same rule and is checked the same way; the two directives keep separate lists.
 
 ## Why this is a problem
 
@@ -15,15 +15,7 @@ This plugin looks for nested contexts where `proxy_set_header` is used at a lowe
 
 This is the same trap as [`add_header`](https://gixy.io/plugins/add_header_redefinition/), but the consequences land on the upstream instead of the client. The headers that usually end up dropped are the ones a backend relies on for correctness and security: `Host`, `X-Forwarded-For`, `X-Forwarded-Proto`, or an `Authorization` header for an internal API.
 
-It also silently re-opens header spoofing. A common hardening pattern is to blank out a header so that a client cannot forge it:
-
-```nginx
-server {
-    proxy_set_header X-Internal-Auth "";
-}
-```
-
-If a nested block declares any `proxy_set_header` of its own, that blanking is dropped too, and a client-supplied `X-Internal-Auth` reaches the backend again.
+It also silently re-opens header spoofing. A common hardening pattern blanks a header at `server` level, `proxy_set_header X-Internal-Auth "";`, so that a client cannot forge it. If a nested block declares any `proxy_set_header` of its own, that blanking is dropped too, and a client-supplied `X-Internal-Auth` reaches the backend again.
 
 ## Bad configuration
 
@@ -134,46 +126,16 @@ gixy --proxy-set-header-redefinition-merge-reported-headers false
 merge_reported_headers = false
 ```
 
+## How severity is determined
+
+- **MEDIUM**: a dropped header is on the list below, or a higher scope set it to an empty value, since that blanking stops a client from supplying the header.
+- **LOW**: any other dropped header.
+
+Security-sensitive headers: `host`, `x-forwarded-for`, `x-forwarded-host`, `x-forwarded-proto`, `x-real-ip`, `forwarded`, `authorization`, `proxy-authorization` and `early-data`. These are sent to the upstream, so the list is not the usual set of response security headers: what matters is whether the upstream loses the proxy's account of who the client is, or starts receiving a value the client chose.
+
 ## Additional notes
 
-### Which levels are checked
-
-`proxy_set_header` and `grpc_set_header` are only valid in the `http`, `server` and `location` contexts, so the plugin reports on `server` and `location` blocks that replace headers declared above them. A `server` block that declares a header drops the `http`-level list in exactly the same way a `location` does. The two directives keep separate lists.
-
-### The built-in defaults still apply
-
-NGINX always merges its own default header list on top of whatever is in effect, so `Host` is never left unset. Dropping `proxy_set_header Host $host;` does not remove the `Host` header, it reverts it to the default `$proxy_host`, which is the upstream address rather than the name the client asked for.
-
-Every other dropped header is not removed either. NGINX forwards the client's request headers to the upstream unless a `proxy_set_header` overrides them, so dropping `proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;` does not leave the upstream without an `X-Forwarded-For` — it hands the upstream the one the client sent. That is why a dropped header is usually worse than a missing one.
-
-### What counts as a finding
-
-The plugin only reports a block when something was actually inherited and is actually lost. A nested block that re-declares every inherited header is correct and is not reported, even when the values differ. A nested block whose parents declare no `proxy_set_header` at all has nothing to drop and is not reported either.
-
-A header declared with the value NGINX uses anyway is not reported when dropped, since dropping it changes nothing: `Host $proxy_host`, or an empty `Connection`, `Upgrade`, `Keep-Alive`, `TE` or `Expect`. Before NGINX 1.29.7 a dropped `Connection ""` reverts to `Connection: close`, which only disables upstream keepalive. The same goes for the `grpc_set_header` defaults, such as `TE $grpc_internal_trailers`.
-
-### What "dropped" means in reports
-
-By default, a report lists every header declared above that is not effective at the flagged block, including one already dropped at an intermediate level. Set `merge_reported_headers` to `false` to compare only with the nearest ancestor that declares headers.
-
-### How severity is determined
-
-This plugin treats some request headers as "secure headers" and escalates severity when they are dropped. Concretely:
-
-- If a nested block drops only non-security headers, the issue is reported as LOW.
-- If a nested block drops any header from the secure list below, the issue is reported as MEDIUM.
-- If a nested block drops a header that a higher scope set to an empty value, the issue is reported as MEDIUM regardless of its name.
-
-Unlike `add_header`, these are headers sent *to the upstream*, so the list is not the usual set of response security headers. What matters here is whether the upstream loses the proxy's account of who the client is, or starts receiving a value the client chose. The following headers are considered security-sensitive:
-
-- `host`
-- `x-forwarded-for`
-- `x-forwarded-host`
-- `x-forwarded-proto`
-- `x-real-ip`
-- `forwarded`
-- `authorization`
-- `proxy-authorization`
-- `early-data`
-
-The empty-value rule covers the blanking pattern shown above. `proxy_set_header X-Internal-Auth "";` exists to stop a client from supplying that header, and the header name is site-specific, so it cannot be listed here by name. Losing it has the same effect as losing `X-Forwarded-For`: the upstream starts trusting a value the client controls.
+- `proxy_set_header` and `grpc_set_header` are valid in the `http`, `server` and `location` contexts only, so the plugin reports `server` and `location` blocks that replace headers declared above them; a `server` block drops the `http`-level list just as a `location` does.
+- NGINX always applies its own default header list, so a dropped `proxy_set_header Host $host;` does not remove the `Host` header: it reverts to the default `$proxy_host`, the upstream address rather than the name the client asked for. Other dropped headers are not removed either. NGINX forwards the client's request headers unless a `proxy_set_header` overrides them, so a dropped `proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;` hands the upstream the `X-Forwarded-For` the client sent. That is why a dropped header is usually worse than a missing one.
+- Only a block that loses something it inherited is reported. A nested block that re-declares every inherited header is not reported, even when the values differ, and a block whose parents declare no `proxy_set_header` has nothing to drop.
+- A header declared with the value NGINX uses anyway is not reported when dropped, since dropping it changes nothing: `Host $proxy_host`, or an empty `Connection`, `Upgrade`, `Keep-Alive`, `TE` or `Expect`. Before NGINX 1.29.7 a dropped `Connection ""` reverts to `Connection: close`, which only disables upstream keepalive. The same goes for the `grpc_set_header` defaults, such as `TE $grpc_internal_trailers`.

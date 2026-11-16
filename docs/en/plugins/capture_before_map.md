@@ -1,25 +1,23 @@
 ---
 title: "Capture Before Regex Map (CVE-2026-42533)"
-description: "Detects a value that reads $N before a variable from a regex map, the pattern that triggers CVE-2026-42533."
+description: "Detects a value that reads a numbered capture before a variable from a regex map, which overflows a heap buffer on NGINX before 1.30.4 and 1.31.3 (CVE-2026-42533)."
 ---
 
-# [capture_before_map] `$N` before a regex `map` variable in one value (CVE-2026-42533)
-
-CVE-2026-42533 is a heap buffer overflow in nginx workers before 1.30.4 (stable) and 1.31.3 (mainline).
+# [capture_before_map] Capture `$N` read before a regex `map` variable (CVE-2026-42533)
 
 ## What this check looks for
 
 A value with variables (`return`, `set`, `add_header`, `proxy_pass`, a `rewrite` replacement, an `if` comparison, a `map` value, and so on) where:
 
-- a numeric capture (`$1`, `$2`, ...) comes first,
+- a numbered capture (`$1`, `$2`, ...) comes first,
 - a variable from a `map` with regex keys comes later,
 - one of that map's regex keys defines the same group.
 
-The nginx version is not in the configuration, so the finding is INFORMATION. Patched versions need no change.
+Findings are INFORMATION, because Gixy-Next cannot tell the NGINX version. Patched versions need no change.
 
 ## Why this is a problem
 
-nginx sizes the buffer for the value in one pass and fills it in a second. The map runs in between and replaces `$1` with its own capture, which can be longer than the buffer.
+On NGINX before 1.30.4 and 1.31.3, the buffer for the value is sized in one pass and filled in a second. Evaluating the map variable in the first pass runs its regex, which replaces the request's captures, so the second pass copies the map's `$1` into room sized for the original one.
 
 ## Bad configuration
 
@@ -36,11 +34,11 @@ server {
 }
 ```
 
-A request for `/aaaa…aaaa/x` with a few thousand `a`s overflows the buffer.
+`$1` is sized as one character, but the map's capture is the whole first path segment. A request for `/` followed by a few thousand `a`s and `/x` overflows the buffer.
 
 ## Better configuration
 
-Upgrade nginx. Until then, use a named capture, which the map does not change:
+Upgrade NGINX. Until then, use a named capture, which the map does not change:
 
 ```nginx
 map $uri $section {
@@ -58,4 +56,4 @@ server {
 ## Additional notes
 
 - A map variable placed before the capture (`"$section$1"`) is not reported; `$1` is then the map's capture.
-- nginx caches a map variable for the request, so a map already evaluated earlier does not run again. Gixy-Next cannot see that and reports the pattern anyway.
+- NGINX caches a map variable for the request unless the map is `volatile`, so a map already evaluated earlier does not run again. Gixy-Next cannot see that and reports the pattern anyway.

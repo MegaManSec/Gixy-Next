@@ -1,5 +1,5 @@
 ---
-title: "Outdated/stale cached DNS records used in proxy_pass"
+title: "Stale Upstream DNS Records"
 description: "Detects proxy_pass targets whose hostnames are resolved only at startup, so the cached IP addresses can go stale. Use a variable with a resolver, or upstream server ... resolve."
 ---
 
@@ -9,8 +9,9 @@ description: "Detects proxy_pass targets whose hostnames are resolved only at st
 
 This plugin reports hostnames that NGINX resolves only once, at startup, so requests can go to outdated IP addresses:
 
-- `proxy_pass` points at a literal hostname, for example `proxy_pass https://api.example.com;`,
-- `proxy_pass` points to an `upstream`, and one or more `server` entries inside that `upstream` are hostnames without the `resolve` option.
+- `proxy_pass` points at a literal hostname, for example `proxy_pass https://api.example.com;`
+- `proxy_pass` points to an `upstream` whose `server` entries are hostnames without the `resolve` parameter
+- `proxy_pass` uses a variable, or an `upstream` uses `server ... resolve`, but no `resolver` is set, so the lookup cannot happen at all
 
 `fastcgi_pass`, `uwsgi_pass`, `scgi_pass` and `grpc_pass` are checked the same way.
 
@@ -18,10 +19,10 @@ This plugin reports hostnames that NGINX resolves only once, at startup, so requ
 
 By default, NGINX resolves upstream hostnames once at startup and ignores their TTL. When the records change, traffic keeps going to the old addresses, which may now belong to another host.
 
-If you want NGINX to re-resolve names at runtime, you have to opt into it using either:
+To make NGINX re-resolve names at runtime, you have to opt in with either:
 
-- variables in `proxy_pass` plus a configured `resolver`, or
-- `upstream` servers with the `resolve` parameter plus a configured `resolver` and a shared `zone` (available in NGINX Open Source starting 1.27.3; previously NGINX Plus only).
+- a variable in `proxy_pass` plus a `resolver`, or
+- `upstream` servers with the `resolve` parameter plus a `resolver` and a shared `zone` (NGINX Open Source 1.27.3+; previously NGINX Plus only).
 
 ## Bad configuration
 
@@ -32,8 +33,6 @@ location / {
     proxy_pass https://api.example.com;
 }
 ```
-
-NGINX resolves the name on startup and keeps the addresses until reload or restart.
 
 ### upstream uses hostnames without resolve
 
@@ -59,7 +58,7 @@ location / {
 }
 ```
 
-Without a `resolver`, this proxy does not work at all. A variable whose values are all unix sockets or IP addresses, such as a `map` that picks a PHP-FPM socket, needs no `resolver` and is not reported.
+Without a `resolver`, NGINX cannot look the name up and answers every request with 502.
 
 ### upstream with resolve, but no resolver
 
@@ -76,7 +75,7 @@ server {
 }
 ```
 
-Here NGINX does not even start or reload: `server ... resolve` needs a `resolver`, and without one `nginx -t` fails with "no resolver defined to resolve names at run time".
+NGINX refuses to start or reload: `nginx -t` fails with "no resolver defined to resolve names at run time".
 
 ## Better configuration
 
@@ -95,7 +94,7 @@ http {
 }
 ```
 
-With any variable in `proxy_pass`, NGINX resolves the name at request time through the `resolver`, which must be set. It honors the record's TTL unless `valid=` overrides it.
+With any variable in `proxy_pass`, NGINX resolves the name at request time through the `resolver`. It honors the record's TTL unless `valid=` overrides it.
 
 ### upstream server ... resolve (open source NGINX 1.27.3+)
 
@@ -116,16 +115,15 @@ http {
 }
 ```
 
-Since NGINX 1.27.3, `server ... resolve` re-resolves upstream names the same way, and also needs a `resolver`.
+`server ... resolve` re-resolves the name in the background when its TTL expires. It needs a `resolver` and a shared `zone`.
 
 ## How severity is determined
 
-This plugin uses different severities depending on what it finds. Concretely:
-
-- If the flagged `proxy_pass` target (or `upstream server`) is a hostname without a registrable suffix (for example, internal names like `backend` or `service.namespace`), the issue is reported as LOW.
-- If the flagged target is a hostname with a registrable suffix (for example, `api.example.com`), the issue is reported as MEDIUM, because these names are commonly backed by load balancers / CDNs and are more likely to change over time.
-- If the configuration is attempting runtime re-resolution (`proxy_pass` with variables, or `upstream ... resolve`) but no `resolver` is configured, the proxying will not work at all, and the issue is reported as MEDIUM.
+- **LOW**: the hostname has no registrable suffix, for example `backend` or `service.namespace`.
+- **MEDIUM**: the hostname has a registrable suffix, for example `api.example.com`. Such names are often backed by load balancers or CDNs whose addresses change.
+- **MEDIUM**: runtime re-resolution is configured (a variable in `proxy_pass`, or `server ... resolve`) but no `resolver` is set, so proxying does not work at all.
 
 ## Additional notes
 
-For more information about this issue, read [this post](https://joshua.hu/nginx-dns-caching).
+- IP addresses, `unix:` sockets and `localhost` need no lookup and are not reported. A variable whose values are all of those, such as a `map` that picks a PHP-FPM socket, is not reported either.
+- For more information about this issue, read [this post](https://joshua.hu/nginx-dns-caching).

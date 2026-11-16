@@ -14,12 +14,12 @@ description: "Detects worker_rlimit_nofile values that are too low relative to w
 
 NGINX needs file descriptors (FDs) for more than its connections. `worker_connections` already caps every socket a worker holds, upstream connections included, so the FDs beyond it go to files:
 
-- Web server mode: the file each request serves. A single page load can involve multiple files.
+- Web server mode: the file each request serves.
 - Proxy mode: a temporary file for a response buffered to disk.
 - Caching mode: the cached file on a hit, and proxy mode on a miss.
 - HTTP/2 and `open_file_cache`: many open files per connection, or files kept open after their requests finish.
 
-If the FD limit is too low, workers will start failing with "Too many open files", which shows up as request failures under load.
+If the FD limit is too low, workers fail with "Too many open files", which shows up as request failures under load.
 
 ## Bad configuration
 
@@ -45,7 +45,7 @@ A 1:1 ratio leaves no room for the files that requests hold open.
 
 ## Better configuration
 
-A practical baseline is at least 2x worker_connections:
+A practical baseline is at least 2x `worker_connections`:
 
 ```nginx
 worker_processes auto;
@@ -65,10 +65,6 @@ Adjust upward if you are proxying heavily, caching, serving lots of static asset
 
 ## Additional notes
 
-Without `worker_rlimit_nofile`, workers inherit the limit from `ulimit`, the systemd unit's `LimitNOFILE` or the container runtime; check it in `/proc/<worker pid>/limits`. Raising `worker_rlimit_nofile` above the inherited hard limit needs `CAP_SYS_RESOURCE`, which a default Docker container does not have.
-
-The common idiom, halved for proxied traffic, is:
-
-```text
-max clients = worker_processes * worker_connections
-```
+- Without `worker_rlimit_nofile`, workers inherit the limit from `ulimit`, the systemd unit's `LimitNOFILE` or the container runtime; check it in `/proc/<worker pid>/limits`.
+- Raising `worker_rlimit_nofile` above the inherited hard limit needs `CAP_SYS_RESOURCE`, which a default Docker container does not have.
+- A worker serves at most `worker_connections` clients, or half that when every request also opens an upstream connection, so `worker_processes * worker_connections` is the usual capacity estimate.

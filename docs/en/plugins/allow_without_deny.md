@@ -100,7 +100,7 @@ Blocking a subnet except for one host is a legitimate pattern: the `allow` comes
 
 ## Additional notes
 
-`allow` and `deny` rules are not merged across levels. As soon as a child context declares an `allow` or `deny` of its own, it stops inheriting the parent's rules (`ngx_http_access_merge_loc_conf`). A `deny all;` at the `server` level therefore does *not* protect a `location` that only says `allow 10.0.0.0/8;`: that location is open to everyone, while a sibling location without rules of its own still inherits the `deny all;`. Every context that declares an `allow` needs its own `deny`.
+`allow` and `deny` rules are not merged across levels: a context that declares an `allow` or `deny` of its own stops inheriting the parent's rules. A `deny all;` at the `server` level therefore does *not* protect a `location` that only says `allow 10.0.0.0/8;`: that location is open to everyone, while a sibling location without rules of its own still inherits the `deny all;`. Every context that declares an `allow` needs its own `deny`.
 
 NGINX keeps separate rule lists for IPv4, IPv6 and `unix:` clients, and `all` joins every list. `deny 0.0.0.0/0;` therefore blocks only IPv4 clients and `deny ::/0;` only IPv6 ones, so neither counts as covering an `allow` from the other family. An IPv4-mapped IPv6 client (`::ffff:a.b.c.d`, as seen on a `listen [::]:80 ipv6only=off` socket) is checked against the IPv4 rules whenever the context has any, so `allow ::ffff:10.0.0.0/104; deny all;` denies those clients: `deny all` is also an IPv4 rule and matches first.
 
@@ -119,4 +119,4 @@ location /admin/ {
 
 That is the intended "IP allowlist OR authentication" pattern. Clients outside the allow list fall through to authentication whether or not `deny all;` is present, so omitting it changes nothing.
 
-`auth_basic` without an `auth_basic_user_file` in effect lets every client through, so it does not count. In a file without an `http` block, the user file is assumed to come from the main configuration.
+`auth_basic` only counts when an `auth_basic_user_file` is in effect; without one, NGINX restricts nothing. In a file without an `http` block, the user file is assumed to be set in the main configuration.

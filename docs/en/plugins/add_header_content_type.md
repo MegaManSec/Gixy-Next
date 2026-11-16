@@ -7,22 +7,19 @@ description: "Flags setting Content-Type via add_header, which creates a duplica
 
 ## What this check looks for
 
-This plugin looks for configurations that set the `Content-Type` response header using `add_header`. The header name is matched case-insensitively.
+This plugin flags `add_header` directives that set the `Content-Type` response header. The header name is matched case-insensitively.
 
-A location that proxies to an upstream is not reported when the upstream's `Content-Type` is hidden by the `*_hide_header` directive of the module that does the proxying: `proxy_hide_header` for `proxy_pass`, `fastcgi_hide_header` for `fastcgi_pass`, and likewise for `uwsgi_pass`, `scgi_pass` and `grpc_pass`. Each upstream module keeps its own hide list, so a `fastcgi_hide_header` has no effect on a `proxy_pass` response. When the scope has no `*_pass` directive, a `Content-Type` hidden by any of the five modules is accepted.
-
-The hide list in effect is the one from the nearest level (`location`, `server`, `http`) that declares *any* `<module>_hide_header`. A level that declares its own list replaces the inherited one rather than merging with it. `<module>_pass_header` does not reset the hide list, but a `<module>_pass_header Content-Type` in effect removes `Content-Type` from it again, so the header is reported.
+A location that proxies to an upstream is not reported when the upstream's `Content-Type` is hidden by the `*_hide_header` directive of the module that does the proxying: `proxy_hide_header` for `proxy_pass`, `fastcgi_hide_header` for `fastcgi_pass`, and likewise for `uwsgi_pass`, `scgi_pass` and `grpc_pass`. When the scope has no `*_pass` directive, a `Content-Type` hidden by any of the five modules is accepted.
 
 ## Why this is a problem
 
-NGINX can end up sending two `Content-Type` headers: one from the upstream, and one you added. Different clients handle duplicates differently, and caches may store an unexpected value. For static content, set the type with an empty `types` block and `default_type` instead.
+NGINX can end up sending two `Content-Type` headers: the one it sets from `types` or receives from the upstream, and the one you added. Different clients handle duplicates differently, and caches may store an unexpected value.
 
 ## Bad configuration
 
 ### plain add_header
 
 ```nginx
-# Adds a second Content-Type if the upstream already sets one
 add_header Content-Type text/plain;
 ```
 
@@ -38,9 +35,9 @@ location / {
 }
 ```
 
-`fastcgi_hide_header` only affects `fastcgi_pass` responses. The `proxy_pass` response keeps the upstream `Content-Type`, so the client receives two.
+`fastcgi_hide_header` only affects `fastcgi_pass` responses, so the `proxy_pass` response keeps the upstream `Content-Type` and the client receives two.
 
-### child list replaces the inherited one
+### hide list redeclared in the location
 
 ```nginx
 server {
@@ -54,7 +51,7 @@ server {
 }
 ```
 
-The `location` declares its own `proxy_hide_header` list, so it no longer inherits `Content-Type` from the `server` level and the upstream header reaches the client.
+A level that declares its own `proxy_hide_header` list replaces the inherited one, so the `location` no longer hides `Content-Type` and the upstream header reaches the client.
 
 ### pass_header re-exposes the upstream header
 

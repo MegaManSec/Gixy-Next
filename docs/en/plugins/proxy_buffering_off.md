@@ -9,8 +9,8 @@ description: "Flags proxy_buffering off, its fastcgi, uwsgi and scgi equivalents
 
 This plugin reports these directives when they are explicitly set to `off`:
 
-- response buffering: `proxy_buffering`, `fastcgi_buffering`, `uwsgi_buffering`, `scgi_buffering`;
-- request body buffering: `proxy_request_buffering`, `fastcgi_request_buffering`, `uwsgi_request_buffering`, `scgi_request_buffering`.
+- response buffering: `proxy_buffering`, `fastcgi_buffering`, `uwsgi_buffering`, `scgi_buffering`
+- request body buffering: `proxy_request_buffering`, `fastcgi_request_buffering`, `uwsgi_request_buffering`, `scgi_request_buffering`
 
 ## Why this is a problem
 

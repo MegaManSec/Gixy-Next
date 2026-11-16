@@ -1,15 +1,15 @@
 ---
 title: "Header Inheritance Issues"
-description: "Detects add_header and add_trailer usage that unintentionally drops fields due to inheritance rules. Adding a header in a nested block replaces inherited add_header values unless add_header_inherit merge is enabled (nginx 1.29.3+)."
+description: "Detects add_header and add_trailer usage that unintentionally drops fields due to inheritance rules. Adding a header in a nested block replaces inherited add_header values unless add_header_inherit merge is enabled (NGINX 1.29.3+)."
 ---
 
 # [add_header_redefinition] Redefining response headers with `add_header`
 
 ## What this check looks for
 
-This plugin looks for nested contexts where `add_header` is used at a lower level and headers declared at higher levels are not effective at that lower level. The same check is applied to `add_trailer`, which follows the identical inheritance rule.
+This plugin looks for nested blocks whose `add_header` directives make the headers declared at higher levels ineffective there. `add_trailer` follows the same inheritance rule and is checked the same way.
 
-It also reports nested contexts that inherit `add_header_inherit off` (or `add_trailer_inherit off`) and so lose the fields of the level above. A block that declares `off` itself is not reported.
+It also reports nested blocks that inherit `add_header_inherit off` (or `add_trailer_inherit off`) and so lose the headers of the level above. A block that declares `off` itself is not reported.
 
 ## Why this is a problem
 
@@ -85,7 +85,23 @@ server {
 
 ### add_header_inherit off
 
-Set `add_header_inherit on;` (or `merge;`) in the nested blocks that should keep the headers of the level that declares `off`.
+Set `add_header_inherit on;` (or `merge;`) in the nested blocks that should keep the headers of the level that declares `off`:
+
+```nginx
+http {
+    add_header X-Powered-By "example";
+
+    server {
+        add_header_inherit off;
+        add_header X-Frame-Options "DENY";
+
+        location / {
+            add_header_inherit on;
+            proxy_pass http://127.0.0.1:8080;
+        }
+    }
+}
+```
 
 ## Configuration
 
@@ -142,5 +158,5 @@ Security-sensitive headers: `strict-transport-security`, `content-security-polic
 
 ## Additional notes
 
-- With nginx 1.29.3+, `add_header_inherit merge;` merges inherited headers with those of the current level, so a nested `add_header` no longer drops them. See the [documentation](https://nginx.org/en/docs/http/ngx_http_headers_module.html#add_header_inherit).
+- With NGINX 1.29.3+, `add_header_inherit merge;` merges inherited headers with those of the current level, so a nested `add_header` no longer drops them. See the [documentation](https://nginx.org/en/docs/http/ngx_http_headers_module.html#add_header_inherit).
 - `add_trailer` and `add_trailer_inherit` follow the same rules, but NGINX keeps trailers and headers apart: a nested `add_trailer` drops inherited trailers only, and a nested `add_header` drops inherited headers only. Each drop is reported on its own.
