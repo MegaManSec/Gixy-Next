@@ -1,5 +1,5 @@
 import gixy
-from gixy.core.utils import AUTH_DIRECTIVES, enforced_auth, rewrites_into, satisfy_any
+from gixy.core.utils import AUTH_DIRECTIVES, enforced_auth, error_page_for, rewrites_into, satisfy_any
 from gixy.plugins.plugin import Plugin
 
 
@@ -50,11 +50,7 @@ class return_bypasses_allow_deny(Plugin):
             return False
         if code in denial_statuses:
             return True
-        for parent in directive.parents:
-            error_pages = parent.find("error_page")
-            if error_pages:
-                return not any(code in error_page.args[:-1] for error_page in error_pages)
-        return True
+        return error_page_for(directive.parent, code) is None
 
     @staticmethod
     def _serves_no_content(directive):

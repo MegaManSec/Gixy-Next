@@ -1,6 +1,7 @@
 import gixy
 from gixy.core.utils import (
     default_listens,
+    error_page_for,
     is_tls_listen,
     listen_sockets,
     parse_listen_key_and_default,
@@ -83,8 +84,17 @@ class http2_misdirected_request(Plugin):
             arg.lower() == "http2" for _, other, _ in socket if other for arg in other.args[1:]
         )
 
+    def _rewrites_421(self, block):
+        page = error_page_for(block, "421")
+        return page is not None and (
+            not page.args[-1].startswith(("/", "@")) or (page.args[-2].startswith("=") and page.args[-2] != "=421")
+        )
+
     def _has_return_421(self, block):
-        return any(r.args and r.args[0] == "421" for r in block.find("return"))
+        return any(
+            r.args and r.args[0] == "421" and (any(r.args[1:]) or not self._rewrites_421(block))
+            for r in block.find("return")
+        )
 
     def _routable_locations(self, block):
         return [

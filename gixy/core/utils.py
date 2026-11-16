@@ -8,6 +8,7 @@ from gixy.core.regexp import PARSE_ERRORS, Regexp
 AUTH_DIRECTIVES = ("auth_basic", "auth_request", "auth_jwt", "auth_oidc")
 PASS_DIRECTIVES = ("proxy_pass", "fastcgi_pass", "uwsgi_pass", "scgi_pass", "grpc_pass")
 TLS_LISTEN_FLAGS = ("ssl", "quic")
+IMPLICIT_LISTEN_SOCKET = "*:80"
 REGEX_ARGUMENT_DIRECTIVES = frozenset((
     "server_name",
     "valid_referers",
@@ -75,6 +76,12 @@ def resolve_inherited_all(scope, name):
         if declared:
             return declared
     return []
+
+
+def error_page_for(scope, code):
+    """The `error_page` in effect at `scope` that handles `code`: the first one listing
+    it in the nearest scope declaring any, as nginx picks it; None when there is none."""
+    return next((page for page in resolve_inherited_all(scope, "error_page") if code in page.args[:-1]), None)
 
 
 def enforced_auth(scope):
@@ -258,7 +265,7 @@ def listen_sockets(servers):
         listens = server.find("listen")
         module = enclosing_module(server)
         if not listens and (module is None or module.name == "http"):
-            sockets.setdefault("*:80", []).append((server, None, False))
+            sockets.setdefault(IMPLICIT_LISTEN_SOCKET, []).append((server, None, False))
         for listen in listens:
             key, is_default = parse_listen_key_and_default(listen.args)
             if key is not None:
@@ -268,12 +275,14 @@ def listen_sockets(servers):
 
 def default_listens(servers):
     """Map each server to the `listen` directives on whose socket it is the default server:
-    the one flagged `default_server`, otherwise the first server on that socket."""
+    the one flagged `default_server`, otherwise the first server on that socket. A server
+    without `listen` that is the default on `*:80` maps to an empty list."""
     defaults = {}
     for entries in listen_sockets(servers).values():
         server, listen, _ = next((entry for entry in entries if entry[2]), entries[0])
+        listens = defaults.setdefault(server, [])
         if listen is not None:
-            defaults.setdefault(server, []).append(listen)
+            listens.append(listen)
     return defaults
 
 

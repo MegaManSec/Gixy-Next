@@ -68,7 +68,7 @@ http {
 }
 ```
 
-`$host` is the request's Host header after NGINX has validated and lowercased it. Every request whose host name matches no other server lands in the default server, so `Host: 169.254.169.254` makes NGINX fetch the metadata service. A server with a fixed `server_name` is the default too when it is the first one declared on its socket.
+`$host` is the request's Host header after NGINX has validated and lowercased it. Every request whose host name matches no other server lands in the default server, so `Host: 169.254.169.254` makes NGINX fetch the metadata service. A server with a fixed `server_name` is the default too when it is the first one declared on its socket, and a server without `listen` sits on `*:80` like one with `listen 80`.
 
 ### host header with an open-ended server name
 
