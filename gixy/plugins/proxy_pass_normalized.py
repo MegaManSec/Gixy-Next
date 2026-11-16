@@ -5,8 +5,8 @@ import gixy
 import gixy.core.sre_parse.sre_parse as sre_parse
 from gixy.core.regexp import PARSE_ERRORS, Regexp
 from gixy.core.utils import PASS_DIRECTIVES
-from gixy.core.variable import compile_script, memoize_query
-from gixy.directives.directive import RewriteDirective
+from gixy.core.variable import compile_hash_entry, compile_script, memoize_query
+from gixy.directives.directive import MapDirective, RewriteDirective
 from gixy.plugins.plugin import Plugin
 
 DECODED_PATH_VARS = frozenset({"uri", "document_uri"})
@@ -108,14 +108,15 @@ class proxy_pass_normalized(Plugin):
             return True
         if provider.name == "if":
             return provider.variable.lstrip("$") in DECODED_PATH_VARS
-        if provider.name == "map":
-            return provider.source.lstrip("$") in DECODED_PATH_VARS
+        if isinstance(provider, MapDirective):
+            return provider.block.source.lstrip("$") in DECODED_PATH_VARS
+        if isinstance(var.value, list):
+            return any(cls._carries_decoded_path(dep) for entry in var.value for dep in compile_hash_entry(entry) or ())
         if provider.name == "set":
-            # nginx re-escapes numbered captures copied by `set`, but not named ones
             return any(
                 cls._carries_decoded_path(dep)
                 for dep in var.depends or ()
-                if not isinstance(dep.name, int)
+                if not (isinstance(dep.name, int) and provider.escapes_captures)
             )
         return False
 
