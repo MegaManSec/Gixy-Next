@@ -4,7 +4,7 @@ from itertools import takewhile
 import gixy
 import gixy.core.sre_parse.sre_parse as sre_parse
 from gixy.core.regexp import Regexp
-from gixy.core.utils import AUTH_DIRECTIVES
+from gixy.core.utils import AUTH_DIRECTIVES, regex_arguments
 from gixy.core.variable import EXTRACT_RE
 from gixy.directives.block import GeoBlock, IfBlock, LocationBlock, MapBlock
 from gixy.plugins.plugin import Plugin
@@ -29,13 +29,18 @@ HIDE_HEADER_DIRECTIVES = frozenset((
     "scgi_hide_header",
     "grpc_hide_header",
 ))
-PROXY_REWRITE_DIRECTIVES = {
+REGEX_CONSEQUENCES = {
+    "rewrite": "the rewrite never applies",
+    "server_name": "this server name never matches",
+    "valid_referers": "this referer pattern never matches",
+    "fastcgi_split_path_info": "the path is never split",
+    "gzip_disable": "it never disables gzip",
     "proxy_redirect": "the redirect is never rewritten",
     "proxy_cookie_domain": "the cookie domain is never rewritten",
     "proxy_cookie_path": "the cookie path is never rewritten",
     "proxy_cookie_flags": "the cookie flags are never applied",
 }
-GZIP_DISABLE_MASKS = frozenset(("msie6", "degradation"))
+LITERAL_HOST_DIRECTIVES = ("server_name", "valid_referers")
 DENYING_RETURN_CODES = frozenset(("401", "403", "444"))
 
 _PCRE_QUOTE_RE = re.compile(r"(?<!\\)((?:\\\\)*)\\Q")
@@ -122,9 +127,8 @@ class non_expanding_variable(Plugin):
     )
     help_url = "https://gixy.io/plugins/non_expanding_variable/"
     directives = [
-        "geo", "split_clients", "map", "location", "if", "server_name", "rewrite", "auth_request",
-        "valid_referers", "fastcgi_split_path_info", "gzip_disable",
-    ] + sorted(LITERAL_PATH_DIRECTIVES) + sorted(HIDE_HEADER_DIRECTIVES) + sorted(PROXY_REWRITE_DIRECTIVES)
+        "geo", "split_clients", "map", "location", "if", "auth_request",
+    ] + sorted(LITERAL_PATH_DIRECTIVES) + sorted(HIDE_HEADER_DIRECTIVES) + sorted(REGEX_CONSEQUENCES)
 
     def audit(self, directive):
         if directive.name in LITERAL_PATH_DIRECTIVES:
@@ -139,28 +143,12 @@ class non_expanding_variable(Plugin):
             self._audit_location(directive)
         elif isinstance(directive, IfBlock):
             self._audit_if(directive)
-        elif directive.name == "server_name":
-            self._audit_server_name(directive)
-        elif directive.name == "rewrite":
-            self._audit_rewrite(directive)
         elif directive.name == "auth_request":
             self._audit_auth_request(directive)
-        elif directive.name == "valid_referers":
-            self._audit_valid_referers(directive)
         elif directive.name in HIDE_HEADER_DIRECTIVES:
             self._audit_hide_header(directive)
-        elif directive.name in PROXY_REWRITE_DIRECTIVES:
-            self._audit_proxy_rewrite(directive)
-        elif directive.name == "fastcgi_split_path_info":
-            variable = directive.args and _regex_variable(directive.args[0])
-            if variable:
-                self._report_regex(directive, variable, "the path is never split")
-        elif directive.name == "gzip_disable":
-            for arg in directive.args:
-                variable = arg not in GZIP_DISABLE_MASKS and _regex_variable(arg)
-                if variable:
-                    self._report_regex(directive, variable, "it never disables gzip", severity=gixy.severity.LOW)
-                    return
+        else:
+            self._audit_regex_arguments(directive)
 
     def _audit_path(self, directive):
         variable = directive.args and _variable_in(directive.args[0])
@@ -274,45 +262,26 @@ class non_expanding_variable(Plugin):
         else:
             self._report_regex(block, variable, "the condition never matches", guards=True)
 
-    def _audit_server_name(self, directive):
-        for name in directive.args:
-            if name.lower() == "$hostname":
-                continue
-            if name.startswith("~"):
-                variable = _regex_variable(name[1:])
-                if variable:
-                    self._report_regex(directive, variable, "this server name never matches")
-                    return
-                continue
-            variable = _variable_in(name)
+    def _audit_regex_arguments(self, directive):
+        for pattern, _ in regex_arguments(directive):
+            variable = _regex_variable(pattern)
             if variable:
-                self.add_issue(
-                    directive=directive,
-                    reason="`server_name` matches the literal host `{0}`; NGINX does not expand `{1}` there.".format(
-                        name, variable
-                    ),
-                )
+                severity = gixy.severity.LOW if directive.name == "gzip_disable" else None
+                self._report_regex(directive, variable, REGEX_CONSEQUENCES[directive.name], severity=severity)
                 return
+        if directive.name in LITERAL_HOST_DIRECTIVES:
+            self._audit_literal_host(directive)
 
-    def _audit_rewrite(self, directive):
-        variable = directive.args and _regex_variable(directive.args[0])
-        if variable:
-            self._report_regex(directive, variable, "the rewrite never applies")
-
-    def _audit_valid_referers(self, directive):
+    def _audit_literal_host(self, directive):
         for name in directive.args:
-            if name.startswith("~"):
-                variable = _regex_variable(name[1:])
-                if variable:
-                    self._report_regex(directive, variable, "this referer pattern never matches")
-                    return
+            if name.startswith("~") or (directive.name == "server_name" and name.lower() == "$hostname"):
                 continue
             variable = _variable_in(name)
             if variable:
                 self.add_issue(
                     directive=directive,
-                    reason="`valid_referers` matches the literal host `{0}`; NGINX does not expand `{1}` there.".format(
-                        name, variable
+                    reason="`{0}` matches the literal host `{1}`; NGINX does not expand `{2}` there.".format(
+                        directive.name, name, variable
                     ),
                 )
                 return
@@ -326,14 +295,6 @@ class non_expanding_variable(Plugin):
                     directive.name, directive.args[0], variable
                 ),
             )
-
-    def _audit_proxy_rewrite(self, directive):
-        pattern = directive.args[0] if directive.args else ""
-        if not pattern.startswith("~"):
-            return
-        variable = _regex_variable(pattern[2:] if pattern.startswith("~*") else pattern[1:])
-        if variable:
-            self._report_regex(directive, variable, PROXY_REWRITE_DIRECTIVES[directive.name])
 
     def _audit_auth_request(self, directive):
         uri = directive.args[0] if directive.args else "off"

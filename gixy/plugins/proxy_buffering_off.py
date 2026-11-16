@@ -28,15 +28,7 @@ class proxy_buffering_off(Plugin):
     ]
 
     def audit(self, directive):
-        if not directive.args:
-            return
-
-        try:
-            value = str(directive.args[0]).strip().lower()
-        except (TypeError, IndexError):
-            return
-
-        if value == "off":
+        if directive.args and directive.args[0].lower() == "off":
             self.add_issue(
                 directive=directive,
                 severity=gixy.severity.LOW if directive.name.endswith("_request_buffering") else self.severity,
