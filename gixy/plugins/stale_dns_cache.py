@@ -4,7 +4,7 @@ import tldextract
 
 import gixy
 import gixy.core.builtin_variables as builtins
-from gixy.core.variable import compile_script
+from gixy.core.variable import GEO_PARAMETERS, compile_script
 from gixy.directives.directive import is_ipv4, is_ipv6
 from gixy.plugins.plugin import Plugin
 
@@ -49,7 +49,12 @@ class stale_dns_cache(Plugin):
     def _option_values(option):
         if not isinstance(option.value, list):
             return [option.final_value]
-        return [entry.provider.dest_val for entry in option.value if entry.provider.dest_val is not None]
+        skip = GEO_PARAMETERS if option.provider.nginx_name == "geo" else ()
+        return [
+            entry.provider.dest_val
+            for entry in option.value
+            if entry.provider.dest_val is not None and entry.provider.src_val not in skip
+        ]
 
     def audit(self, directive):
         if not getattr(directive, "args", None):
@@ -84,7 +89,7 @@ class stale_dns_cache(Plugin):
             if len(values) > 1:
                 break
 
-        if not any(self._needs_dns(host, startup="$" not in raw_host) for host in parsed_hosts):
+        if not any(self._needs_dns(host, startup="$" not in proxy_target) for host in parsed_hosts):
             return
 
         severity = self.severity
