@@ -16,7 +16,7 @@ from gixy.core.regexp import (
     SubpatternToken,
 )
 from gixy.core.utils import default_listens, parse_listen_key_and_default, resolve_inherited_single
-from gixy.core.variable import compile_script
+from gixy.core.variable import compile_hash_entry, compile_script
 from gixy.plugins.plugin import Plugin
 
 
@@ -134,9 +134,19 @@ def _is_open_suffix_name(name):
         return False
 
 
+def _hash_values(var):
+    """The scripts a map or geo variable resolves to, plus an empty one when it has no `default`."""
+    values = [compile_hash_entry(entry) or [] for entry in var.value]
+    if not any(entry.provider.src_val == "default" for entry in var.value):
+        values.append([])
+    return values
+
+
 def _depends_on_host(var):
     if var.name == "host":
         return True
+    if isinstance(var.value, list):
+        return any(_depends_on_host(dep) for parts in _hash_values(var) for dep in parts)
     return any(_depends_on_host(dep) for dep in var.depends or var.alternatives or ())
 
 
@@ -245,21 +255,30 @@ class ssrf(Plugin):
         if var.name == "host":
             return bool(self._host_explanation)
         if var.alternatives:
-            results = [self._host_tainted(option) for option in var.options]
-            if any(results):
-                return True
-            if results and all(result is None for result in results):
-                return None
-            return False
+            return self._any_tainted(self._host_tainted(option) for option in var.options)
+        if isinstance(var.value, list):
+            return self._any_tainted(self._parts_tainted(parts) for parts in _hash_values(var))
         if var.depends:
-            for dep in var.depends:
-                result = self._host_tainted(dep)
-                if result is not False:
-                    return result
-            return False
+            return self._parts_tainted(var.depends)
         if var.must_contain("/"):
             return None
         return bool(var.can_contain("."))
+
+    def _parts_tainted(self, parts):
+        for part in parts:
+            result = self._host_tainted(part)
+            if result is not False:
+                return result
+        return False
+
+    @staticmethod
+    def _any_tainted(results):
+        results = list(results)
+        if any(results):
+            return True
+        if results and all(result is None for result in results):
+            return None
+        return False
 
     def _host_header_explanation(self, directive):
         """Why `$host` is attacker-chosen for `directive`, or None when the server only sees the
