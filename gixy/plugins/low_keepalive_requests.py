@@ -17,7 +17,7 @@ class low_keepalive_requests(Plugin):
         "should not be 0. Lower values may result in client disconnections."
     )
     help_url = "https://gixy.io/plugins/low_keepalive_requests/"
-    directives = ["keepalive_requests", "keepalive_timeout"]
+    directives = ["keepalive_requests", "keepalive_timeout", "keepalive_time"]
 
     ZERO_TIME = re.compile(r"(?:0+(?:ms|[yMwdhms])?)+")
 
@@ -29,9 +29,12 @@ class low_keepalive_requests(Plugin):
         # values are expected — not the client-facing limits this check targets.
         if any(parent.name == "upstream" for parent in directive.parents):
             return
-        if directive.name == "keepalive_timeout":
+        if directive.name != "keepalive_requests":
             if self.ZERO_TIME.fullmatch(directive.args[0]):
-                self._report_disabled(directive, "connections are closed before serving a request")
+                if directive.name == "keepalive_timeout":
+                    self._report_disabled(directive, "connections are closed before serving a request")
+                else:
+                    self._report_disabled(directive, "connections are closed after their first request")
             return
         try:
             value = int(directive.args[0])
