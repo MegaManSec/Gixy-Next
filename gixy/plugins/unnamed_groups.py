@@ -43,7 +43,7 @@ class unnamed_groups(Plugin):
         if directive.stops_processing:
             return
 
-        groups = self._groups(directive.args[0])
+        groups = self._groups(directive.pattern)
         node = directive
         parent = node.parent
         while parent:
@@ -82,8 +82,7 @@ class unnamed_groups(Plugin):
 
     @staticmethod
     def _replacement(directive):
-        replacement = directive.args[1]
-        return replacement[:-1] if replacement.endswith("?") else replacement
+        return directive.replace[:-1] if directive.replace.endswith("?") else directive.replace
 
     @staticmethod
     def _groups(pattern):

@@ -34,11 +34,8 @@ class overlapping_captures(Plugin):
     _NGINX_VARIABLE = re.compile(r"\$[A-Za-z_]\w*|\$\{[^}]+\}")
 
     def audit(self, directive):
-        if len(directive.args) < 2:
-            return
-
-        regex = directive.args[0]
-        replacement = directive.args[1]
+        regex = directive.pattern
+        replacement = directive.replace
 
         # nginx strips a sole trailing `?` from the replacement (it
         # means "drop the original arguments"), so a trailing-only `?`

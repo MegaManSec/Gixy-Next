@@ -237,7 +237,7 @@ class invalid_regex(Plugin):
         for child in if_directive.children:
             if child is directive:
                 break
-            if child.name == "rewrite" and child.args:
+            if child.name == "rewrite":
                 pattern, source, case_sensitive, negative = child.args[0], "preceding rewrite", True, False
                 stopping_rewrite = child.stops_processing
 
