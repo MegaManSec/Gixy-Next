@@ -88,6 +88,6 @@ location / {
 
 - `$remote_user` is not reported when `auth_basic` (not `off`) and `auth_basic_user_file` are both in effect for the directive and `satisfy` is `all` (the default): the user name then has to match an entry in the password file before the request is proxied or answered. With `satisfy any`, clients that pass another access check skip the password check, so the finding stays; without `auth_basic_user_file` nothing is enforced. In a file without an `http` block, the user file is assumed to be set in the main configuration.
 - `$request` (the request line) and `$content_type` (the request `Content-Type` header) are client-controlled but cannot contain line breaks, so they are not reported here.
-- NGINX URL-escapes numbered captures (`$1` to `$9`) in a `rewrite` replacement, and when `set` copies one from the URI before any `rewrite` in the location, so those are not reported. Named captures are copied raw.
+- NGINX URL-escapes numbered captures (`$1` to `$9`) in a `rewrite` replacement, and when `set` copies one from the URI with no earlier `rewrite` in the location that can match and continue (one without `last`, `break` or a redirect), so those are not reported. Named captures are copied raw.
 - Of an internal `rewrite`, only the query string after `?` is checked: NGINX escapes the rewritten path when it proxies the request, but not the arguments.
 - Directives inside `stream {}` are not checked: no HTTP message is built there.

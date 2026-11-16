@@ -40,19 +40,18 @@ class http_splitting(Plugin):
         if any(parent.name == "stream" for parent in directive.parents):
             return
         server_side = directive.name in SERVER_SIDE_DIRECTIVES
-        captures_escaped = directive.name == "rewrite"
         for value in _get_values(directive):
             for var in compile_script(value):
-                if captures_escaped and _is_capture(var):
+                if directive.name == "rewrite" and _is_capture(var):
                     continue
-                char = ""
-                if _can_contain(var, "\n"):
+                sources = list(_line_break_sources(var))
+                if any(source.can_contain("\n") for source in sources):
                     char = "\\n"
-                elif not server_side and _can_contain(var, "\r"):
+                elif sources and not server_side:
                     char = "\\r"
                 else:
                     continue
-                if _line_break_sources(var) == {"remote_user"} and basic_auth_enforced(directive.parent):
+                if {source.name for source in sources} == {"remote_user"} and basic_auth_enforced(directive.parent):
                     continue
                 reason = "Variable `${var}` can contain `{char}`, which can enable header/response splitting.".format(
                     var=var.name, char=char
@@ -68,12 +67,26 @@ def _is_capture(var):
     return isinstance(var.name, int)
 
 
+def _line_break_sources(var, seen=None):
+    """Leaf variables behind `var` that can carry CR or LF, without the captures `set` URL-escapes."""
+    seen = set() if seen is None else seen
+    if var in seen:
+        return
+    seen.add(var)
+    children = var.alternatives or var.depends
+    if not children and (var.can_contain("\n") or var.can_contain("\r")):
+        yield var
+    for child in children or ():
+        if not _escaped_capture(var, child):
+            yield from _line_break_sources(child, seen)
+
+
 def _escaped_capture(var, dep):
     """True when `set` copies the numbered capture `dep` into `var` URL-escaped."""
     provider = var.provider
     if provider is None or provider.name != "set" or not _is_capture(dep):
         return False
-    return _captured_from_uri(dep) and not _rewrite_precedes(provider)
+    return _captured_from_uri(dep) and all(rewrite.stops_processing for rewrite in _preceding_rewrites(provider))
 
 
 def _captured_from_uri(var):
@@ -87,55 +100,19 @@ def _captured_from_uri(var):
     return provider.name == "if" and provider.variable in ("$uri", "$document_uri")
 
 
-def _rewrite_precedes(directive):
+def _preceding_rewrites(directive):
     node = directive
     for parent in directive.parents:
         for child in parent.children:
             if child is node:
                 break
             if child.name == "rewrite":
-                return True
-            if child.is_block and not child.self_context and child.find("rewrite", flat=True):
-                return True
+                yield child
+            elif child.is_block and not child.self_context:
+                yield from child.find("rewrite", flat=True)
         if parent.self_context:
-            return False
+            return
         node = parent
-    return False
-
-
-def _can_contain(var, char, seen=None):
-    """Variable.can_contain, without the captures `set` URL-escapes."""
-    seen = set() if seen is None else seen
-    if id(var) in seen:
-        return False
-    seen.add(id(var))
-    if var.boundary and not var.boundary.can_contain(char):
-        return False
-    if var.regexp or not (var.alternatives or var.depends):
-        return var.can_contain(char)
-    children = var.alternatives or [dep for dep in var.depends if not _escaped_capture(var, dep)]
-    return any(_can_contain(child, char, seen) for child in children)
-
-
-def _line_break_sources(var):
-    """Names of the leaf variables behind `var` that can carry CR or LF."""
-    names, seen = set(), set()
-
-    def collect(current):
-        if id(current) in seen:
-            return
-        seen.add(id(current))
-        children = list(current.depends or ()) + list(current.alternatives or ())
-        if not children:
-            if current.name and (current.can_contain("\n") or current.can_contain("\r")):
-                names.add(current.name)
-            return
-        for child in children:
-            if not _escaped_capture(current, child):
-                collect(child)
-
-    collect(var)
-    return names
 
 
 # ngx_http_send_response() puts the value in Location for these statuses only;
@@ -152,9 +129,7 @@ def _get_values(directive):
         values = [_get_rewrite_target(directive)]
     elif directive.name == "error_page":
         values = [_get_error_page_location(directive)]
-    elif directive.name == "more_set_headers":
-        values = list(directive.headers.values())
-    elif directive.name == "more_set_input_headers":
+    elif directive.name in ("more_set_headers", "more_set_input_headers"):
         values = list(MoreSetHeadersDirective.parse_headers(directive.args).values())
     elif len(directive.args) >= 2:
         values = [directive.args[1]]
