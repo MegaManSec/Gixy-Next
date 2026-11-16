@@ -535,6 +535,19 @@ def test_needs_anchor(regexp, needs_anchor):
     assert Regexp(regexp).needs_anchor() is needs_anchor
 
 
+@pytest.mark.parametrize('regexp,needs_anchor', (
+    (r'example\.com', True),
+    (r'^(www\.)?example\.com', True),
+    (r'example\.com$', True),
+    (r'^example\.com$', False),
+    (r'^(.+)\.example\.com\z', False),
+    (r'^example\.com$|^example\.org', True),
+    (r'(^example\.com$|^example\.org$)', False),
+))
+def test_needs_anchor_both(regexp, needs_anchor):
+    assert Regexp(regexp).needs_anchor(both=True) is needs_anchor
+
+
 @pytest.mark.parametrize('regexp', (
     r'(?|a|b)', r'(?R)', r'(?1)', r'a(?1)', r'(a)\g<1>', r'(a)\g{-3}', r'\g{-1}',
 ))

@@ -170,19 +170,20 @@ def _seq_anchored(seq, anchors, last):
     return False
 
 
-def _is_anchored(seq):
-    """True if every alternative is anchored at the start or at the end."""
+def _is_anchored(seq, both=False):
+    """True if every alternative is anchored at the start or at the end,
+    or at both when `both` is set."""
     if len(seq) == 1:
         op, av = seq[0]
         if op == sre_parse.BRANCH:
-            return all(_is_anchored(list(alt)) for alt in av[1])
+            return all(_is_anchored(list(alt), both) for alt in av[1])
         if op in _GROUPS:
             # A group wrapping the whole pattern: each alternative inside
             # still picks its own side.
-            return _is_anchored(list(_group_body(op, av)))
-    return _seq_anchored(seq, _ANCHORS_BEGIN, last=False) or _seq_anchored(
-        seq, _ANCHORS_END, last=True
-    )
+            return _is_anchored(list(_group_body(op, av)), both)
+    begin = _seq_anchored(seq, _ANCHORS_BEGIN, last=False)
+    end = _seq_anchored(seq, _ANCHORS_END, last=True)
+    return (begin and end) if both else (begin or end)
 
 
 class Token(object):
@@ -1215,16 +1216,16 @@ class Regexp(object):
     def __str__(self):
         return str(self.root)
 
-    def needs_anchor(self):
+    def needs_anchor(self, both=False):
         """True when some alternative can match anywhere in the input.
 
         A regex is considered anchored when every top-level alternative is
         pinned to the start (``^``/``\\A``) or the end (``$``/``\\z``) of the
-        input; anything else lets the engine retry at every position and match
-        URLs it was never meant to match.
+        input, or to both when `both` is set; anything else lets the engine
+        retry at every position and match input it was never meant to match.
         """
         try:
             parsed = self.parsed
         except Exception:
             return False
-        return not _is_anchored(list(parsed))
+        return not _is_anchored(list(parsed), both)
