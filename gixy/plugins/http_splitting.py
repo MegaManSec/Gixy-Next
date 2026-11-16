@@ -86,7 +86,7 @@ def _escaped_capture(var, dep):
     provider = var.provider
     if provider is None or provider.name != "set" or not _is_capture(dep):
         return False
-    return _captured_from_uri(dep) and all(rewrite.stops_processing for rewrite in _preceding_rewrites(provider))
+    return _captured_from_uri(dep) and provider.escapes_captures
 
 
 def _captured_from_uri(var):
@@ -98,21 +98,6 @@ def _captured_from_uri(var):
     if provider.name in ("location", "rewrite"):
         return True
     return provider.name == "if" and provider.variable in ("$uri", "$document_uri")
-
-
-def _preceding_rewrites(directive):
-    node = directive
-    for parent in directive.parents:
-        for child in parent.children:
-            if child is node:
-                break
-            if child.name == "rewrite":
-                yield child
-            elif child.is_block and not child.self_context:
-                yield from child.find("rewrite", flat=True)
-        if parent.self_context:
-            return
-        node = parent
 
 
 # ngx_http_send_response() puts the value in Location for these statuses only;

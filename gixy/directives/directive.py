@@ -254,6 +254,22 @@ class MoreSetHeadersDirective(Directive):
         self.value = self.headers[self.header]
 
 
+def _preceding_rewrites(directive):
+    """The `rewrite` directives that run before `directive` in its rewrite phase, `if` blocks included."""
+    node = directive
+    for parent in directive.parents:
+        for child in parent.children:
+            if child is node:
+                break
+            if child.name == "rewrite":
+                yield child
+            elif child.is_block and not child.self_context:
+                yield from child.find("rewrite", flat=True)
+        if parent.self_context:
+            return
+        node = parent
+
+
 class MoreClearHeadersDirective(Directive):
     """
     Syntax: more_clear_headers 'Foo' 'Baz*';
@@ -278,6 +294,12 @@ class SetDirective(Directive):
     @property
     def variables(self):
         return [Variable(name=self.variable, value=self.value, provider=self)]
+
+    @property
+    def escapes_captures(self):
+        """Whether NGINX URL-escapes the numbered captures this `set` copies from a quoted URI: it does unless an
+        earlier `rewrite` can match and continue, which clears the script engine's quote flag."""
+        return all(rewrite.stops_processing for rewrite in _preceding_rewrites(self))
 
 
 class AuthRequestSetDirective(Directive):
@@ -482,23 +504,17 @@ class MapDirective(Directive):
         return self.src_val.startswith("~")
 
     @property
+    def block(self):
+        """The `map` block this entry belongs to, through any `include`; None for a `geo` entry."""
+        return next((parent for parent in self.parents if parent.nginx_name == "map"), None)
+
+    @property
     def variables(self):
-        if not self.regex:
+        if not self.regex or self.block is None:
             return []
 
-        ancestor = self.parent
-        while (
-            ancestor is not None and ancestor.nginx_name != "map"
-        ):  # XXX: Better to check isinstance(ancestor, MapBlock) but circular import..
-            ancestor = getattr(ancestor, "parent", None)
-
-        if (
-            ancestor is None
-        ):  # This happens for "geo" directives, which is ok because geo directive does not provide variables.
-            return []
-
-        boundary = subject_boundary(ancestor.source)
+        boundary = subject_boundary(self.block.source)
         return [
-            Variable(name=name, value=group, provider=self, boundary=boundary, ctx=self.src_val)
+            Variable(name=name, value=group, provider=self, boundary=boundary, ctx=self)
             for name, group in self.regex.groups.items()
         ]
