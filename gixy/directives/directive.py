@@ -6,7 +6,7 @@ import tldextract
 
 from gixy.core.exceptions import MalformedDirective
 from gixy.core.regexp import Regexp
-from gixy.core.variable import Variable
+from gixy.core.variable import Variable, subject_boundary
 
 _TLD = tldextract.TLDExtract(include_psl_private_domains=False, suffix_list_urls=(), cache_dir=None)
 
@@ -475,15 +475,8 @@ class MapDirective(Directive):
         ):  # This happens for "geo" directives, which is ok because geo directive does not provide variables.
             return []
 
-        result = []
-        for name, group in self.regex.groups.items():
-            result.append(
-                Variable(
-                    name=name,
-                    value=group,
-                    provider=self,
-                    boundary=None,
-                    ctx=self.src_val,
-                )
-            )
-        return result
+        boundary = subject_boundary(ancestor.source)
+        return [
+            Variable(name=name, value=group, provider=self, boundary=boundary, ctx=self.src_val)
+            for name, group in self.regex.groups.items()
+        ]
