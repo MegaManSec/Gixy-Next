@@ -93,7 +93,7 @@ This plugin only runs on a full configuration, one with a top-level `http` or `e
 
 Sockets are compared the way NGINX itself compares them. `listen 80`, `listen *:80`, `listen 0.0.0.0:80` and `listen 0.0.0.0` all name one socket, as do `listen [::]:80`, `listen [::0]:80` and `listen [::]`; an argument with no port implies port 80. The IPv4 and IPv6 wildcards on one port stay separate, and so do sockets of different types: `listen 443 ssl` and `listen 443 quic` each have their own default server, as do `listen 12345` and `listen 12345 udp` in `stream`.
 
-`listen localhost` is compared as `127.0.0.1`. NGINX resolves it with `getaddrinfo(AI_ADDRCONFIG)`, so it also binds `[::1]` on musl and on glibc hosts with a non-loopback IPv6 address; that socket is not assumed. Other hostnames are compared by name.
+`listen localhost` is compared as `127.0.0.1`. Depending on the libc and the host's IPv6 setup, NGINX may also bind `[::1]`; that socket is not assumed. Other hostnames are compared by name.
 
 `listen unix:/path` sockets are matched by their path.
 

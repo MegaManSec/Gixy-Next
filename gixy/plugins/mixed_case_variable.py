@@ -52,9 +52,7 @@ class mixed_case_variable(Plugin):
             return directive.args[:1]
         if directive.name == "rewrite":
             return directive.args[1:]
-        if directive.name == "server_name":
-            return [arg for arg in directive.args if not arg.startswith("~")]
-        return directive.args
+        return [arg for arg in directive.args if not arg.startswith("~")]
 
     def _finalize(self):
         if self._finalized:

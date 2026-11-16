@@ -17,21 +17,24 @@ class low_keepalive_requests(Plugin):
         "should not be 0. Lower values may result in client disconnections."
     )
     help_url = "https://gixy.io/plugins/low_keepalive_requests/"
-    directives = ["keepalive_requests", "keepalive_timeout"]
+    directives = ["keepalive_requests", "keepalive_timeout", "keepalive_time"]
 
     ZERO_TIME = re.compile(r"(?:0+(?:ms|[yMwdhms])?)+")
 
     def audit(self, directive):
         if not directive.args:
             return
-        # upstream { keepalive_requests N; keepalive_timeout T; } are different
-        # directives (since 1.15.3) for cached upstream connections, where low
-        # values are expected — not the client-facing limits this check targets.
+        # upstream { keepalive_requests N; keepalive_timeout T; keepalive_time T; } are
+        # different directives for cached upstream connections, where low values are
+        # expected — not the client-facing limits this check targets.
         if any(parent.name == "upstream" for parent in directive.parents):
             return
-        if directive.name == "keepalive_timeout":
+        if directive.name != "keepalive_requests":
             if self.ZERO_TIME.fullmatch(directive.args[0]):
-                self._report_disabled(directive, "connections are closed before serving a request")
+                http3 = None
+                if directive.name == "keepalive_timeout":
+                    http3 = "connections are closed before serving a request"
+                self._report_disabled(directive, http3)
             return
         try:
             value = int(directive.args[0])
@@ -54,6 +57,8 @@ class low_keepalive_requests(Plugin):
         )
         if any(parent.name == "location" for parent in directive.parents):
             reason += " (HTTP/1.x only: HTTP/2 and HTTP/3 use the server-level value)."
-        else:
+        elif http3:
             reason += f", and on HTTP/3, {http3}."
+        else:
+            reason += "."
         self.add_issue(directive=directive, reason=reason)
