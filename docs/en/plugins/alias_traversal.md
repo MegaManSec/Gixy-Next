@@ -81,6 +81,8 @@ location = /i.gif {
 }
 ```
 
+The alias path itself must still be fixed: `location = /file { alias /home/$arg_path; }` serves `/etc/passwd` for `/file?path=../etc/passwd`.
+
 ## How severity is determined
 
 - **HIGH**: the path can climb out of the directory, e.g. from `/var/www/` to `/var/www/../../etc/passwd`.
