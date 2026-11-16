@@ -1,5 +1,5 @@
 import gixy
-from gixy.core.utils import resolve_inherited_single
+from gixy.core.utils import basic_auth_enforced
 from gixy.core.variable import compile_script
 from gixy.directives.directive import REDIRECT_PREFIXES, MoreSetHeadersDirective
 from gixy.plugins.plugin import Plugin
@@ -52,7 +52,7 @@ class http_splitting(Plugin):
                     char = "\\r"
                 else:
                     continue
-                if _line_break_sources(var) == {"remote_user"} and _basic_auth_enforced(directive):
+                if _line_break_sources(var) == {"remote_user"} and basic_auth_enforced(directive.parent):
                     continue
                 reason = "Variable `${var}` can contain `{char}`, which can enable header/response splitting.".format(
                     var=var.name, char=char
@@ -136,19 +136,6 @@ def _line_break_sources(var):
 
     collect(var)
     return names
-
-
-def _basic_auth_enforced(directive):
-    """True when ngx_http_auth_basic_module rejects every request whose user
-    is not in the password file: realm and file set, and no `satisfy any`."""
-    scope = directive.parent
-    auth = resolve_inherited_single(scope, "auth_basic")
-    if auth is None or auth.args[0].lower() == "off":
-        return False
-    if resolve_inherited_single(scope, "auth_basic_user_file") is None:
-        return False
-    satisfy = resolve_inherited_single(scope, "satisfy")
-    return satisfy is None or satisfy.args[0].lower() == "all"
 
 
 # ngx_http_send_response() puts the value in Location for these statuses only;

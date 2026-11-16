@@ -81,7 +81,7 @@ server {
 - An `allow` that covers every address the `server` accepts is not a whitelist. `allow all` always qualifies, while `0.0.0.0/0` covers only IPv4 clients and `::/0` only IPv6 clients. The same applies to `deny`.
 - Rules are evaluated in order and the first match decides, so `allow 10.0.0.0/8; allow all; deny all;` is reported: the `deny all` never applies.
 - Rules on an enclosing `server` or `http` protect a location that declares none of its own. A location with its own `allow`/`deny` does not inherit them.
-- An endpoint protected by `auth_basic`, `auth_request`, `auth_jwt` or `auth_oidc` is not reported, unless `satisfy any` is paired with an `allow` that covers every address: that lets everyone in without authenticating. `satisfy any; allow 10.0.0.0/8; deny all;` with authentication is fine.
+- An endpoint protected by `auth_basic`, `auth_request`, `auth_jwt` or `auth_oidc` is not reported, unless `satisfy any` is paired with an `allow` that covers every address: that lets everyone in without authenticating. `satisfy any; allow 10.0.0.0/8; deny all;` with authentication is fine. `auth_basic` only counts when an `auth_basic_user_file` is in effect; in a file without an `http` block, the user file is assumed to be set in the main configuration.
 - The address families are read off the `server`'s `listen` directives:
 
     | `listen` spelling              | Server accepts                                     |
