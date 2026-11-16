@@ -61,9 +61,11 @@ class stale_dns_cache(Plugin):
         return targets
 
     def _option_values(self, option, seen):
-        if not isinstance(option.value, list):
-            return [option.final_value]
-        return [target for entry in option.value for target in self._targets(compile_hash_entry(entry) or [], seen)]
+        if isinstance(option.value, list):
+            return [target for entry in option.value for target in self._targets(compile_hash_entry(entry) or [], seen)]
+        if option.depends:
+            return self._targets(option.depends, seen)
+        return [option.final_value]
 
     def audit(self, directive):
         if not getattr(directive, "args", None):
