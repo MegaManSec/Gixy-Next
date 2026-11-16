@@ -135,7 +135,7 @@ def _is_open_suffix_name(name):
 
 
 def _depends_on_host(var):
-    if var.name == "host" and var.value == "builtin":
+    if var.name == "host":
         return True
     return any(_depends_on_host(dep) for dep in var.depends or var.alternatives or ())
 
@@ -242,7 +242,7 @@ class ssrf(Plugin):
         """True if the host part of `var` can carry user input, None if the
         variable ends the host part with a mandatory `/` before any such
         input, False otherwise."""
-        if var.name == "host" and var.value == "builtin":
+        if var.name == "host":
             return bool(self._host_explanation)
         if var.alternatives:
             results = [self._host_tainted(option) for option in var.options]

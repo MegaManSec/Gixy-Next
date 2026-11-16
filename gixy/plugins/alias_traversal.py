@@ -120,7 +120,7 @@ class alias_traversal(Plugin):
     def _from_host(part):
         """True for values nginx takes from the validated Host, which never
         contain `/` or `..`."""
-        return part.name == "http_host" or getattr(part.provider, "name", None) == "server"
+        return part.name in ("host", "http_host") or getattr(part.provider, "name", None) == "server"
 
     @staticmethod
     def _can_be_parent_dir(part):
