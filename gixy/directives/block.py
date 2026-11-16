@@ -3,7 +3,7 @@ from functools import cached_property
 import gixy.core.sre_parse.sre_parse as sre_parse
 from gixy.core.exceptions import MalformedDirective
 from gixy.core.regexp import Regexp
-from gixy.core.variable import Variable, subject_boundary
+from gixy.core.variable import GEO_PARAMETERS, Variable, subject_boundary
 from gixy.directives.directive import Directive, MapDirective, RewriteDirective, quote_arg
 
 
@@ -296,10 +296,25 @@ class MapBlock(Block):
             elif isinstance(node, IncludeBlock):
                 yield from self.gather_map_directives(node.children)
 
+    @property
+    def entries(self):
+        return [child for child in self.gather_map_directives(self.children) if child.dest_val is not None]
+
+    @property
+    def hostname_entries(self):
+        """Entries declared after `hostnames`, whose keys nginx reads as host names."""
+        after, result = False, []
+        for child in self.gather_map_directives(self.children):
+            if child.dest_val is None:
+                after = after or child.src_val == "hostnames"
+            elif after:
+                result.append(child)
+        return result
+
     @cached_property
     def variables(self):
         vars = []
-        for child in self.gather_map_directives(self.children):
+        for child in self.entries:
             value = child.dest_val
             if child.is_regex and _key_parses(child):
                 value = child.regex.groups[0]
@@ -347,6 +362,14 @@ class GeoBlock(Block):
                 yield node
             elif isinstance(node, IncludeBlock):
                 yield from self.gather_geo_directives(node.children)
+
+    @property
+    def entries(self):
+        return [
+            child
+            for child in self.gather_geo_directives(self.children)
+            if child.dest_val is not None and child.src_val not in GEO_PARAMETERS
+        ]
 
     @cached_property
     def variables(self):

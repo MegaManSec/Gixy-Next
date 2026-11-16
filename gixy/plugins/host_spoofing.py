@@ -2,7 +2,7 @@ import gixy
 from gixy.core.utils import bare_variable_name, resolve_variable_chain
 from gixy.core.variable import EXTRACT_RE
 from gixy.directives.block import MapBlock
-from gixy.directives.directive import MapDirective, SetDirective
+from gixy.directives.directive import SetDirective
 from gixy.plugins.plugin import Plugin
 
 
@@ -59,12 +59,9 @@ class host_spoofing(Plugin):
 
     @staticmethod
     def _map_values(mb):
-        entries = [md for md in mb.gather_map_directives(mb.children) if isinstance(md, MapDirective)]
-        hostnames = any(md.src_val == "hostnames" and md.dest_val is None for md in entries)
-        for md in entries:
-            if md.dest_val is None:
-                continue
-            pinned = md.src_val != "default" and not md.is_regex and not (hostnames and md.src_val.endswith(".*"))
+        for md in mb.entries:
+            wildcard = md in mb.hostname_entries and md.src_val.endswith(".*")
+            pinned = md.src_val != "default" and not md.is_regex and not wildcard
             if pinned and bare_variable_name(md.dest_val) == bare_variable_name(mb.source):
                 continue
             yield md, md.dest_val
