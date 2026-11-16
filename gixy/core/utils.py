@@ -74,6 +74,12 @@ def resolve_inherited_all(scope, name):
     return []
 
 
+def error_page_for(scope, code):
+    """The `error_page` in effect at `scope` that handles `code`: the first one listing
+    it in the nearest scope declaring any, as nginx picks it; None when there is none."""
+    return next((page for page in resolve_inherited_all(scope, "error_page") if code in page.args[:-1]), None)
+
+
 def enforced_auth(scope):
     """Names of the authentication modules that restrict `scope`.
 
