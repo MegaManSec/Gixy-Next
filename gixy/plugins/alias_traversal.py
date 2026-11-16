@@ -2,7 +2,7 @@ import gixy
 import gixy.core.sre_parse.sre_parse as sre_parse
 from gixy.core.regexp import Regexp, RegexpTooComplex
 from gixy.core.utils import basic_auth_enforced
-from gixy.core.variable import EXTRACT_RE, compile_script
+from gixy.core.variable import compile_script
 from gixy.plugins.plugin import Plugin
 
 _PATTERN_START = (sre_parse.AT, sre_parse.AT_BEGINNING)
@@ -44,29 +44,43 @@ class alias_traversal(Plugin):
             return
 
     def check_prefix_location(self, directive, location):
-        severities = list(self._variable_severities(directive, location))
+        alias_parts = compile_script(directive.path)
+        severities = list(self._variable_severities(directive, location, alias_parts))
         if not location.path.endswith("/"):
             severities.append(
                 gixy.severity.HIGH
                 if directive.path.endswith("/")
                 else gixy.severity.MEDIUM
             )
-        elif not directive.path.endswith("/") and EXTRACT_RE.split(directive.path)[-1]:
+        elif alias_parts and self._literal_tail(alias_parts[-1]) not in (None, "/"):
             severities.append(gixy.severity.MEDIUM)
         if severities:
             self.report_issue(directive, location, max(severities, key=gixy.severity.ALL.index))
 
     def check_regex_location(self, directive, location):
-        for severity in self._variable_severities(directive, location):
+        for severity in self._variable_severities(directive, location, compile_script(directive.path)):
             self.report_issue(directive, location, severity)
 
-    def _variable_severities(self, directive, location):
-        alias_parts = compile_script(directive.path)
+    @staticmethod
+    def _literal_tail(part):
+        """The last character of the fixed text a part ends with, or None when its value is not fixed."""
+        while part.depends:
+            part = part.depends[-1]
+        if part.alternatives or part.regexp or not isinstance(part.value, str) or not part.value:
+            return None
+        return part.value[-1]
 
+    @classmethod
+    def _client_controlled(cls, part):
+        if part.regexp:
+            return True
+        return any(cls._client_controlled(child) for child in (part.alternatives or []) + (part.depends or []))
+
+    def _variable_severities(self, directive, location, alias_parts):
         prev_part = None
 
         for part in alias_parts:
-            if not getattr(part, "regexp", False) or (
+            if not self._client_controlled(part) or (
                 part.name == "remote_user" and basic_auth_enforced(directive.parent)
             ):
                 prev_part = part
@@ -102,6 +116,8 @@ class alias_traversal(Plugin):
 
     @staticmethod
     def _can_be_parent_dir(part):
+        if part.regexp is None:
+            return True
         try:
             return ".." in part.regexp.generate(".", max_repeat=2)
         except RegexpTooComplex:

@@ -89,5 +89,6 @@ location = /i.gif {
 ## Additional notes
 
 - A capture that follows a `/` in the location regex, such as `^/images/(.*)$`, is not reported: NGINX has already collapsed `..` segments in the URI. Nor is a capture that cannot form `..`, such as `(\.[a-z]+)`.
+- Variables are followed through `set` and `map`, so `set $dir $arg_dir; alias /home/$dir/;` is reported like `alias /home/$arg_dir/;`, and `alias $root;` with a fixed `$root` is judged by that value's trailing slash.
 - `$host`, `$http_host` and `server_name` captures are not reported, since NGINX rejects a Host header containing `/` or `..`.
 - `$remote_user` is not reported while `auth_basic` with an `auth_basic_user_file` is in effect and `satisfy` is not `any`: only user names listed in the file get through. In a file without an `http` block, the user file is assumed to be set in the main configuration. Under `satisfy any`, a client from an allowed address can send any user name, so it is reported.
