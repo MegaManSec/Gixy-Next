@@ -125,6 +125,6 @@ http {
 
 ## Additional notes
 
-- IP addresses and `unix:` sockets need no lookup and are not reported, nor is a variable whose values are all of those, such as a `map` or `geo` that picks a PHP-FPM socket.
+- IP addresses and `unix:` sockets need no lookup and are not reported, nor is a variable whose values are all of those, such as a `map` or `geo` that picks a PHP-FPM socket, or a `map` whose value is a variable `set` to an IP address.
 - `localhost` is exempt only in a literal target, which NGINX resolves at startup through the system resolver. Once the target contains a variable, even just in the path, NGINX resolves the host at request time through `resolver`, and `localhost` counts like any other name.
 - For more information about this issue, read [this post](https://joshua.hu/nginx-dns-caching).
