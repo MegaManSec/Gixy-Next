@@ -68,7 +68,7 @@ http {
 }
 ```
 
-`$host` is the request's Host header after NGINX has validated and lowercased it. Every request whose host name matches no other server lands in the default server, so `Host: 169.254.169.254` makes NGINX fetch the metadata service. A server with a fixed `server_name` is the default too when it is the first one declared on its socket.
+`$host` is the request's Host header after NGINX has validated and lowercased it. Every request whose host name matches no other server lands in the default server, so `Host: 169.254.169.254` makes NGINX fetch the metadata service. A server with a fixed `server_name` is the default too when it is the first one declared on its socket, and a server without `listen` sits on `*:80` like one with `listen 80`.
 
 ### host header with an open-ended server name
 
@@ -134,4 +134,4 @@ In a server that is not the default of any of its sockets and lists fixed `serve
 
 `$ssl_server_name` is the TLS server name (SNI) the client sent, copied by NGINX without validation, so `proxy_pass https://$ssl_server_name` is reported like any other client-controlled host. So is `$ssl_preread_server_name` in a `stream` server.
 
-The plugin checks an `internal` location when a `rewrite` in the same `server` can send a request there: one whose replacement is built from variables, that searches the locations again (`last` or no flag), and whose fixed start can match the location.
+The plugin checks an `internal` location when a `rewrite` in the same `server` can send a request there: one whose replacement is built from variables and whose fixed start can match the location, at `server` level with any flag, or in a location with `last` or no flag.

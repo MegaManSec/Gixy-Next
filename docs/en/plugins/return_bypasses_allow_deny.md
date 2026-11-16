@@ -13,6 +13,7 @@ It does not report:
 
 - `allow` rules without a `deny`, or, in a file with an `http` block, `auth_basic` without an `auth_basic_user_file`, since neither stops anyone;
 - an inherited restriction in a `location` that declares its own `allow`/`deny` or the same auth directive: the location's own rules replace it and are checked instead;
+- an inherited restriction in a named location, or in an `internal` location no `rewrite` leads to: `try_files` and `error_page` enter them only after the originating location's access phase. A `rewrite` at `server` level, or one with `last` or no flag in a location, whose replacement can match an `internal` location enters it before any access phase, so that location is checked like any other;
 - an auth module under `satisfy any` when `allow all` is in effect, since the auth modules then never run;
 - a `return` of an error status without body text, such as `return 404;`, which only produces NGINX's error page. It is reported when an `error_page` in effect lists the status, unless that status is the one the restriction answers with anyway: `403` for `deny`, `401` for `auth_basic` and `auth_jwt`, `401` or `403` for `auth_request`;
 - `stream` servers, where `return` runs after the access checks.

@@ -1,7 +1,17 @@
 import re
 
 import gixy
+import gixy.core.sre_parse.sre_parse as sre_parse
+from gixy.core.regexp import PARSE_ERRORS, Regexp
 from gixy.plugins.plugin import Plugin
+
+
+def _subpatterns(av):
+    if isinstance(av, sre_parse.SubPattern):
+        return [av]
+    if isinstance(av, (tuple, list)):
+        return [body for item in av for body in _subpatterns(item)]
+    return []
 
 
 class overlapping_captures(Plugin):
@@ -89,15 +99,16 @@ class overlapping_captures(Plugin):
         # lookahead and the other follows it, or one sits in a positive
         # lookbehind and the other precedes it. Sibling pairs like
         # `((.*))/((.*))` with `$1$3` are not reported.
-        parent, total, lookarounds = self._capture_parent_map(regex)
-        ancestors = {g: self._chain_ancestors(parent, g) for g in parent}
-        refs = sorted(g for g in referenced if g <= total)
-        for idx, g1 in enumerate(refs):
-            anc1 = ancestors.get(g1, set())
-            for g2 in refs[idx + 1:]:
-                if g1 in ancestors.get(g2, set()) or g2 in anc1:
-                    return True
-                if any(self._looks_across(look, g1, g2) for look in lookarounds):
+        try:
+            parsed = Regexp(regex).parsed
+        except PARSE_ERRORS:
+            return False
+        ancestors, lookarounds = {}, []
+        self._walk(parsed, frozenset(), ancestors, lookarounds)
+        refs = sorted(g for g in referenced if g in ancestors)
+        for idx, low in enumerate(refs):
+            for high in refs[idx + 1:]:
+                if low in ancestors[high] or any(self._looks_across(look, low, high) for look in lookarounds):
                     return True
         return False
 
@@ -108,96 +119,18 @@ class overlapping_captures(Plugin):
             return first <= low <= last < high
         return low < first <= high <= last
 
-    def _chain_ancestors(self, parent, g):
-        chain = set()
-        p = parent.get(g)
-        while p is not None:
-            chain.add(p)
-            p = parent.get(p)
-        return chain
-
-    def _capture_parent_map(self, regex):
-        # Walk `regex` once. Return (parent, total, lookarounds) where
-        # parent maps each capturing group number to its nearest capturing
-        # ancestor (or None at top level), total is the number of capturing
-        # groups, and lookarounds lists (kind, first, last) for every
-        # positive lookahead/lookbehind holding captures first..last.
-        # Groups are numbered in declaration order, named or unnamed.
-        parent = {}
-        lookarounds = []
-        stack = []   # (cap_num if capturing else None, lookaround frame)
-        cap = 0
-        i = 0
-        n = len(regex)
-        while i < n:
-            c = regex[i]
-            if c == "\\":
-                i += 2
-                continue
-            if c == "[":
-                i = self._skip_char_class(regex, i)
-                continue
-            if c == "(":
-                if self._is_capturing_paren(regex, i):
-                    cap += 1
-                    parent[cap] = next(
-                        (x for x, _ in reversed(stack) if x is not None), None
-                    )
-                    stack.append((cap, None))
-                else:
-                    kind = self._lookaround_kind(regex, i)
-                    stack.append((None, [kind, cap + 1] if kind else None))
-            elif c == ")" and stack:
-                _, frame = stack.pop()
-                if frame and cap >= frame[1]:
-                    lookarounds.append((frame[0], frame[1], cap))
-            i += 1
-        return parent, cap, lookarounds
-
-    @staticmethod
-    def _lookaround_kind(regex, i):
-        if regex.startswith("(?=", i):
-            return "ahead"
-        if regex.startswith("(?<=", i):
-            return "behind"
-        return None
-
-    def _skip_char_class(self, regex, i):
-        # Advance past a `[...]` character class, honoring escapes.
-        n = len(regex)
-        i += 1
-        while i < n:
-            if regex[i] == "\\":
-                i += 2
-                continue
-            if regex[i] == "]":
-                return i + 1
-            i += 1
-        return i
-
-    def _is_capturing_paren(self, regex, i):
-        # True iff regex[i] starts a capturing group (named or unnamed).
-        # Non-capturing groups, lookarounds, atomic groups, inline flags,
-        # comments, named backreferences/recursion, and PCRE verbs return
-        # False.
-        n = len(regex)
-        if i + 1 >= n:
-            return True
-        nxt = regex[i + 1]
-        if nxt == "*":
-            return False  # PCRE verb: `(*UTF)`, `(*MARK:name)`, `(*COMMIT)`, etc.
-        if nxt != "?":
-            return True  # plain `(`: unnamed capture
-        if i + 2 >= n:
-            return False
-        c2 = regex[i + 2]
-        if c2 == "<":
-            # `(?<name>...)` named; `(?<=...)` / `(?<!...)` lookbehind.
-            return not (i + 3 < n and regex[i + 3] in "=!")
-        if c2 == "'":
-            return True  # `(?'name'...)` named capture
-        if c2 == "P":
-            # `(?P<name>...)` named; `(?P=name)` backref; `(?P>name)` recursion.
-            return i + 3 < n and regex[i + 3] == "<"
-        # `(?:`, `(?=`, `(?!`, `(?>`, `(?#`, `(?i)`, `(?i:`, etc.
-        return False
+    def _walk(self, seq, chain, ancestors, lookarounds):
+        # Map every capturing group to its capturing ancestors and record
+        # (kind, first, last) for every positive lookahead/lookbehind
+        # holding captures first..last.
+        for op, av in seq:
+            inner = chain
+            if op == sre_parse.SUBPATTERN and av[0]:
+                ancestors[av[0]] = chain
+                inner = chain | {av[0]}
+            known = set(ancestors)
+            for body in _subpatterns(av):
+                self._walk(body, inner, ancestors, lookarounds)
+            if op == sre_parse.ASSERT and len(ancestors) > len(known):
+                inside = ancestors.keys() - known
+                lookarounds.append(("ahead" if av[0] > 0 else "behind", min(inside), max(inside)))

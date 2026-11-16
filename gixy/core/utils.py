@@ -2,19 +2,13 @@ import ipaddress
 import re
 from collections import deque
 
+import gixy.core.sre_parse.sre_parse as sre_parse
+from gixy.core.regexp import PARSE_ERRORS, Regexp
+
 AUTH_DIRECTIVES = ("auth_basic", "auth_request", "auth_jwt", "auth_oidc")
 PASS_DIRECTIVES = ("proxy_pass", "fastcgi_pass", "uwsgi_pass", "scgi_pass", "grpc_pass")
 TLS_LISTEN_FLAGS = ("ssl", "quic")
-REGEX_ARGUMENT_DIRECTIVES = frozenset((
-    "server_name",
-    "valid_referers",
-    "gzip_disable",
-    "fastcgi_split_path_info",
-    "proxy_redirect",
-    "proxy_cookie_domain",
-    "proxy_cookie_path",
-    "proxy_cookie_flags",
-))
+IMPLICIT_LISTEN_SOCKET = "*:80"
 
 _UPPERCASE_RE = re.compile(r"[A-Z]")
 _BARE_VARIABLE_RE = re.compile(r"\$(?:([a-z_][a-z0-9_]*)|\{([a-z_][a-z0-9_]*)\})", re.IGNORECASE)
@@ -72,6 +66,12 @@ def resolve_inherited_all(scope, name):
         if declared:
             return declared
     return []
+
+
+def error_page_for(scope, code):
+    """The `error_page` in effect at `scope` that handles `code`: the first one listing
+    it in the nearest scope declaring any, as nginx picks it; None when there is none."""
+    return next((page for page in resolve_inherited_all(scope, "error_page") if code in page.args[:-1]), None)
 
 
 def enforced_auth(scope):
@@ -185,7 +185,7 @@ def normalize_address(address):
 def regex_arguments(directive):
     """Yield (pattern, case_insensitive) for every regular expression among a
     directive's arguments, as nginx compiles them."""
-    name, args = directive.name, directive.args
+    name, args = directive.nginx_name or directive.name, directive.args
     if name == "location":
         if directive.is_regex:
             yield directive.path, directive.modifier == "~*"
@@ -220,6 +220,21 @@ def is_error_return(directive):
     """True for a `return` whose status is 4xx or 5xx, 444 included."""
     status = directive.arg(0, "")
     return directive.name == "return" and status.isdigit() and int(status) >= 400
+
+
+def script_arguments(directive):
+    """Arguments whose `$var` nginx expands or defines: every argument that is
+    neither a regular expression nor a literal name."""
+    name, args = directive.nginx_name or directive.name, directive.args
+    if name in ("location", "server_name", "valid_referers", "gzip_disable", "fastcgi_split_path_info"):
+        return []
+    if name == "if":
+        return args[:1] if directive.is_regex else [arg for arg in args if arg != directive.operand]
+    if name == "rewrite":
+        return args[1:2]
+    if name in ("proxy_redirect", "proxy_cookie_domain", "proxy_cookie_path", "proxy_cookie_flags"):
+        return args[1:] if args and args[0].startswith("~") else args
+    return args
 
 
 def bare_variable_name(value):
@@ -261,7 +276,7 @@ def listen_sockets(servers):
         listens = server.find("listen")
         module = enclosing_module(server)
         if not listens and (module is None or module.name == "http"):
-            sockets.setdefault("*:80", []).append((server, None, False))
+            sockets.setdefault(IMPLICIT_LISTEN_SOCKET, []).append((server, None, False))
         for listen in listens:
             key, is_default = parse_listen_key_and_default(listen.args)
             if key is not None:
@@ -271,12 +286,14 @@ def listen_sockets(servers):
 
 def default_listens(servers):
     """Map each server to the `listen` directives on whose socket it is the default server:
-    the one flagged `default_server`, otherwise the first server on that socket."""
+    the one flagged `default_server`, otherwise the first server on that socket. A server
+    without `listen` that is the default on `*:80` maps to an empty list."""
     defaults = {}
     for entries in listen_sockets(servers).values():
         server, listen, _ = next((entry for entry in entries if entry[2]), entries[0])
+        listens = defaults.setdefault(server, [])
         if listen is not None:
-            defaults.setdefault(server, []).append(listen)
+            listens.append(listen)
     return defaults
 
 
@@ -311,3 +328,46 @@ def tls_sockets(servers):
         for key, entries in listen_sockets(servers).items()
         if any(listen is not None and is_tls_listen(listen) for _, listen, _ in entries)
     }
+
+
+def _literal_start(location):
+    if not location.is_regex:
+        return location.path
+    try:
+        seq = list(Regexp(location.path).parsed)
+    except PARSE_ERRORS:
+        return ""
+    if not seq or seq[0] != (sre_parse.AT, sre_parse.AT_BEGINNING):
+        return ""
+    start = ""
+    for op, av in seq[1:]:
+        if op != sre_parse.LITERAL:
+            break
+        start += chr(av)
+    return start.lower() if location.modifier == "~*" else start
+
+
+def rewrites_into(location):
+    """The `rewrite` directives of the location's server that can send a request into it before its
+    access phase: one at `server` level whatever its flag, or one with `last` or no flag in a location
+    external requests reach, whose replacement can produce a URI the location matches."""
+    scopes = list(location.parents)
+    server = next((scope for scope in scopes if scope.name == "server"), scopes[-1])
+    start = _literal_start(location)
+    result = []
+    for rewrite in server.find_recursive("rewrite"):
+        origins = [scope for scope in rewrite.parents if scope.name == "location"]
+        if rewrite.redirects or (rewrite.flag == "break" and origins):
+            continue
+        if any(origin.path.startswith("@") or origin.is_internal for origin in origins):
+            continue
+        prefix, variables, _ = rewrite.replace.split("?")[0].partition("$")
+        if location.modifier == "~*":
+            prefix = prefix.lower()
+        if variables:
+            reaches = start.startswith(prefix) or (location.modifier != "=" and prefix.startswith(start))
+        else:
+            reaches = prefix == start if location.modifier == "=" else prefix.startswith(start)
+        if reaches:
+            result.append(rewrite)
+    return result
