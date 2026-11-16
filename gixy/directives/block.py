@@ -4,7 +4,7 @@ import gixy.core.sre_parse.sre_parse as sre_parse
 from gixy.core.exceptions import MalformedDirective
 from gixy.core.regexp import Regexp
 from gixy.core.variable import Variable, subject_boundary
-from gixy.directives.directive import Directive, MapDirective, RewriteDirective, quote_arg
+from gixy.directives.directive import Directive, MapDirective, quote_arg
 
 
 def get_overrides():
@@ -18,15 +18,6 @@ def get_overrides():
 
         result[klass.nginx_name] = klass
     return result
-
-
-def resets_captures(block):
-    for child in block.children:
-        if isinstance(child, RewriteDirective) or isinstance(child, IfBlock) and child.is_regex:
-            return True
-        if child.is_block and not child.self_context and resets_captures(child):
-            return True
-    return False
 
 
 class Block(Directive):
@@ -129,19 +120,13 @@ class ServerBlock(Block):
 
     @cached_property
     def variables(self):
-        numbered = not resets_captures(self)
-        result = []
-        for server_name in self.get_names():
-            for name in server_name.args:
-                if not name.startswith("~"):
-                    continue
-                regexp = Regexp(name[1:], case_sensitive=False)
-                result.extend(
-                    Variable(name=group_name, value=group, boundary=self.HOST_BOUNDARY, provider=self)
-                    for group_name, group in regexp.groups.items()
-                    if numbered or not isinstance(group_name, int)
-                )
-        return result
+        return [
+            Variable(name=name, value=group, boundary=self.HOST_BOUNDARY, provider=self)
+            for server_name in self.get_names()
+            for arg in server_name.args
+            if arg.startswith("~")
+            for name, group in Regexp(arg[1:], case_sensitive=False).groups.items()
+        ]
 
     def __str__(self):
         server_names = [str(sn) for sn in self.find("server_name")]
