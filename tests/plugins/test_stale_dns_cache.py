@@ -1,5 +1,7 @@
 import io
 
+import pytest
+
 from gixy.core.config import Config
 from gixy.core.manager import Manager
 
@@ -11,6 +13,7 @@ def _issues(config):
     return [issue for plugin in manager.results for issue in plugin.issues]
 
 
+@pytest.mark.timeout(60)
 def test_chained_conditional_assignments_are_audited_in_linear_time():
     branches = " ".join('if ($arg_%d) { set $value "${value}%d"; }' % (i, i) for i in range(64))
     issues = _issues('server { set $value ""; %s location / { proxy_pass http://$value; } }' % branches)

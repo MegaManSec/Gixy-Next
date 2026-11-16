@@ -33,7 +33,8 @@ class stale_dns_cache(Plugin):
         super(stale_dns_cache, self).__init__(config)
         self.extract = _EXTRACT
         self.parse_uri_re = re.compile(
-            r"^(?P<scheme>[a-z][a-z0-9+.-]*://)?(?P<host>\[[0-9a-fA-F:.]+\]|[^/?#:]+)(?::(?P<port>[0-9]+))?"
+            r"^(?P<scheme>[a-z][a-z0-9+.-]*://)?(?P<host>\[[0-9a-fA-F:.]+\]|[^/?#:]+)(?::(?P<port>[0-9]+))?",
+            re.IGNORECASE,
         )
 
     def _needs_dns(self, target, startup=True):
@@ -52,7 +53,9 @@ class stale_dns_cache(Plugin):
             options = var.options
             if not options or var in seen or (var.name and builtins.is_builtin(var.name)):
                 break
-            values = [value for option in options for value in self._option_values(option, seen + (var,))]
+            values = list(
+                dict.fromkeys(value for option in options for value in self._option_values(option, seen + (var,)))
+            )
             if not all(isinstance(value, str) for value in values):
                 break
             targets = [target + value for target in targets for value in values]
@@ -61,9 +64,14 @@ class stale_dns_cache(Plugin):
         return targets
 
     def _option_values(self, option, seen):
+        if option not in self._values:
+            self._values[option] = self._expand(option, seen)
+        return self._values[option]
+
+    def _expand(self, option, seen):
         if isinstance(option.value, list):
             return [target for entry in option.value for target in self._targets(compile_hash_entry(entry) or [], seen)]
-        if any(isinstance(dep.value, list) for dep in option.depends or ()):
+        if option.depends:
             return self._targets(option.depends, seen)
         return [option.final_value]
 
@@ -80,8 +88,9 @@ class stale_dns_cache(Plugin):
         if _UNIX_SOCKET_RE.match(proxy_target) or not self.parse_uri_re.match(proxy_target):
             return
 
-        _, scheme, rest = proxy_target.partition("://")
-        targets = self._targets(compile_script(rest if scheme else proxy_target))
+        self._values = {}
+        _, sep, rest = proxy_target.partition("://")
+        targets = self._targets(compile_script(rest if sep else proxy_target))
 
         if not any(self._needs_dns(target, startup="$" not in proxy_target) for target in targets):
             return
