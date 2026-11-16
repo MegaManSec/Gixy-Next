@@ -1,6 +1,6 @@
 ---
 title: "Alias Path Traversal"
-description: "Detects alias directives that let a request escape the aliased directory: a location and alias that disagree on a trailing slash, or a capture or request variable in the alias path."
+description: "Detects alias directives that let a request escape the aliased directory: a prefix location whose path or alias lacks a trailing slash, or a capture or request variable in the alias path."
 ---
 
 # [alias_traversal] Path traversal via misconfigured alias
@@ -81,7 +81,7 @@ location = /i.gif {
 }
 ```
 
-The alias path itself must still be fixed: `location = /file { alias /home/$arg_path; }` serves `/etc/passwd` for `/file?path=../etc/passwd`.
+An exact match does not make a variable in the alias safe: `location = /file { alias /home/$arg_path; }` serves `/etc/passwd` for `/file?path=../etc/passwd`.
 
 ## How severity is determined
 

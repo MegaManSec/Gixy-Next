@@ -25,8 +25,8 @@ class alias_traversal(Plugin):
     summary = "Path traversal via misconfigured alias."
     severity = gixy.severity.HIGH
     description = (
-        "An alias whose location prefix and path disagree on a trailing slash, or whose path "
-        "contains a request-controlled variable, lets a request reach files outside the aliased directory."
+        "A prefix location whose path or alias lacks a trailing slash, or an alias path built from a "
+        "request-controlled variable or capture, lets a request reach files outside the aliased directory."
     )
     help_url = "https://gixy.io/plugins/alias_traversal/"
     directives = ["alias"]
@@ -35,6 +35,8 @@ class alias_traversal(Plugin):
         for location in directive.parents:
             if location.name != "location":
                 continue
+            if location.path.startswith("@"):
+                return
 
             alias_parts = compile_script(directive.path)
             severities = list(self._variable_severities(directive, location, alias_parts))
@@ -101,8 +103,12 @@ class alias_traversal(Plugin):
                         # location /site([^/]*) ~ { alias /lol/$1; }
                         yield gixy.severity.MEDIUM
             elif not part.must_startswith("/"):
+                # location /files/ { alias /home$arg_dir/; } with ?dir=/../../etc
+                raw = part.can_startswith("/") and any(
+                    source.provider is None and self._can_be_parent_dir(source) for source in sources
+                )
                 # location /site/(.*) ~ { alias /lol$1; }
-                yield gixy.severity.MEDIUM
+                yield gixy.severity.HIGH if raw else gixy.severity.MEDIUM
 
             prev_part = part
 
