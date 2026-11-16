@@ -16,7 +16,13 @@ from gixy.core.regexp import (
     RegexpTooComplex,
     SubpatternToken,
 )
-from gixy.core.utils import PASS_DIRECTIVES, default_listens, parse_listen_key_and_default, resolve_inherited_single
+from gixy.core.utils import (
+    IMPLICIT_LISTEN_SOCKET,
+    PASS_DIRECTIVES,
+    default_listens,
+    parse_listen_key_and_default,
+    resolve_inherited_single,
+)
 from gixy.core.variable import compile_hash_entry, compile_script
 from gixy.plugins.plugin import Plugin
 
@@ -292,12 +298,12 @@ class ssrf(Plugin):
         if id(http) not in self._defaults:
             self._defaults[id(http)] = default_listens(list(http.find_all_contexts_of_type("server")))
         listens = self._defaults[id(http)].get(server)
-        if listens:
-            sockets = sorted({parse_listen_key_and_default(listen.args)[0] for listen in listens})
+        if listens is not None:
+            sockets = {parse_listen_key_and_default(listen.args)[0] for listen in listens} or {IMPLICIT_LISTEN_SOCKET}
             return (
                 "`$host` is taken from the request: this is the default server for {sockets}, "
                 "so a request for any host name reaches it."
-            ).format(sockets=", ".join("`{0}`".format(socket) for socket in sockets))
+            ).format(sockets=", ".join("`{0}`".format(socket) for socket in sorted(sockets)))
         names = [name for sn in server.find("server_name") for name in sn.args]
         if any(_is_catch_all_name(name) for name in names):
             return (
