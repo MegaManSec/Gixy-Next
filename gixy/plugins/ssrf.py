@@ -16,7 +16,7 @@ from gixy.core.regexp import (
     SubpatternToken,
 )
 from gixy.core.utils import PASS_DIRECTIVES, default_listens, parse_listen_key_and_default, resolve_inherited_single
-from gixy.core.variable import compile_script
+from gixy.core.variable import compile_hash_entry, compile_script
 from gixy.plugins.plugin import Plugin
 
 
@@ -134,9 +134,19 @@ def _is_open_suffix_name(name):
         return False
 
 
+def _hash_values(var):
+    """The scripts a map or geo variable resolves to, plus an empty one when it has no `default`."""
+    values = [compile_hash_entry(entry) or [] for entry in var.value]
+    if not any(entry.provider.src_val == "default" for entry in var.value):
+        values.append([])
+    return values
+
+
 def _depends_on_host(var):
-    if var.name == "host" and var.value == "builtin":
+    if var.name == "host":
         return True
+    if isinstance(var.value, list):
+        return any(_depends_on_host(dep) for parts in _hash_values(var) for dep in parts)
     return any(_depends_on_host(dep) for dep in var.depends or var.alternatives or ())
 
 
@@ -163,12 +173,9 @@ def _reached_by_rewrite(location):
         return False
     start = _literal_start(location)
     for rewrite in server.find_recursive("rewrite"):
-        if len(rewrite.args) < 2 or rewrite.args[2:] not in ([], ["last"]):
+        if rewrite.flag not in (None, "last") or rewrite.redirects or "$" not in rewrite.replace:
             continue
-        replacement = rewrite.args[1]
-        if "$" not in replacement or replacement.startswith(("http://", "https://", "$scheme")):
-            continue
-        prefix = replacement.split("$", 1)[0]
+        prefix = rewrite.replace.split("$", 1)[0]
         if location.modifier == "~*":
             prefix = prefix.lower()
         if start.startswith(prefix) or prefix.startswith(start):
@@ -245,24 +252,33 @@ class ssrf(Plugin):
         """True if the host part of `var` can carry user input, None if the
         variable ends the host part with a mandatory `/` before any such
         input, False otherwise."""
-        if var.name == "host" and var.value == "builtin":
+        if var.name == "host":
             return bool(self._host_explanation)
         if var.alternatives:
-            results = [self._host_tainted(option) for option in var.options]
-            if any(results):
-                return True
-            if results and all(result is None for result in results):
-                return None
-            return False
+            return self._any_tainted(self._host_tainted(option) for option in var.options)
+        if isinstance(var.value, list):
+            return self._any_tainted(self._parts_tainted(parts) for parts in _hash_values(var))
         if var.depends:
-            for dep in var.depends:
-                result = self._host_tainted(dep)
-                if result is not False:
-                    return result
-            return False
+            return self._parts_tainted(var.depends)
         if var.must_contain("/"):
             return None
         return bool(var.can_contain("."))
+
+    def _parts_tainted(self, parts):
+        for part in parts:
+            result = self._host_tainted(part)
+            if result is not False:
+                return result
+        return False
+
+    @staticmethod
+    def _any_tainted(results):
+        results = list(results)
+        if any(results):
+            return True
+        if results and all(result is None for result in results):
+            return None
+        return False
 
     def _host_header_explanation(self, directive):
         """Why `$host` is attacker-chosen for `directive`, or None when the server only sees the
@@ -276,7 +292,7 @@ class ssrf(Plugin):
             self._defaults[id(http)] = default_listens(list(http.find_all_contexts_of_type("server")))
         listens = self._defaults[id(http)].get(server)
         if listens:
-            sockets = sorted({parse_listen_key_and_default(listen.args)[0] or listen.args[0] for listen in listens})
+            sockets = sorted({parse_listen_key_and_default(listen.args)[0] for listen in listens})
             return (
                 "`$host` is taken from the request: this is the default server for {sockets}, "
                 "so a request for any host name reaches it."

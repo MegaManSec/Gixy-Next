@@ -42,4 +42,4 @@ server {
 ## Additional notes
 
 - This applies to every variable: those defined with `set`, `map` and `geo`, built-in ones such as `$http_*` and `$arg_*`, and named captures. A capture `(?<Name>...)` is lowercased too, so `$Name` and `$name` are the same variable.
-- The regular expressions of `location ~`, `if (... ~ ...)`, `rewrite` and `server_name ~` are not checked: there `$Name` is an end-of-string anchor followed by `Name`, and `\$Name` a literal dollar sign. In a value, `"\$Name"` still references `$name`, because the backslash does not escape `$`.
+- Regular expressions are not checked: `location ~`, `if (... ~ ...)`, `rewrite` patterns and every `~` argument such as `server_name ~` or `proxy_redirect ~`. There `$Name` is an end-of-string anchor followed by `Name`, and `\$Name` a literal dollar sign. In a value, `"\$Name"` still references `$name`, because the backslash does not escape `$`.

@@ -10,7 +10,7 @@ description: "Detects root and alias directives that resolve to /, which let cli
 This plugin flags:
 
 - a `root` or `alias` whose path resolves to `/`: the bare `/`, and spellings of it such as `//`, `/./` or `/usr/..`;
-- an `alias` in a regex location whose path is `/` followed directly by a capture that can contain `/`, such as `alias /$1;`.
+- an `alias` in a regex location whose path is `/` followed directly by a capture, such as `alias /$1;`.
 
 ## Why this is a problem
 

@@ -3,8 +3,8 @@ from functools import cached_property
 import gixy.core.sre_parse.sre_parse as sre_parse
 from gixy.core.exceptions import MalformedDirective
 from gixy.core.regexp import Regexp
-from gixy.core.variable import Variable, compile_script
-from gixy.directives.directive import Directive, MapDirective, RewriteDirective, quote_arg
+from gixy.core.variable import GEO_PARAMETERS, Variable, subject_boundary
+from gixy.directives.directive import Directive, MapDirective, quote_arg
 
 
 def get_overrides():
@@ -18,15 +18,6 @@ def get_overrides():
 
         result[klass.nginx_name] = klass
     return result
-
-
-def resets_captures(block):
-    for child in block.children:
-        if isinstance(child, RewriteDirective) or isinstance(child, IfBlock) and child.is_regex:
-            return True
-        if child.is_block and not child.self_context and resets_captures(child):
-            return True
-    return False
 
 
 class Block(Directive):
@@ -129,19 +120,13 @@ class ServerBlock(Block):
 
     @cached_property
     def variables(self):
-        numbered = not resets_captures(self)
-        result = []
-        for server_name in self.get_names():
-            for name in server_name.args:
-                if not name.startswith("~"):
-                    continue
-                regexp = Regexp(name[1:], case_sensitive=False)
-                result.extend(
-                    Variable(name=group_name, value=group, boundary=self.HOST_BOUNDARY, provider=self)
-                    for group_name, group in regexp.groups.items()
-                    if numbered or not isinstance(group_name, int)
-                )
-        return result
+        return [
+            Variable(name=name, value=group, boundary=self.HOST_BOUNDARY, provider=self)
+            for server_name in self.get_names()
+            for arg in server_name.args
+            if arg.startswith("~")
+            for name, group in Regexp(arg[1:], case_sensitive=False).groups.items()
+        ]
 
     def __str__(self):
         server_names = [str(sn) for sn in self.find("server_name")]
@@ -184,8 +169,9 @@ class LocationBlock(Block):
         regexp = self._regexp
         if not regexp:
             return []
+        boundary = subject_boundary("$uri")
         return [
-            Variable(name=name, value=group, boundary=None, provider=self)
+            Variable(name=name, value=group, boundary=boundary, provider=self)
             for name, group in regexp.groups.items()
         ]
 
@@ -242,24 +228,12 @@ class IfBlock(Block):
         if not self.is_regex or not self.value:
             return []
 
-        boundary = None
-        if self.variable:
-            try:
-                compiled_script = compile_script(self.variable)
-                if len(compiled_script) == 1:
-                    boundary = compiled_script[0].regexp
-            except (IndexError, AttributeError):
-                # compile_script may raise if the context of a variable cannot be found, such as in unit tests.
-                pass
-
+        boundary = subject_boundary(self.variable)
         regexp = Regexp(self.value, case_sensitive=self.operand in {"~", "!~"})
-        result = []
-        for name, group in regexp.groups.items():
-            result.append(
-                Variable(name=name, value=group, boundary=boundary, provider=self)
-            )
-
-        return result
+        return [
+            Variable(name=name, value=group, boundary=boundary, provider=self)
+            for name, group in regexp.groups.items()
+        ]
 
 
 class IncludeBlock(Block):
@@ -308,60 +282,27 @@ class MapBlock(Block):
                 yield from self.gather_map_directives(node.children)
 
     @cached_property
+    def entries(self):
+        hostnames, result = False, []
+        for child in self.gather_map_directives(self.children):
+            if child.dest_val is None:
+                hostnames = hostnames or child.src_val == "hostnames"
+                continue
+            child.hostnames = hostnames
+            result.append(child)
+        return result
+
+    @cached_property
     def variables(self):
         vars = []
-        for child in self.gather_map_directives(self.children):
-            if not isinstance(child, MapDirective):
-                continue  # XXX: Should never happen?
-            src_val = child.src_val
-            dest_val = child.dest_val
-
-            if not child.is_regex or not _key_parses(child):
-                vars.append(
-                    Variable(
-                        name=src_val,
-                        value=dest_val,
-                        have_script=False,
-                        provider=child,
-                        ctx=src_val,
-                    )
-                )
-                continue
-
-            result = []
-            for name, group in child.regex.groups.items():
-                result.append(
-                    Variable(
-                        name=name,
-                        value=group,
-                        provider=child,
-                        boundary=None,
-                        ctx=src_val,
-                    )
-                )
-                break  # Only need the first result (full expression)
-            if len(result) != 1:
-                continue
+        for child in self.entries:
+            value = child.dest_val
+            if child.is_regex and _key_parses(child):
+                value = child.regex.groups[0]
             vars.append(
-                Variable(
-                    name=src_val,
-                    value=result[0].value,  # Value is Regexp()
-                    boundary=None,
-                    provider=child,
-                    have_script=False,
-                    ctx=src_val,
-                ),
+                Variable(name=child.src_val, value=value, have_script=False, provider=child, ctx=child.src_val)
             )
-
-        return [
-            Variable(
-                name=self.variable,
-                value=vars,
-                boundary=None,
-                provider=self,
-                have_script=False,
-            )
-        ]
+        return [Variable(name=self.variable, value=vars, provider=self, have_script=False)]
 
     def __str__(self):
         return "{0} {1} {2} {{".format(
@@ -404,9 +345,17 @@ class GeoBlock(Block):
                 yield from self.gather_geo_directives(node.children)
 
     @cached_property
+    def entries(self):
+        return [
+            child
+            for child in self.gather_geo_directives(self.children)
+            if child.dest_val is not None and child.src_val not in GEO_PARAMETERS
+        ]
+
+    @cached_property
     def variables(self):
         vars = []
-        for child in self.gather_geo_directives(self.children):
+        for child in self.entries:
             src_val = child.src_val
             dest_val = child.dest_val
 

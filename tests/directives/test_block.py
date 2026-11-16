@@ -72,7 +72,7 @@ server {
     assert not variables['domain'].can_contain('A')
 
 
-def test_server_regex_name_captures_after_rewrite():
+def test_server_regex_name_captures_with_rewrite():
     config = '''
 server {
     server_name ~^(www\\.)?(?<domain>.+)$;
@@ -81,7 +81,7 @@ server {
     '''
 
     directive = _get_parsed(config)
-    assert [v.name for v in directive.variables] == ['domain']
+    assert {1, 2, 'domain'} <= {v.name for v in directive.variables}
 
 
 def test_location():
@@ -419,3 +419,21 @@ map "$request_method $uri" $some_var {
 
     directive = _get_parsed(config)
     assert str(directive) == 'map "$request_method $uri" $some_var {'
+
+
+def test_map_hostnames_applies_to_later_keys():
+    config = '''
+map $http_host $h {
+    example.* a;
+    hostnames;
+    *.example.com b;
+    default c;
+}
+    '''
+
+    directive = _get_parsed(config)
+    assert [(e.src_val, e.hostnames) for e in directive.entries] == [
+        ("example.*", False),
+        ("*.example.com", True),
+        ("default", True),
+    ]

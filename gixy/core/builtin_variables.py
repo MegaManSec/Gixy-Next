@@ -60,7 +60,7 @@ BUILTIN_VARIABLES = {
     # https://nginx.org/en/docs/http/ngx_http_core_module.html#var_cookie_
     "cookie_": r"[^;\r\n]*",
     # https://nginx.org/en/docs/http/ngx_http_core_module.html#var_host
-    "host": "",
+    "host": r"[^\x00-\x20\x7f/]*",
     # https://nginx.org/en/docs/http/ngx_http_core_module.html#var_hostname
     # https://nginx.org/en/docs/stream/ngx_stream_core_module.html#var_hostname
     "hostname": "",

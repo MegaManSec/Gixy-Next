@@ -1,7 +1,7 @@
 import ipaddress
 
 import gixy
-from gixy.core.utils import AUTH_DIRECTIVES, resolve_inherited_single
+from gixy.core.utils import enforced_auth, satisfy_any
 from gixy.plugins.plugin import Plugin
 
 ALL_RULE = "all"
@@ -94,85 +94,46 @@ class allow_without_deny(Plugin):
         super(allow_without_deny, self).__init__(config)
         self._reported_parents = set()
 
-    def _is_satisfy_any_with_auth(self, scope):
-        """True for the intended 'IP allowlist OR authentication' pattern.
-
-        Under `satisfy any`, clients outside the allow list get NGX_DECLINED
-        from the access module and fall through to the auth modules, so a
-        missing `deny all` changes nothing: they still must authenticate.
-        Without an auth module the allow list is decorative and the warning
-        stands.
-        """
-        satisfy = resolve_inherited_single(scope, "satisfy")
-        if satisfy is None or satisfy.args[0].lower() != "any":
-            return False
-        for name in AUTH_DIRECTIVES:
-            auth = resolve_inherited_single(scope, name)
-            if auth is not None and auth.args[0].lower() != "off":
-                if name == "auth_basic" and self._lacks_user_file(scope):
-                    continue
-                return True
-        return False
-
-    @staticmethod
-    def _lacks_user_file(scope):
-        if resolve_inherited_single(scope, "auth_basic_user_file") is not None:
-            return False
-        return scope.name == "http" or any(parent.name == "http" for parent in scope.parents)
-
     @staticmethod
     def _simulate(rules):
         """Walk each family's rule list the way nginx does.
 
-        Returns (shadowed, effective): `shadowed` maps a rule that can never match in any of
-        its families to (opposite-kind rules that take its clients, mapped) where `mapped` says
-        the IPv4 list took them; `effective` holds the allows that let through some client a
-        later deny would otherwise have caught.
+        Returns (shadowed, effective): `shadowed` maps a rule that never matches in any of its
+        families to (opposite-kind rules that take its clients, mapped) where `mapped` says the
+        IPv4 list took them; `effective` holds the allows that let through some client a later
+        deny would otherwise have caught.
         """
         has_inet = any(INET in rule.families for rule in rules)
-        dead_in = {rule: {} for rule in rules}
-        effective = set()
+        live, mapped, effective = set(), set(), set()
+        shadows = {rule: [] for rule in rules}
         for family in (INET, INET6, UNIX):
             listed = [rule for rule in rules if family in rule.families]
             seen = [V4_MAPPED] if family == INET6 and has_inet else []
             for index, rule in enumerate(listed):
                 coverage = rule.coverage(family)
                 remaining = _exclude(coverage, seen)
-                if not remaining:
-                    shadows = [
-                        earlier
-                        for earlier in listed[:index]
-                        if earlier.allow != rule.allow and _overlaps(earlier.coverage(family), coverage)
-                    ]
-                    mapped = not shadows and family == INET6 and has_inet and _overlaps(coverage, [V4_MAPPED])
-                    if mapped:
-                        shadows += [
-                            other
-                            for other in rules
-                            if INET in other.families and other.allow != rule.allow
-                        ]
-                    dead_in[rule][family] = (shadows, mapped)
-                elif rule.allow:
+                seen = seen + remaining
+                if remaining:
+                    live.add(rule)
                     later = [
                         network
                         for other in listed[index + 1:]
                         if not other.allow
                         for network in other.coverage(family)
                     ]
-                    if _overlaps(remaining, later):
+                    if rule.allow and _overlaps(remaining, later):
                         effective.add(rule)
-                seen = seen + remaining
-        shadowed = {}
-        for rule in rules:
-            if len(dead_in[rule]) != len(rule.families):
-                continue
-            shadows = []
-            mapped = False
-            for family_shadows, family_mapped in dead_in[rule].values():
-                shadows += [shadow for shadow in family_shadows if shadow not in shadows]
-                mapped = mapped or family_mapped
-            if shadows:
-                shadowed[rule] = (shadows, mapped)
+                    continue
+                earlier = [
+                    other
+                    for other in listed[:index]
+                    if other.allow != rule.allow and _overlaps(other.coverage(family), coverage)
+                ]
+                if not earlier and family == INET6 and has_inet and _overlaps(coverage, [V4_MAPPED]):
+                    mapped.add(rule)
+                    earlier = [other for other in rules if INET in other.families and other.allow != rule.allow]
+                shadows[rule] += [other for other in earlier if other not in shadows[rule]]
+        shadowed = {rule: (shadows[rule], rule in mapped) for rule in rules if rule not in live and shadows[rule]}
         return shadowed, effective
 
     def audit(self, directive):
@@ -196,7 +157,7 @@ class allow_without_deny(Plugin):
             for rule in rules
             if rule.allow and rule.directive.args[0] not in ALLOW_ALL_RULES and rule not in shadowed
         ]
-        if not allows or self._is_satisfy_any_with_auth(parent):
+        if not allows or (satisfy_any(parent) and enforced_auth(parent)):
             return
         if any(rule in effective for rule in allows):
             return

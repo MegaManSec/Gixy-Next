@@ -6,7 +6,6 @@ import gixy
 import gixy.core.builtin_variables as builtins
 from gixy.core.utils import PASS_DIRECTIVES
 from gixy.core.variable import compile_script
-from gixy.directives.block import MapBlock
 from gixy.directives.directive import is_ipv4, is_ipv6
 from gixy.plugins.plugin import Plugin
 
@@ -37,28 +36,21 @@ class stale_dns_cache(Plugin):
             r"^(?P<scheme>[a-z][a-z0-9+.-]*://)?(?P<host>\[[0-9a-fA-F:.]+\]|[^/?#:]+)(?::(?P<port>[0-9]+))?"
         )
 
-    @staticmethod
-    def _needs_dns(host):
+    def _needs_dns(self, target, startup=True):
+        if _UNIX_SOCKET_RE.match(target):
+            return False
+        parsed = self.parse_uri_re.match(target)
+        host = parsed.group("host") if parsed else target
         if is_ipv6(host) or is_ipv4(host, False):
             return False
         host = host.lower().rstrip(".")
-        return host not in ("localhost", "ip6-localhost") and not host.endswith(".localhost")
-
-    def _is_address(self, value):
-        if _UNIX_SOCKET_RE.match(value):
-            return True
-        parsed = self.parse_uri_re.match(value)
-        return bool(parsed) and (is_ipv6(parsed.group("host")) or is_ipv4(parsed.group("host"), False))
+        return not startup or (host not in ("localhost", "ip6-localhost") and not host.endswith(".localhost"))
 
     @staticmethod
     def _option_values(option):
-        if not isinstance(option.provider, MapBlock):
+        if not isinstance(option.value, list):
             return [option.final_value]
-        entries = [d for d in option.provider.gather_map_directives(option.provider.children) if d.dest_val is not None]
-        values = [d.dest_val for d in entries]
-        if not any(d.src_val == "default" for d in entries):
-            values.append("")
-        return values
+        return [entry.provider.dest_val for entry in option.value]
 
     def audit(self, directive):
         if not getattr(directive, "args", None):
@@ -93,7 +85,7 @@ class stale_dns_cache(Plugin):
             if len(values) > 1:
                 break
 
-        if not any(self._needs_dns(host) and not self._is_address(host) for host in parsed_hosts):
+        if not any(self._needs_dns(host, startup="$" not in proxy_target) for host in parsed_hosts):
             return
 
         severity = self.severity
@@ -134,23 +126,13 @@ class stale_dns_cache(Plugin):
                             return
                         continue
 
-                    # No 'resolve' -> stale DNS risk if this server target is a hostname
-
-                    if _UNIX_SOCKET_RE.match(child.arg(0)):
-                        continue
-
-                    parsed_upstream_server = self.parse_uri_re.match(child.arg(0))
-                    if not parsed_upstream_server:
-                        continue
-
-                    parsed_upstream_host = parsed_upstream_server.group("host")
-                    if not self._needs_dns(parsed_upstream_host):
+                    if not self._needs_dns(child.arg(0)):
                         continue
 
                     found_bad_server = True
                     upstream_directives.append(child)
 
-                    if self.extract(parsed_upstream_host).suffix:
+                    if self.extract(child.arg(0)).suffix:
                         severity = (
                             gixy.severity.MEDIUM
                         )  # Registerable suffix (one way or another)

@@ -602,3 +602,87 @@ def test_pcre_escapes_can_contain(regexp, char, contains):
 ))
 def test_pcre_escapes_groups(regexp, groups):
     assert set(Regexp(regexp).groups) == groups
+
+
+@pytest.mark.parametrize('name,inside,outside', (
+    ('alnum', 'aZ5', '_-/ \n'),
+    ('alpha', 'aZ', '5_/ '),
+    ('ascii', 'a\x00\x7f', '\x80\xff'),
+    ('blank', ' \t', '\n\ra'),
+    ('cntrl', '\x00\x1f\x7f', ' a\x80'),
+    ('digit', '09', 'a/'),
+    ('graph', '!~a', ' \n\x80'),
+    ('lower', 'az', 'A5'),
+    ('print', ' !~a', '\n\t\x80'),
+    ('punct', '!/:@[`{~', 'a5 \n'),
+    ('space', ' \t\n\v\f\r', 'a\x85\xa0'),
+    ('upper', 'AZ', 'a5'),
+    ('word', 'aZ5_', '-/ '),
+    ('xdigit', '09afAF', 'gG/'),
+))
+def test_posix_classes(name, inside, outside):
+    reg = Regexp('^[[:%s:]]$' % name)
+    negated = Regexp('^[[:^%s:]]$' % name)
+    for char in inside:
+        assert reg.can_contain(char, skip_literal=False), char
+        assert not negated.can_contain(char, skip_literal=False), char
+    for char in outside:
+        assert not reg.can_contain(char, skip_literal=False), char
+        assert negated.can_contain(char, skip_literal=False), char
+
+
+@pytest.mark.parametrize('regexp,tree', (
+    (r'[[:digit:]]', [(sre_parse.IN, [(sre_parse.RANGE, (48, 57))])]),
+    (r'[[:digit:]a-f]', [(sre_parse.IN, [(sre_parse.RANGE, (48, 57)), (sre_parse.RANGE, (97, 102))])]),
+    (r'[[:digit:][:upper:]]', [(sre_parse.IN, [(sre_parse.RANGE, (48, 57)), (sre_parse.RANGE, (65, 90))])]),
+    (r'[[:digit:]-]', [(sre_parse.IN, [(sre_parse.RANGE, (48, 57)), (sre_parse.LITERAL, 45)])]),
+    (r'[[:digit:]\]]', [(sre_parse.IN, [(sre_parse.RANGE, (48, 57)), (sre_parse.LITERAL, 93)])]),
+    (r'[^[:digit:]]', [(sre_parse.IN, [(sre_parse.NEGATE, None), (sre_parse.RANGE, (48, 57))])]),
+    (r'[[:digit]', [(sre_parse.IN, [(sre_parse.LITERAL, ord(c)) for c in '[:digit'])]),
+    (r'[[:a[:digit:]]', [(sre_parse.IN, [(sre_parse.LITERAL, ord(c)) for c in '[:a'] + [(sre_parse.RANGE, (48, 57))])]),
+    (r'[[:<:]]a', [(sre_parse.AT, sre_parse.AT_BOUNDARY), (sre_parse.LITERAL, 97)]),
+    (r'a[[:>:]]', [(sre_parse.LITERAL, 97), (sre_parse.AT, sre_parse.AT_BOUNDARY)]),
+))
+def test_parse_posix_classes(regexp, tree):
+    assert repr(sre_parse.parse(regexp)) == repr(tree)
+
+
+@pytest.mark.parametrize('regexp', (
+    r'[[:foo:]]', r'[[:ALPHA:]]', r'[[:^^alpha:]]', r'[[:^:]]', r'[:alpha:]',
+    r'[a-[:digit:]]', r'[[:digit:]-z]', r'[[:alpha:]-[:digit:]]', r'[[:<:]a]', r'[[:^<:]]',
+))
+def test_invalid_posix_classes_fail_to_parse(regexp):
+    with pytest.raises(sre_parse.error):
+        Regexp(regexp).parsed
+
+
+def test_posix_class_location_regex():
+    reg = Regexp(r'^/[[:alpha:]]+$')
+    assert not reg.can_contain('/')
+    assert reg.can_contain('a')
+    assert not reg.needs_anchor()
+    assert str(reg) == '^/[A-Za-z]+$'
+    values = list(reg.generate('a'))
+    assert values
+    for value in values:
+        assert re.fullmatch(r'/[A-Za-z]+', value), value
+    mixed = Regexp(r'^[[:^digit:]5]$')
+    assert mixed.can_contain('5', skip_literal=False)
+    assert mixed.can_contain('a', skip_literal=False)
+    assert not mixed.can_contain('6', skip_literal=False)
+
+
+@pytest.mark.parametrize('regexp, char, value', (
+    (r'[^.]', '.', 'a'),
+    (r'[^a-z]', 'a', 'A'),
+    (r'[a-z]', '.', 'a'),
+    (r'[0-9]', '.', '0'),
+    (r'\d', '.', '0'),
+    (r'\w', '.', 'a'),
+    (r'\s', '.', ' '),
+    (r'\S', ' ', 'a'),
+    (r'\D', '0', 'a'),
+    (r'\W', 'a', '!'),
+))
+def test_generate_fallback_is_fixed(regexp, char, value):
+    assert list(Regexp(regexp).generate(char)) == [value]

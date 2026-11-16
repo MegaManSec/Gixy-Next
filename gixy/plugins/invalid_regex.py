@@ -55,8 +55,6 @@ class invalid_regex(Plugin):
 
     REGEX_OPERATORS = ("~", "~*", "!~", "!~*")
     IF_FILE_OPERATORS = ("-f", "!-f", "-d", "!-d", "-e", "!-e", "-x", "!-x")
-    STOPPING_FLAGS = ("last", "break", "redirect", "permanent")
-    REDIRECT_PREFIXES = ("http://", "https://", "$scheme")
 
     def __init__(self, config):
         super(invalid_regex, self).__init__(config)
@@ -236,9 +234,9 @@ class invalid_regex(Plugin):
         for child in if_directive.children:
             if child is directive:
                 break
-            if child.name == "rewrite" and child.args:
+            if child.name == "rewrite":
                 pattern, source, case_sensitive, negative = child.args[0], "preceding rewrite", True, False
-                stopping_rewrite = self._rewrite_stops(child)
+                stopping_rewrite = child.stops_processing
 
         if stopping_rewrite:
             refs = ", ".join(f"${g}" for g in sorted(referenced_groups))
@@ -324,12 +322,6 @@ class invalid_regex(Plugin):
                     f"is always empty."
                 ),
             )
-
-    @classmethod
-    def _rewrite_stops(cls, directive):
-        if len(directive.args) > 2 and directive.args[2] in cls.STOPPING_FLAGS:
-            return True
-        return len(directive.args) > 1 and directive.args[1].startswith(cls.REDIRECT_PREFIXES)
 
     @staticmethod
     def _in_scope(directive):

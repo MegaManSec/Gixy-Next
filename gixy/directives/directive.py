@@ -6,7 +6,7 @@ import tldextract
 
 from gixy.core.exceptions import MalformedDirective
 from gixy.core.regexp import Regexp
-from gixy.core.variable import Variable
+from gixy.core.variable import Variable, subject_boundary
 
 _TLD = tldextract.TLDExtract(include_psl_private_domains=False, suffix_list_urls=(), cache_dir=None)
 
@@ -16,7 +16,8 @@ _NO_DEFAULT = object()
 _MISSING = object()
 
 _BRACED_VARIABLE_RE = re.compile(r"\$\{\w+\}")
-_SHARED_ADDRESS_SPACE = ipaddress.IPv4Network("100.64.0.0/10")
+
+REDIRECT_PREFIXES = ("http://", "https://", "$scheme")
 
 
 def get_overrides():
@@ -328,11 +329,19 @@ class RewriteDirective(Directive):
         return Regexp(self.pattern, case_sensitive=True)
 
     @property
+    def redirects(self):
+        return self.flag in ("redirect", "permanent") or self.replace.startswith(REDIRECT_PREFIXES)
+
+    @property
+    def stops_processing(self):
+        return self.flag in ("last", "break") or self.redirects
+
+    @property
     def variables(self):
-        regexp = self._regexp
+        boundary = subject_boundary("$uri")
         return [
-            Variable(name=name, value=group, boundary=None, provider=self)
-            for name, group in regexp.groups.items()
+            Variable(name=name, value=group, boundary=boundary, provider=self)
+            for name, group in self._regexp.groups.items()
         ]
 
 
@@ -393,7 +402,7 @@ class ResolverDirective(Directive):
                 continue
 
             ip = getattr(ip, "ipv4_mapped", None) or ip
-            if ip.is_global and ip not in _SHARED_ADDRESS_SPACE:
+            if ip.is_global:
                 external_nameservers.append(addr)
         return external_nameservers
 
@@ -438,6 +447,7 @@ class MapDirective(Directive):
             destination[0] if destination and len(destination) == 1 else None
         )
         self.regex = None
+        self.hostnames = False
 
         if self.is_regex:
             if self.src_val.startswith("~*"):
@@ -475,15 +485,8 @@ class MapDirective(Directive):
         ):  # This happens for "geo" directives, which is ok because geo directive does not provide variables.
             return []
 
-        result = []
-        for name, group in self.regex.groups.items():
-            result.append(
-                Variable(
-                    name=name,
-                    value=group,
-                    provider=self,
-                    boundary=None,
-                    ctx=self.src_val,
-                )
-            )
-        return result
+        boundary = subject_boundary(ancestor.source)
+        return [
+            Variable(name=name, value=group, provider=self, boundary=boundary, ctx=self.src_val)
+            for name, group in self.regex.groups.items()
+        ]

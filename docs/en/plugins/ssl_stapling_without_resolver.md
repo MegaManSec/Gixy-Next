@@ -13,6 +13,7 @@ This plugin flags `server` blocks where all of the following are true:
 - `ssl_stapling on;` is in effect, in the server or inherited from the enclosing `http {}` block
 - No `resolver` is set in the server or an enclosing block
 - No `ssl_stapling_file` is set, since a pre-loaded OCSP response needs no resolver
+- The `ssl_certificate` and `ssl_certificate_key` in effect have no variables, since NGINX staples nothing for certificates it loads per request
 - `ssl_stapling_responder`, if set, names a host other than an IP address or `localhost`, whose addresses cannot change
 
 ## Why this is a problem
