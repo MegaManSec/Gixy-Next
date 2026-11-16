@@ -110,11 +110,16 @@ class unnamed_groups(Plugin):
     def _is_regex_if(self, node):
         return node.name == "if" and len(node.args) == 3 and node.args[1] in self._REGEX_OPERATORS
 
+    def _regex_if_groups(self, node, inside):
+        if inside and node.args[1] in ("!~", "!~*"):
+            return set()
+        return self._groups(node.args[2])
+
     def _groups_after(self, node, groups):
         if node.name == "rewrite":
             return set() if len(node.args) >= 2 and self._rewrite_is_terminator(node) else None
         if self._is_regex_if(node):
-            return None
+            return self._regex_if_groups(node, inside=False)
         if node.is_block and not node.self_context:
             inner = groups
             for child in node.children:
@@ -132,7 +137,7 @@ class unnamed_groups(Plugin):
             return True
         if node.is_block and not node.self_context:
             if self._is_regex_if(node):
-                groups = None
+                groups = self._regex_if_groups(node, inside=True)
             for child in node.children:
                 if self._has_vulnerable_complex_value(child, groups):
                     return True
