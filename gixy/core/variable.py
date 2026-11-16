@@ -345,18 +345,22 @@ class Variable(object):
         collect(self)
         return result
 
-    def depends_on(self, names, seen=()):
+    def depends_on(self, names, seen=None):
         """
         Checks if the variable is one of `names` or is built from one, through `set`, `map` and `geo` values.
 
         :param collection names: variable names.
-        :param tuple seen: map/geo variables being expanded; one that refers to itself resolves to nothing.
+        :param set seen: variables already walked; one met again, by a cycle or another branch, adds nothing.
         :return: True if the variable can carry one of them.
         """
         if self.name in names:
             return True
+        seen = set() if seen is None else seen
+        if self in seen:
+            return False
+        seen.add(self)
         if isinstance(self.value, list):
-            return self not in seen and any(
-                dep.depends_on(names, seen + (self,)) for entry in self.value for dep in compile_hash_entry(entry) or ()
-            )
-        return any(dep.depends_on(names, seen) for dep in self.depends or self.alternatives or ())
+            children = (dep for entry in self.value for dep in compile_hash_entry(entry) or ())
+        else:
+            children = self.depends or self.alternatives or ()
+        return any(dep.depends_on(names, seen) for dep in children)
