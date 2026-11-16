@@ -109,12 +109,14 @@ class allow_without_deny(Plugin):
         for family in (INET, INET6, UNIX):
             listed = [rule for rule in rules if family in rule.families]
             seen = [V4_MAPPED] if family == INET6 and has_inet else []
+            claimed = {}
             for index, rule in enumerate(listed):
                 coverage = rule.coverage(family)
                 remaining = _exclude(coverage, seen)
                 seen = seen + remaining
                 if remaining:
                     live.add(rule)
+                    claimed[rule] = remaining
                     later = [
                         network
                         for other in listed[index + 1:]
@@ -126,8 +128,8 @@ class allow_without_deny(Plugin):
                     continue
                 earlier = [
                     other
-                    for other in listed[:index]
-                    if other.allow != rule.allow and _overlaps(other.coverage(family), coverage)
+                    for other, region in claimed.items()
+                    if other.allow != rule.allow and _overlaps(region, coverage)
                 ]
                 if not earlier and family == INET6 and has_inet and _overlaps(coverage, [V4_MAPPED]):
                     mapped.add(rule)
