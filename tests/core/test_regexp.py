@@ -138,6 +138,7 @@ def test_lookahead_group_is_analysed():
     (r'1+', '1+'),
     (r'^/x/(?=(.*))', '^/x/(?=(.*))'),
     (r'(?<=a)b', '(?<=a)b'),
+    (r'\Afoo\z', '^foo$'),
 ))
 def test_to_string(regexp, string):
     reg = Regexp(regexp)
@@ -342,6 +343,9 @@ def test_negative_must_startswith(regexp, char, strict):
     (r'(a)\1', ['aa']),
     (r'(^a)\1', ['^aa']),
     (r'(?P<n>x)(?P=n)', ['xx']),
+    (r'\Afoo\z', ['^foo$']),
+    (r'\Afoo\Z', ['^foo$']),
+    (r'\A(foo|bar)\z', ['^foo$', '^bar$']),
 ))
 def test_generate(regexp, values):
     reg = Regexp(regexp)
@@ -587,6 +591,11 @@ def test_unsupported_pcre_constructs_fail_to_parse(regexp):
     (r'^\p{^L}+$', 'a', False),
     (r'^\p{Latin}+$', 'a', True),
     (r'^\p{Latin}+$', '/', False),
+    (r'^\p{ASCII}+$', '\r', True),
+    (r'^\p{ASCII}+$', '\xe9', False),
+    (r'^\P{ASCII}+$', '\xe9', True),
+    (r'^\P{ASCII}+$', 'a', False),
+    (r'^\p{Greek}+$', '\r', True),
     (r'^a\Kb$', 'b', True),
     (r'^a\yb$', 'y', True),
 ))

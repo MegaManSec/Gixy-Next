@@ -808,8 +808,8 @@ class AtToken(Token):
     type = sre_parse.AT
 
     def _parse(self):
-        self.begin = self.token[1] == sre_parse.AT_BEGINNING
-        self.end = self.token[1] == sre_parse.AT_END
+        self.begin = self.token[1] in _ANCHORS_BEGIN
+        self.end = self.token[1] in _ANCHORS_END
 
     def can_contain(self, char, skip_literal=True):
         return False
