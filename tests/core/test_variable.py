@@ -118,6 +118,15 @@ def test_unassigned_stand_in_is_not_an_option():
     assert var.options == [assigned]
 
 
+def test_depends_on_walks_chained_conditional_assignments_once():
+    var = Variable("value", value="$arg_a")
+    for i in range(64):
+        get_context().add_var("value", var)
+        var = Variable("value", alternatives=(var, Variable("value", value="${value}%d" % i)))
+    assert var.depends_on({"arg_a"})
+    assert not var.depends_on({"host"})
+
+
 def test_regexp_boundary():
     var = Variable(name='simple', value=Regexp('.*'), boundary=Regexp('/[a-z]', strict=True))
     assert not var.depends
