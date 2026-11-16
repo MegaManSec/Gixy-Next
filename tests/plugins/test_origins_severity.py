@@ -48,6 +48,8 @@ def test_reflection_is_high_only_with_credentials(fixture, severity):
     ('more_set_headers "Access-Control-Allow-Credentials: false";', "MEDIUM"),
     ('more_set_headers "Access-Control-Allow-Credentials";', "MEDIUM"),
     ("more_clear_headers Access-Control-Allow-Credentials;", "MEDIUM"),
+    ('more_clear_headers "Access-Control-*";', "MEDIUM"),
+    ('more_clear_headers "Access-Control-*" "Access-Control-Allow-Credentials: true";', "MEDIUM"),
     ('more_set_headers "Access-Control-Allow-Credentials: false" "Access-Control-Allow-Credentials: true";', "HIGH"),
     ('more_clear_headers Access-Control-Allow-Credentials; more_set_headers "Access-Control-Allow-Credentials: true";', "HIGH"),
     ('more_set_headers "Access-Control-Allow-Credentials: false"; add_header Access-Control-Allow-Credentials true;', "HIGH"),

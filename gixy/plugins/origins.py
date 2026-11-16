@@ -464,7 +464,8 @@ class origins(Plugin):
             if scope.name == "location" and scope.find_recursive("location"):
                 continue
             for block in scope.children:
-                if block.name != "if" or not block.variable or not any(map(is_error_return, block.find("return"))):
+                returns = block.find("return") if block.name == "if" else []
+                if not returns or not block.variable or not is_error_return(returns[0]):
                     continue
                 if not self._is_origin_reflection(block.variable):
                     if self._origin_flag_rejects(block):
@@ -513,8 +514,10 @@ class origins(Plugin):
         for node in directives:
             if not isinstance(node, (AddHeaderDirective, MoreSetHeadersDirective, MoreClearHeadersDirective)):
                 continue
+            wildcard = isinstance(node, MoreClearHeadersDirective)
             for name, value in node.headers.items():
-                if name.strip().lower() == header:
+                name = name.strip().lower()
+                if name == header or (wildcard and name.endswith("*") and header.startswith(name[:-1])):
                     yield node, value
 
     @staticmethod

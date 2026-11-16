@@ -263,7 +263,7 @@ class MoreClearHeadersDirective(Directive):
 
     def __init__(self, name, args):
         super().__init__(name, args)
-        self.headers = MoreSetHeadersDirective.parse_headers(args)
+        self.headers = dict.fromkeys(MoreSetHeadersDirective.parse_headers(args), "")
 
 
 class SetDirective(Directive):

@@ -98,6 +98,8 @@ def test_origin_flag_map_is_followed_through_the_entry_an_untrusted_origin_selec
     ("403", False),
     ("444", False),
     ("503", False),
+    ('200 "first"; return 403', True),
+    ('403; return 200 "x"', False),
 ])
 def test_only_an_error_return_guards_reflection(ret, reflected):
     assert _reflected("""
