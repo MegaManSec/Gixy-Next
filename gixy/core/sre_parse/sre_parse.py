@@ -623,6 +623,11 @@ def _parse(source, state):
 
         elif this == "[":
             # character set
+            if source.next == "[" and source.string.startswith(("[:<:]]", "[:>:]]"), source.index - 1):
+                for _ in range(6):
+                    sourceget()
+                subpatternappend(CATEGORIES[r"\b"])
+                continue
             set = []
             setappend = set.append
             if _posix_class(source):

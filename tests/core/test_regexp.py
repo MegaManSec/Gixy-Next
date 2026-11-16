@@ -640,6 +640,8 @@ def test_posix_classes(name, inside, outside):
     (r'[^[:digit:]]', [(sre_parse.IN, [(sre_parse.NEGATE, None), (sre_parse.RANGE, (48, 57))])]),
     (r'[[:digit]', [(sre_parse.IN, [(sre_parse.LITERAL, ord(c)) for c in '[:digit'])]),
     (r'[[:a[:digit:]]', [(sre_parse.IN, [(sre_parse.LITERAL, ord(c)) for c in '[:a'] + [(sre_parse.RANGE, (48, 57))])]),
+    (r'[[:<:]]a', [(sre_parse.AT, sre_parse.AT_BOUNDARY), (sre_parse.LITERAL, 97)]),
+    (r'a[[:>:]]', [(sre_parse.LITERAL, 97), (sre_parse.AT, sre_parse.AT_BOUNDARY)]),
 ))
 def test_parse_posix_classes(regexp, tree):
     assert repr(sre_parse.parse(regexp)) == repr(tree)
@@ -647,7 +649,7 @@ def test_parse_posix_classes(regexp, tree):
 
 @pytest.mark.parametrize('regexp', (
     r'[[:foo:]]', r'[[:ALPHA:]]', r'[[:^^alpha:]]', r'[[:^:]]', r'[:alpha:]',
-    r'[a-[:digit:]]', r'[[:digit:]-z]', r'[[:alpha:]-[:digit:]]',
+    r'[a-[:digit:]]', r'[[:digit:]-z]', r'[[:alpha:]-[:digit:]]', r'[[:<:]a]', r'[[:^<:]]',
 ))
 def test_invalid_posix_classes_fail_to_parse(regexp):
     with pytest.raises(sre_parse.error):
