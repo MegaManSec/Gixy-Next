@@ -292,8 +292,8 @@ class ssrf(Plugin):
         if id(http) not in self._defaults:
             self._defaults[id(http)] = default_listens(list(http.find_all_contexts_of_type("server")))
         listens = self._defaults[id(http)].get(server)
-        if listens:
-            sockets = sorted({parse_listen_key_and_default(listen.args)[0] for listen in listens})
+        if listens is not None:
+            sockets = sorted({parse_listen_key_and_default(listen.args)[0] for listen in listens} or {"*:80"})
             return (
                 "`$host` is taken from the request: this is the default server for {sockets}, "
                 "so a request for any host name reaches it."

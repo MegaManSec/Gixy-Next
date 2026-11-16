@@ -265,12 +265,14 @@ def listen_sockets(servers):
 
 def default_listens(servers):
     """Map each server to the `listen` directives on whose socket it is the default server:
-    the one flagged `default_server`, otherwise the first server on that socket."""
+    the one flagged `default_server`, otherwise the first server on that socket. A server
+    without `listen` that is the default on `*:80` maps to an empty list."""
     defaults = {}
     for entries in listen_sockets(servers).values():
         server, listen, _ = next((entry for entry in entries if entry[2]), entries[0])
+        listens = defaults.setdefault(server, [])
         if listen is not None:
-            defaults.setdefault(server, []).append(listen)
+            listens.append(listen)
     return defaults
 
 
