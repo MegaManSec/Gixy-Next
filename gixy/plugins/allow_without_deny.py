@@ -35,6 +35,10 @@ def _overlaps(region, networks):
     return any(piece.overlaps(network) for piece in region for network in networks)
 
 
+def _strict_subnet(inner, outer):
+    return inner != outer and inner.subnet_of(outer)
+
+
 class _Rule(object):
     """One `allow`/`deny` directive as ngx_http_access_module stores it: in the IPv4, IPv6 and
     unix rule lists it belongs to (`all` joins all three), with the network it matches."""
@@ -57,9 +61,7 @@ class _Rule(object):
             self.families = (INET if self.network.version == 4 else INET6,)
 
     def coverage(self, family):
-        if self.network is not None:
-            return [self.network]
-        return [UNIVERSE[family]]
+        return UNIVERSE[family] if self.network is None else self.network
 
     def __str__(self):
         return str(self.directive)
@@ -108,30 +110,27 @@ class allow_without_deny(Plugin):
         shadows = {rule: [] for rule in rules}
         for family in (INET, INET6, UNIX):
             listed = [rule for rule in rules if family in rule.families]
-            seen = [V4_MAPPED] if family == INET6 and has_inet else []
+            v4_mapped = family == INET6 and has_inet
+            seen = [V4_MAPPED] if v4_mapped else []
             claimed = {}
             for index, rule in enumerate(listed):
-                coverage = rule.coverage(family)
-                remaining = _exclude(coverage, seen)
+                network = rule.coverage(family)
+                remaining = _exclude([network], seen)
                 seen = seen + remaining
                 if remaining:
                     live.add(rule)
                     claimed[rule] = remaining
-                    later = [
-                        network
-                        for other in listed[index + 1:]
-                        if not other.allow
-                        for network in other.coverage(family)
-                    ]
+                    later = [other.coverage(family) for other in listed[index + 1:] if not other.allow]
                     if rule.allow and _overlaps(remaining, later):
                         effective.add(rule)
                     continue
                 earlier = [
                     other
                     for other, region in claimed.items()
-                    if other.allow != rule.allow and _overlaps(region, coverage)
+                    if other.allow != rule.allow and _overlaps(region, [network])
+                    and not _strict_subnet(other.coverage(family), network)
                 ]
-                if not earlier and family == INET6 and has_inet and _overlaps(coverage, [V4_MAPPED]):
+                if not earlier and v4_mapped and INET not in rule.families and network.overlaps(V4_MAPPED):
                     mapped.add(rule)
                     earlier = [other for other in rules if INET in other.families and other.allow != rule.allow]
                 shadows[rule] += [other for other in earlier if other not in shadows[rule]]
