@@ -1,5 +1,5 @@
 ---
-title: "Unanchored Regex Pattern"
+title: "Unanchored Regular Expression"
 description: "Detects regular expressions on the request URI or host name that are not anchored with ^ or $, so they also match requests they were not written for."
 ---
 
@@ -7,16 +7,18 @@ description: "Detects regular expressions on the request URI or host name that a
 
 ## What this check looks for
 
-A regular expression matched against the request URI or host name that is not anchored with `^` or `$`. In an alternation, every branch needs its own anchor. The plugin checks:
+A regular expression on the request URI that is not anchored with `^` or `$`, or on the host name that is not anchored with both. In an alternation, every branch needs its own anchors. The plugin checks:
 
 - `location ~` and `location ~*` patterns,
-- `if` tests of `$uri`, `$document_uri` or `$request_uri`, and regex keys of a `map` on one of them,
+- `if` tests of `$uri`, `$document_uri`, `$request_uri` or `$host`, and regex keys of a `map` on one of them,
 - `rewrite` patterns,
 - `server_name` regular expressions.
 
 ## Why this is a problem
 
-An unanchored pattern matches anywhere in the input. `location ~ \.php` also handles `/foo.php/x`, `server_name ~example\.com` also selects the server for `notexample.com.attacker.net`, and `if ($request_uri !~ "/api/") { return 403; }` lets `/x/api/y` through.
+An unanchored pattern matches anywhere in the input. `location ~ \.php` also hands `/uploads/x.php.jpg` to PHP, `location ~ \.(jpg|png)` also serves `/x.jpg.php` as a static file, and `if ($request_uri !~ "/api/") { return 403; }` lets `/x/api/y` through.
+
+A host name needs both anchors, because the client chooses the name: `server_name ~^(www\.)?example\.com` also selects the server for `example.com.attacker.net`, and `~example\.com$` for `notexample.com`.
 
 ## Bad configuration
 
@@ -35,7 +37,7 @@ location ~ ^/foo|/bar {
 
 ```nginx
 server {
-    server_name ~example\.com;
+    server_name ~^(www\.)?example\.com;
 
     location / {
         if ($request_uri !~ "/api/") {
@@ -71,7 +73,8 @@ server {
 
 ## Additional notes
 
-- Not reported, because matching anywhere is the intent: a `location` or positive `if` whose block only rejects (`deny`, `internal`, or a 4xx or 5xx `return`, optionally with `access_log` and `log_not_found`), such as `location ~ /\.ht { deny all; }`, and a positive `if` whose block only sets variables. A negated `if` is still reported.
-- A `rewrite` whose leading text the enclosing `location` path already starts with, such as `rewrite /app(.*) $1 break;` in `location ^~ /app/`, is not reported, because it can only match at the start.
+- A `location` or positive `if` whose block only rejects (`deny`, `internal` or a 4xx or 5xx `return`, with or without logging directives), such as `location ~ /\.ht { deny all; }`, is not reported: matching anywhere is the intent. A negated `if` is still reported.
+- A positive `if` whose block only sets variables, such as a cache-skip list, is not reported either.
+- A `rewrite` whose leading text the enclosing `location` path already starts with, such as `rewrite /app(.*) $1 break;` in `location ^~ /app/`, can only match at the start and is not reported.
 - A pattern of only `.` wildcards, such as `server_name ~.;`, matches anything and is not reported. Neither are tests of other variables, such as `if ($http_user_agent ~* bot)`.
-- A pattern gixy cannot parse, such as branch reset `(?|...)` or recursion `(?R)`, is skipped, so no finding there says nothing about its anchors.
+- A pattern gixy cannot parse, such as branch reset `(?|...)` or recursion `(?R)`, is skipped and may still be unanchored.

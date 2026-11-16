@@ -5,6 +5,7 @@ from gixy.directives.block import IfBlock, LocationBlock, MapBlock
 from gixy.plugins.plugin import Plugin
 
 URI_VARIABLES = frozenset(("$uri", "$document_uri", "$request_uri"))
+HOST_VARIABLES = frozenset(("$host",))
 LOGGING_DIRECTIVES = frozenset(("access_log", "log_not_found"))
 
 
@@ -31,13 +32,10 @@ def _any_characters(seq):
     return True
 
 
-def _over_matches(regexp):
-    if not regexp.needs_anchor():
+def _over_matches(regexp, host=False):
+    if not regexp.needs_anchor(both=host):
         return False
-    try:
-        parsed = regexp.parsed
-    except Exception:
-        return True
+    parsed = regexp.parsed
     return parsed.getwidth()[0] > 1 or not _any_characters(list(parsed))
 
 
@@ -79,10 +77,7 @@ def _location_prefix(location):
 
 
 def _prefix_pinned(rewrite, regexp):
-    try:
-        literal, rest = _leading_literal(list(regexp.parsed))
-    except Exception:
-        return False
+    literal, rest = _leading_literal(list(regexp.parsed))
     if not literal or not _matches_empty(rest):
         return False
     location = next((parent for parent in rewrite.parents if isinstance(parent, LocationBlock)), None)
@@ -132,10 +127,11 @@ class unanchored_regex(Plugin):
         elif isinstance(directive, IfBlock):
             self._audit_if(directive)
         elif isinstance(directive, MapBlock):
-            if directive.source in URI_VARIABLES:
+            host = directive.source in HOST_VARIABLES
+            if host or directive.source in URI_VARIABLES:
                 for entry in directive.gather_map_directives(directive.children):
-                    if entry.regex is not None and _over_matches(entry.regex):
-                        self._report([directive, entry])
+                    if entry.regex is not None and _over_matches(entry.regex, host=host):
+                        self._report([directive, entry], host=host)
         elif directive.name == "rewrite":
             if directive.args:
                 regexp = Regexp(directive.args[0])
@@ -143,23 +139,29 @@ class unanchored_regex(Plugin):
                     self._report(directive)
         elif directive.name == "server_name":
             for name in directive.args:
-                if name.startswith("~") and _over_matches(Regexp(name[1:])):
-                    self._report(directive)
+                if name.startswith("~") and _over_matches(Regexp(name[1:]), host=True):
+                    self._report(directive, host=True)
                     return
 
     def _audit_if(self, block):
-        if not block.is_regex or block.variable not in URI_VARIABLES:
+        if not block.is_regex or block.variable not in URI_VARIABLES | HOST_VARIABLES:
             return
         negated = block.operand.startswith("!")
         if not negated and (_only_rejects(block) or _only_sets(block)):
             return
-        if _over_matches(Regexp(block.value, case_sensitive=block.operand in ("~", "!~"))):
-            self._report(block)
+        host = block.variable in HOST_VARIABLES
+        if _over_matches(Regexp(block.value, case_sensitive=block.operand in ("~", "!~")), host=host):
+            self._report(block, host=host)
 
-    def _report(self, directive):
-        self.add_issue(
-            severity=gixy.severity.LOW,
-            directive=directive,
-            reason="This regular expression, or one of its alternatives, is not anchored with `^` or `$`, "
-            "so it can match anywhere in the input.",
-        )
+    def _report(self, directive, host=False):
+        if host:
+            reason = (
+                "This host name regular expression, or one of its alternatives, is not anchored with both "
+                "`^` and `$`, so it also matches names under other domains."
+            )
+        else:
+            reason = (
+                "This regular expression, or one of its alternatives, is not anchored with `^` or `$`, "
+                "so it can match anywhere in the input."
+            )
+        self.add_issue(severity=gixy.severity.LOW, directive=directive, reason=reason)
