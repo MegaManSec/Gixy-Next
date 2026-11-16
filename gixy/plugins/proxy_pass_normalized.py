@@ -3,7 +3,7 @@ from urllib.parse import urlparse
 
 import gixy
 import gixy.core.sre_parse.sre_parse as sre_parse
-from gixy.core.regexp import Regexp
+from gixy.core.regexp import PARSE_ERRORS, Regexp
 from gixy.core.utils import PASS_DIRECTIVES
 from gixy.core.variable import compile_script, memoize_query
 from gixy.directives.directive import RewriteDirective
@@ -45,7 +45,7 @@ def _rest_capture(pattern, prefix):
     `^/api(/.*)`, ("", None, "") for `^`; otherwise None."""
     try:
         seq = list(_flatten(Regexp(pattern).parsed))
-    except (sre_parse.error, OverflowError, RecursionError):
+    except PARSE_ERRORS:
         return None
     anchored = bool(seq) and seq[0][:2] == (sre_parse.AT, sre_parse.AT_BEGINNING)
     end_anchored = bool(seq) and seq[-1][:2] == (sre_parse.AT, sre_parse.AT_END)
