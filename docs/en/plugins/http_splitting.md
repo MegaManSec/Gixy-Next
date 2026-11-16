@@ -9,7 +9,7 @@ description: "Detects patterns that allow CRLF injection into response or upstre
 
 This plugin looks for client-controlled input in response headers and trailers (`add_header`, `add_trailer`, `more_set_headers`), in redirect URLs (`return`, `rewrite`, `error_page`) and in the request NGINX sends upstream (`proxy_set_header`, `proxy_pass`, `more_set_input_headers`), through variables that can contain newline characters:
 
-- regex captures that are not restricted to a safe character set,
+- regex captures that are not restricted to a safe character set by their own pattern or by the variable they are matched against (a capture of a request header cannot contain a line break, a capture of `$uri` can),
 - `$uri` and `$document_uri`, which hold the decoded URI, so `%0d%0a` becomes a line break,
 - `$request_body`, which is raw client input,
 - `$remote_user`, which NGINX base64-decodes from the `Authorization` header without validation,
@@ -86,7 +86,7 @@ location / {
 
 ## Additional notes
 
-- `$remote_user` is not reported when `auth_basic` (not `off`) and `auth_basic_user_file` are both in effect for the directive and `satisfy` is `all` (the default): the user name then has to match an entry in the password file before the request is proxied or answered. With `satisfy any`, clients that pass another access check skip the password check, so the finding stays; without `auth_basic_user_file` nothing is enforced.
+- `$remote_user` is not reported when `auth_basic` (not `off`) and `auth_basic_user_file` are both in effect for the directive and `satisfy` is `all` (the default): the user name then has to match an entry in the password file before the request is proxied or answered. With `satisfy any`, clients that pass another access check skip the password check, so the finding stays; without `auth_basic_user_file` nothing is enforced. In a file without an `http` block, the user file is assumed to be set in the main configuration.
 - `$request` (the request line) and `$content_type` (the request `Content-Type` header) are client-controlled but cannot contain line breaks, so they are not reported here.
 - NGINX URL-escapes numbered captures (`$1` to `$9`) in a `rewrite` replacement, and when `set` copies one from the URI before any `rewrite` in the location, so those are not reported. Named captures are copied raw.
 - Of an internal `rewrite`, only the query string after `?` is checked: NGINX escapes the rewritten path when it proxies the request, but not the arguments.

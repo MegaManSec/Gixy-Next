@@ -1,7 +1,7 @@
 import gixy
-from gixy.core.utils import resolve_inherited_single
+from gixy.core.utils import basic_auth_enforced
 from gixy.core.variable import compile_script
-from gixy.directives.directive import MoreSetHeadersDirective
+from gixy.directives.directive import REDIRECT_PREFIXES, MoreSetHeadersDirective
 from gixy.plugins.plugin import Plugin
 
 
@@ -52,7 +52,7 @@ class http_splitting(Plugin):
                     char = "\\r"
                 else:
                     continue
-                if _line_break_sources(var) == {"remote_user"} and _basic_auth_enforced(directive):
+                if _line_break_sources(var) == {"remote_user"} and basic_auth_enforced(directive.parent):
                     continue
                 reason = "Variable `${var}` can contain `{char}`, which can enable header/response splitting.".format(
                     var=var.name, char=char
@@ -138,23 +138,6 @@ def _line_break_sources(var):
     return names
 
 
-def _basic_auth_enforced(directive):
-    """True when ngx_http_auth_basic_module rejects every request whose user
-    is not in the password file: realm and file set, and no `satisfy any`."""
-    scope = directive.parent
-    auth = resolve_inherited_single(scope, "auth_basic")
-    if auth is None or auth.args[0].lower() == "off":
-        return False
-    if resolve_inherited_single(scope, "auth_basic_user_file") is None:
-        return False
-    satisfy = resolve_inherited_single(scope, "satisfy")
-    return satisfy is None or satisfy.args[0].lower() == "all"
-
-
-# nginx treats a lone `return` argument and a `rewrite` replacement as a redirect
-# URL when it starts with one of these; the prefix check is case-sensitive
-# (ngx_http_rewrite_return, ngx_http_rewrite).
-REDIRECT_PREFIXES = ("http://", "https://", "$scheme")
 # ngx_http_send_response() puts the value in Location for these statuses only;
 # for every other status it is the response body.
 REDIRECT_STATUSES = ("301", "302", "303", "307", "308")
@@ -191,14 +174,10 @@ def _get_return_location(directive):
 
 def _get_rewrite_target(directive):
     """The whole replacement of a redirect, the arguments of an internal rewrite."""
-    if len(directive.args) < 2:
-        return None
-    replace = directive.args[1]
-    flag = directive.args[2] if len(directive.args) > 2 else None
-    if replace.startswith(REDIRECT_PREFIXES) or flag in ("redirect", "permanent"):
-        return replace
-    if "?" in replace:
-        return replace.split("?", 1)[1]
+    if directive.redirects:
+        return directive.replace
+    if "?" in directive.replace:
+        return directive.replace.split("?", 1)[1]
     return None
 
 

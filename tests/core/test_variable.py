@@ -3,7 +3,7 @@ import pytest
 from gixy.core import builtin_variables as builtins
 from gixy.core.context import get_context, purge_context, push_context
 from gixy.core.regexp import Regexp
-from gixy.core.variable import Variable
+from gixy.core.variable import Variable, subject_boundary
 from gixy.directives.block import Root
 
 
@@ -122,16 +122,28 @@ def test_regexp_boundary():
     assert not var.depends
     assert var.regexp
 
-    assert var.can_startswith('/')
-    assert not var.can_startswith('a')
+    assert not var.can_startswith('/')
+    assert var.can_startswith('a')
     assert not var.can_contain('/')
     assert var.can_contain('a')
     assert not var.can_contain('0')
     assert not var.can_contain('\n')
-    assert var.must_contain('/')
+    assert not var.must_contain('/')
     assert not var.must_contain('a')
-    assert var.must_startswith('/')
+    assert not var.must_startswith('/')
     assert not var.must_startswith('a')
+
+
+def test_subject_boundary():
+    assert not subject_boundary('$http_origin').can_contain('\n')
+    assert subject_boundary('$uri').can_contain('\n')
+    assert subject_boundary('$host') is None
+    assert subject_boundary('$uri$args') is None
+    assert subject_boundary('$unknown') is None
+    get_context().add_var('copy', Variable(name='copy', value='$http_origin'))
+    assert subject_boundary('$copy') is None
+    purge_context()
+    assert subject_boundary('$uri') is None
 
 
 def test_script_boundary():

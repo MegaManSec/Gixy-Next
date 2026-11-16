@@ -22,8 +22,6 @@ class if_is_evil(Plugin):
     help_url = "https://gixy.io/plugins/if_is_evil/"
     directives = []
 
-    REDIRECT_PREFIXES = ("http://", "https://", "$scheme")
-
     def audit(self, directive):
         if directive.name == "if" and not directive.children:
             location = directive.parent
@@ -42,10 +40,7 @@ class if_is_evil(Plugin):
 
         # "rewrite ... last", "rewrite ... redirect", "rewrite ... permanent" and a rewrite to an
         # absolute URL (which redirects whatever its flag) are safe
-        if directive.name == "rewrite" and (
-            (len(directive.args) >= 3 and directive.args[-1] in ("last", "redirect", "permanent"))
-            or (len(directive.args) >= 2 and directive.args[1].startswith(self.REDIRECT_PREFIXES))
-        ):
+        if directive.name == "rewrite" and (directive.flag == "last" or directive.redirects):
             return
 
         # "return" is safe too
