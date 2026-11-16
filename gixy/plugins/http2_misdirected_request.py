@@ -1,5 +1,12 @@
 import gixy
-from gixy.core.utils import default_listens, parse_listen_key_and_default, resolve_inherited_single
+from gixy.core.utils import (
+    default_listens,
+    is_tls_listen,
+    listen_sockets,
+    parse_listen_key_and_default,
+    resolve_inherited_single,
+    tls_sockets,
+)
 from gixy.plugins.plugin import Plugin
 
 
@@ -19,8 +26,6 @@ class http2_misdirected_request(Plugin):
     directives = []
     supports_full_config = True
 
-    SSL_LISTEN_FLAGS = ("ssl", "quic", "http3")
-
     def audit(self, directive):
         return
 
@@ -31,11 +36,9 @@ class http2_misdirected_request(Plugin):
 
         servers = list(http_block.find_all_contexts_of_type("server"))
         defaults = default_listens(servers)
-        sockets = self._sockets(servers)
+        sockets = listen_sockets(servers)
+        tls = tls_sockets(servers)
         for server in servers:
-            listens = [listen for listen in defaults.get(server, ()) if self._listen_is_ssl(listen)]
-            if not listens:
-                continue
             ssl_reject = resolve_inherited_single(server, "ssl_reject_handshake")
             if not ssl_reject or ssl_reject.args[0].lower() != "on":
                 continue
@@ -43,13 +46,10 @@ class http2_misdirected_request(Plugin):
                 continue
             exposed = [
                 listen
-                for listen in listens
-                if self._socket_accepts_handshakes(server, sockets.get(self._socket_key(listen), ()))
-                and self._serves_misdirected(server, listen, sockets.get(self._socket_key(listen), ()))
+                for listen in defaults.get(server, ())
+                if is_tls_listen(listen, tls) and self._exposed(server, listen, sockets)
             ]
-            if not exposed:
-                continue
-            if self._server_returns_421(server):
+            if not exposed or self._server_returns_421(server):
                 continue
             protocols = sorted({"HTTP/3" if self._listen_is_quic(listen) else "HTTP/2" for listen in exposed})
             self.add_issue(
@@ -61,25 +61,8 @@ class http2_misdirected_request(Plugin):
                 ),
             )
 
-    def _listen_is_ssl(self, listen):
-        return any(arg.lower() in self.SSL_LISTEN_FLAGS for arg in listen.args)
-
     def _listen_is_quic(self, listen):
         return any(arg.lower() == "quic" for arg in listen.args[1:])
-
-    def _socket_key(self, listen):
-        if listen.args[0].lower().startswith("unix:"):
-            return listen.args[0]
-        return parse_listen_key_and_default(listen.args)[0]
-
-    def _sockets(self, servers):
-        sockets = {}
-        for server in servers:
-            for listen in server.find("listen"):
-                key = self._socket_key(listen)
-                if key is not None:
-                    sockets.setdefault(key, []).append((server, listen))
-        return sockets
 
     def _is_on(self, server, name, default):
         directive = resolve_inherited_single(server, name)
@@ -87,18 +70,18 @@ class http2_misdirected_request(Plugin):
             return default
         return directive.args[0].lower() != "off"
 
-    def _socket_accepts_handshakes(self, server, socket):
-        return any(
+    def _exposed(self, server, listen, sockets):
+        socket = sockets[parse_listen_key_and_default(listen.args)[0]]
+        if not any(
             other is not server and not self._is_on(other, "ssl_reject_handshake", default=False)
-            for other, _ in socket
-        )
-
-    def _serves_misdirected(self, server, listen, socket):
+            for other, _, _ in socket
+        ):
+            return False
         if self._listen_is_quic(listen):
             return self._is_on(server, "http3", default=True)
-        if any(arg.lower() == "http2" for _, other in socket for arg in other.args[1:]):
-            return True
-        return self._is_on(server, "http2", default=False)
+        return self._is_on(server, "http2", default=False) or any(
+            arg.lower() == "http2" for _, other, _ in socket if other for arg in other.args[1:]
+        )
 
     def _has_return_421(self, block):
         return any(r.args and r.args[0] == "421" for r in block.find("return"))
@@ -110,24 +93,18 @@ class http2_misdirected_request(Plugin):
             if not location.path.startswith("@") and not location.is_internal
         ]
 
-    def _locations_to_check(self, block):
-        """Routable locations a client can be served by: every prefix location, plus the regex
-        ones only when some prefix location lacks `=`/`^~`, since NGINX skips them otherwise."""
-        locations = self._routable_locations(block)
-        prefix = [location for location in locations if not location.is_regex]
-        if any(location.modifier is None for location in prefix):
-            return locations
-        return prefix
-
     def _location_returns_421(self, location):
-        if not self._has_return_421(location):
-            return False
-        return all(self._location_returns_421(nested) for nested in self._locations_to_check(location))
+        return self._has_return_421(location) and all(
+            self._location_returns_421(nested) for nested in self._routable_locations(location)
+        )
 
     def _server_returns_421(self, server):
         if self._has_return_421(server):
             return True
-        locations = self._locations_to_check(server)
-        if not any(location.path == "/" and location.modifier in (None, "^~") for location in locations):
+        locations = self._routable_locations(server)
+        prefix = [location for location in locations if not location.is_regex]
+        if not any(location.path == "/" and location.modifier in (None, "^~") for location in prefix):
             return False
+        if all(location.modifier for location in prefix):
+            locations = prefix
         return all(self._location_returns_421(location) for location in locations)

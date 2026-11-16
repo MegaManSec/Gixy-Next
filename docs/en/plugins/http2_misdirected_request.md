@@ -10,7 +10,7 @@ description: "Detects a TLS default server with ssl_reject_handshake and HTTP/2 
 This plugin flags `server` blocks where all of the following are true:
 
 - `ssl_reject_handshake on` is in effect, set in the `server` block or inherited from `http`
-- the server is the default server of a TLS `listen` socket: the one marked `default_server` (or `default`), or, when none is marked, the first one on that socket in the configuration
+- the server is the default server of a TLS `listen` socket: the one marked `default_server` (or `default`), or, when none is marked, the first one on that socket in the configuration; a socket is TLS when any `listen` on it carries `ssl` or `quic`
 - another server on the same socket accepts TLS handshakes, so connections to the socket can be opened at all
 - the protocol is enabled for the server:
   - on a TCP socket, `http2 on` is in effect for it, or any server on the socket has `listen ... http2`, which applies to the whole socket
@@ -21,13 +21,13 @@ This plugin flags `server` blocks where all of the following are true:
 A server answers every request with 421 when either:
 
 - `return 421;` sits directly in the `server` block, or
-- `location /` (plain or `^~`) returns 421, and so does every other location a client can reach: the other prefix and `=` locations, nested locations, and regex locations unless every prefix location carries `^~` or `=` (NGINX never consults regex locations then). Named (`@name`) and `internal` locations are not counted.
+- `location /` (plain or `^~`) returns 421, and so does every other location a client can reach: the other prefix and `=` locations, nested locations, and regex locations unless every prefix location carries `^~` or `=` (NGINX never consults regex locations then). Nested regex locations always count: NGINX consults them whenever no nested prefix location matches, whatever modifier the enclosing location has. Named (`@name`) and `internal` locations are not counted.
 
 ## Why this is a problem
 
 HTTP/2 and HTTP/3 clients may reuse a TLS connection opened for one server to send a request for another name. `ssl_reject_handshake` only acts at the handshake, so NGINX hands a request for a name that no server handles to the socket's default server. NGINX answers it with 421 on its own only when the default server has that protocol disabled or enables `ssl_verify_client`; otherwise the default server's locations handle it. HTTP/1.1 requests with a foreign `Host` header reach it the same way.
 
-RFC 7540 §9.1.2 defines status code 421 (Misdirected Request) for exactly this situation.
+RFC 9113 §9.1.2 and RFC 9114 §3.3 define status code 421 (Misdirected Request) for exactly this situation.
 
 ## Bad configuration
 
@@ -175,4 +175,4 @@ If the default server has other locations, each of them has to return 421 too, o
 
 - Both the modern `http2 on;` directive (NGINX 1.25.1+) and the older `listen ... http2;` syntax are recognised.
 - `location = / { return 421; }` on its own is not a safeguard: an exact match covers only `/`, and every other path falls through to NGINX's default handling.
-- Listen sockets are matched the way NGINX matches them, as in [default_server_flag](default_server_flag.md): `listen 443`, `listen *:443` and `listen 0.0.0.0:443` name one socket, `listen [::]:443` another, and `listen 443 ssl` and `listen 443 quic` each have their own default server. A `listen unix:` socket is only considered when it is marked `default_server`.
+- Listen sockets are matched the way NGINX matches them, as in [default_server_flag](default_server_flag.md): `listen 443`, `listen *:443` and `listen 0.0.0.0:443` name one socket, `listen [::]:443` another, and `listen 443 ssl` and `listen 443 quic` each have their own default server. `listen unix:` sockets are matched by their path.

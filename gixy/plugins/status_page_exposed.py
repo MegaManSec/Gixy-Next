@@ -1,7 +1,7 @@
 import ipaddress
 
 import gixy
-from gixy.core.utils import enforced_auth, satisfy_any
+from gixy.core.utils import enforced_auth, satisfy_any, split_address_port
 from gixy.plugins.plugin import Plugin
 
 
@@ -26,17 +26,11 @@ class status_page_exposed(Plugin):
     @staticmethod
     def _is_local_address(address):
         """True for a `listen` address on a unix: socket or a loopback interface."""
-        address = address.lower()
-        if address.startswith("unix:"):
+        if address.lower().startswith("unix:"):
             return True
-        if address.startswith("["):
-            host = address[1:].split("]", 1)[0]
-        else:
-            host = address.rsplit(":", 1)[0]
-        if host == "localhost":
-            return True
+        host, _ = split_address_port(address)
         try:
-            ip = ipaddress.ip_address(host)
+            ip = ipaddress.ip_address((host or "").strip("[]"))
         except ValueError:
             return False
         return (getattr(ip, "ipv4_mapped", None) or ip).is_loopback
