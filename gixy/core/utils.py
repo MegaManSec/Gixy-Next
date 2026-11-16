@@ -5,16 +5,6 @@ from collections import deque
 AUTH_DIRECTIVES = ("auth_basic", "auth_request", "auth_jwt", "auth_oidc")
 PASS_DIRECTIVES = ("proxy_pass", "fastcgi_pass", "uwsgi_pass", "scgi_pass", "grpc_pass")
 TLS_LISTEN_FLAGS = ("ssl", "quic")
-REGEX_ARGUMENT_DIRECTIVES = frozenset((
-    "server_name",
-    "valid_referers",
-    "gzip_disable",
-    "fastcgi_split_path_info",
-    "proxy_redirect",
-    "proxy_cookie_domain",
-    "proxy_cookie_path",
-    "proxy_cookie_flags",
-))
 
 _UPPERCASE_RE = re.compile(r"[A-Z]")
 _BARE_VARIABLE_RE = re.compile(r"\$(?:([a-z_][a-z0-9_]*)|\{([a-z_][a-z0-9_]*)\})", re.IGNORECASE)
@@ -214,6 +204,21 @@ def regex_arguments(directive):
     elif name in ("proxy_cookie_domain", "proxy_cookie_flags"):
         if args and args[0].startswith("~"):
             yield args[0][1:], True
+
+
+def script_arguments(directive):
+    """Arguments nginx compiles as scripts, expanding `$var` per request: every
+    argument that is neither a regular expression nor a literal name."""
+    name, args = directive.name, directive.args
+    if name in ("location", "server_name", "valid_referers", "gzip_disable", "fastcgi_split_path_info"):
+        return []
+    if name == "if":
+        return args[:1] if directive.is_regex else [arg for arg in args if arg != directive.operand]
+    if name == "rewrite":
+        return args[1:2]
+    if name in ("proxy_redirect", "proxy_cookie_domain", "proxy_cookie_path", "proxy_cookie_flags"):
+        return args[1:] if args and args[0].startswith("~") else args
+    return args
 
 
 def bare_variable_name(value):
