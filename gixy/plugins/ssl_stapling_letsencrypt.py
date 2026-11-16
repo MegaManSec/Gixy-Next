@@ -10,7 +10,6 @@ from gixy.core.utils import (
 from gixy.plugins.plugin import Plugin
 
 LETSENCRYPT_PREFIX = "/etc/letsencrypt/"
-CERT_DIRECTIVES = ("ssl_certificate", "ssl_trusted_certificate")
 
 
 def _is_letsencrypt(directive):
