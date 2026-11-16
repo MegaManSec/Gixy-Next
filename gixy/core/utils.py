@@ -2,6 +2,9 @@ import ipaddress
 import re
 from collections import deque
 
+import gixy.core.sre_parse.sre_parse as sre_parse
+from gixy.core.regexp import PARSE_ERRORS, Regexp
+
 AUTH_DIRECTIVES = ("auth_basic", "auth_request", "auth_jwt", "auth_oidc")
 PASS_DIRECTIVES = ("proxy_pass", "fastcgi_pass", "uwsgi_pass", "scgi_pass", "grpc_pass")
 TLS_LISTEN_FLAGS = ("ssl", "quic")
@@ -319,3 +322,46 @@ def tls_sockets(servers):
         for key, entries in listen_sockets(servers).items()
         if any(listen is not None and is_tls_listen(listen) for _, listen, _ in entries)
     }
+
+
+def _literal_start(location):
+    if not location.is_regex:
+        return location.path
+    try:
+        seq = list(Regexp(location.path).parsed)
+    except PARSE_ERRORS:
+        return ""
+    if not seq or seq[0] != (sre_parse.AT, sre_parse.AT_BEGINNING):
+        return ""
+    start = ""
+    for op, av in seq[1:]:
+        if op != sre_parse.LITERAL:
+            break
+        start += chr(av)
+    return start.lower() if location.modifier == "~*" else start
+
+
+def rewrites_into(location):
+    """The `rewrite` directives of the location's server that can send a request into it before its
+    access phase: one at `server` level whatever its flag, or one with `last` or no flag in a location
+    external requests reach, whose replacement can produce a URI the location matches."""
+    scopes = list(location.parents)
+    server = next((scope for scope in scopes if scope.name == "server"), scopes[-1])
+    start = _literal_start(location)
+    result = []
+    for rewrite in server.find_recursive("rewrite"):
+        origins = [scope for scope in rewrite.parents if scope.name == "location"]
+        if rewrite.redirects or (rewrite.flag == "break" and origins):
+            continue
+        if any(origin.path.startswith("@") or origin.is_internal for origin in origins):
+            continue
+        prefix, variables, _ = rewrite.replace.split("?")[0].partition("$")
+        if location.modifier == "~*":
+            prefix = prefix.lower()
+        if variables:
+            reaches = start.startswith(prefix) or (location.modifier != "=" and prefix.startswith(start))
+        else:
+            reaches = prefix == start if location.modifier == "=" else prefix.startswith(start)
+        if reaches:
+            result.append(rewrite)
+    return result

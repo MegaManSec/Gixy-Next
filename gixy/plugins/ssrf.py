@@ -2,7 +2,6 @@ import re
 import string
 
 import gixy
-import gixy.core.sre_parse.sre_parse as sre_parse
 from gixy.core.regexp import (
     AtToken,
     BranchToken,
@@ -22,6 +21,7 @@ from gixy.core.utils import (
     default_listens,
     parse_listen_key_and_default,
     resolve_inherited_single,
+    rewrites_into,
 )
 from gixy.core.variable import compile_hash_entry, compile_script
 from gixy.plugins.plugin import Plugin
@@ -157,39 +157,6 @@ def _depends_on_host(var):
     return any(_depends_on_host(dep) for dep in var.depends or var.alternatives or ())
 
 
-def _literal_start(location):
-    if not location.is_regex:
-        return location.path
-    try:
-        seq = list(Regexp(location.path).parsed)
-    except PARSE_ERRORS:
-        return ""
-    if not seq or seq[0] != (sre_parse.AT, sre_parse.AT_BEGINNING):
-        return ""
-    start = ""
-    for op, av in seq[1:]:
-        if op != sre_parse.LITERAL:
-            break
-        start += chr(av)
-    return start.lower() if location.modifier == "~*" else start
-
-
-def _reached_by_rewrite(location):
-    server = next((parent for parent in location.parents if parent.name == "server"), None)
-    if server is None:
-        return False
-    start = _literal_start(location)
-    for rewrite in server.find_recursive("rewrite"):
-        if rewrite.flag not in (None, "last") or rewrite.redirects or "$" not in rewrite.replace:
-            continue
-        prefix = rewrite.replace.split("$", 1)[0]
-        if location.modifier == "~*":
-            prefix = prefix.lower()
-        if start.startswith(prefix) or prefix.startswith(start):
-            return True
-    return False
-
-
 class ssrf(Plugin):
     """
     Insecure examples:
@@ -225,7 +192,9 @@ class ssrf(Plugin):
             return
 
         locations = [block for block in directive.parents if block.name == "location"]
-        if any(location.is_internal for location in locations) and not _reached_by_rewrite(locations[0]):
+        if any(location.is_internal for location in locations) and not any(
+            "$" in rewrite.replace for rewrite in rewrites_into(locations[0])
+        ):
             return
 
         parsed = self.parse_uri_re.match(value)

@@ -1,5 +1,5 @@
 import gixy
-from gixy.core.utils import AUTH_DIRECTIVES, enforced_auth, error_page_for, satisfy_any
+from gixy.core.utils import AUTH_DIRECTIVES, enforced_auth, error_page_for, rewrites_into, satisfy_any
 from gixy.plugins.plugin import Plugin
 
 
@@ -32,20 +32,10 @@ class return_bypasses_allow_deny(Plugin):
         self._reported_directives = set()
 
     @staticmethod
-    def _is_internal_only_location(node):
-        """True for locations only reachable via internal redirect.
-
-        Named locations (`location @name`) and locations carrying the
-        `internal` directive cannot be hit by an external request, so a
-        `return` inside them does not bypass the parent's allow/deny: any
-        client that ever reaches the return has already passed the access
-        phase of the originating location.
-        """
-        if getattr(node, "name", None) != "location":
-            return False
-        if getattr(node, "path", "").startswith("@"):
-            return True
-        return bool(getattr(node, "is_internal", False))
+    def _reached_only_after_access(node):
+        """True for a location only entered by an internal redirect issued after the originating
+        location's access phase: a named location, or an `internal` location no `rewrite` leads to."""
+        return node.name == "location" and (node.path.startswith("@") or node.is_internal and not rewrites_into(node))
 
     @staticmethod
     def _returns_unhandled_error(directive, denial_statuses=()):
@@ -88,7 +78,7 @@ class return_bypasses_allow_deny(Plugin):
     def _find_descendants_excluding_internal_locations(self, node, name, overrides):
         result = []
         for child in node.children:
-            if self._is_internal_only_location(child):
+            if self._reached_only_after_access(child):
                 continue
             if child.name == name:
                 result.append(child)
