@@ -27,11 +27,15 @@ def test_back_reference_in_server_name_is_not_an_error():
     (r"~^(.+)\.com$", True),
     (r"~^api.example.com$", True),
     (r"~example\.com$", True),
+    (r"~^api\.[a-z]+$", True),
+    (r"~^(.+)\.co\.uk$", True),
+    (r"~^[a-z0-9-]+\.co\.uk$", True),
+    (r"~^(.+)\.github\.io$", True),
     ("*.example.com", False),
     (r"~^(.+)\.example\.com$", False),
     (r"~^api\.(.+)\.example\.com$", False),
     (r"~^api\.example\.(com|net)$", False),
-    (r"~^api\.[a-z]+$", False),
+    (r"~^(.+)\.example\.co\.uk$", False),
     (r"~^(www\.)?example\.com\.?$", False),
 ])
 def test_open_suffix_name(name, is_open):

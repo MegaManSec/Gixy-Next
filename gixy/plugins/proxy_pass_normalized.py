@@ -3,13 +3,15 @@ from urllib.parse import urlparse
 
 import gixy
 import gixy.core.sre_parse.sre_parse as sre_parse
-from gixy.core.regexp import PARSE_ERRORS, Regexp
-from gixy.core.utils import PASS_DIRECTIVES
+from gixy.core.regexp import ANCHORS_BEGIN, ANCHORS_END, PARSE_ERRORS, Regexp
+from gixy.core.utils import PASS_DIRECTIVES, resolve_inherited_all
 from gixy.core.variable import compile_hash_entry, compile_script, memoize_query
 from gixy.directives.directive import MapDirective, RewriteDirective
 from gixy.plugins.plugin import Plugin
 
 DECODED_PATH_VARS = frozenset({"uri", "document_uri"})
+CGI_PASS_DIRECTIVES = ("fastcgi_pass", "uwsgi_pass", "scgi_pass")
+REWRITTEN_URI_VARS = frozenset({"uri", "document_uri", "request_filename", "fastcgi_script_name", "fastcgi_path_info"})
 
 
 def _flatten(seq, group=None):
@@ -47,8 +49,8 @@ def _rest_capture(pattern, prefix):
         seq = list(_flatten(Regexp(pattern).parsed))
     except PARSE_ERRORS:
         return None
-    anchored = bool(seq) and seq[0][:2] == (sre_parse.AT, sre_parse.AT_BEGINNING)
-    end_anchored = bool(seq) and seq[-1][:2] == (sre_parse.AT, sre_parse.AT_END)
+    anchored = bool(seq) and seq[0][0] == sre_parse.AT and seq[0][1] in ANCHORS_BEGIN
+    end_anchored = bool(seq) and seq[-1][0] == sre_parse.AT and seq[-1][1] in ANCHORS_END
     seq = seq[anchored:len(seq) - end_anchored]
     head = list(takewhile(_is_literal, seq))
     rest = seq[len(head):]
@@ -254,6 +256,15 @@ class proxy_pass_normalized(Plugin):
                     break
         return None
 
+    @staticmethod
+    def _params_carry_uri(directive, location):
+        """Whether a `*_param` in effect sends the rewritten URI to the FastCGI, uwsgi or SCGI backend; assumed when
+        none is visible, as with an `include fastcgi_params` Gixy could not read."""
+        params = resolve_inherited_all(location, directive.name.replace("_pass", "_param"))
+        return not params or any(
+            var.depends_on(REWRITTEN_URI_VARS) for param in params for var in compile_script(param.arg(1))
+        )
+
     def _audit_uri_part(self, directive, location, uri):
         if location.modifier not in (None, "^~") or location.path.startswith("@") or directive.parent is not location:
             return
@@ -265,6 +276,8 @@ class proxy_pass_normalized(Plugin):
             if group is None or not sep or "$" in uri or not location.path.endswith(literal):
                 return
             if rewrite.parent is not location and not uri.startswith(location.path):
+                return
+            if directive.name in CGI_PASS_DIRECTIVES and not self._params_carry_uri(directive, location):
                 return
             uri += inner
             directives.append(rewrite)

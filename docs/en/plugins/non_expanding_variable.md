@@ -115,7 +115,7 @@ server {
 
 ## How severity is determined
 
-- **HIGH**: a `geo` or `split_clients` value that a `limit_req_zone` or `limit_conn_zone` key depends on entirely, directly or through `map`. Also a location or `if` that never matches the requests it was written for, because of a literal prefix or a regular expression that can never match, but that contains access control: `deny`, `auth_basic`, `auth_request`, `auth_jwt`, `auth_oidc`, or `return` with `401`, `403` or `444`.
+- **HIGH**: a `geo` or `split_clients` value that a `limit_req_zone` or `limit_conn_zone` key depends on entirely, directly or through `map`. Also a location or `if` that never matches the requests it was written for, because of a literal prefix or a regular expression that can never match, but that contains access control: `deny`, `auth_basic`, `auth_request`, `auth_jwt`, `auth_oidc`, or `return` with `401`, `403` or `444`. `auth_basic` only counts when an `auth_basic_user_file` is in effect; in a file without an `http` block, the user file is assumed to be set in the main configuration.
 - **MEDIUM**: any other finding.
 - **LOW**: a path, since it only changes where NGINX writes files, and a `gzip_disable` regular expression, since gzip only stays on.
 
