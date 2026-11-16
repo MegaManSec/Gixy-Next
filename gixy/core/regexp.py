@@ -143,10 +143,6 @@ def _merge_variants(variants):
 _ANCHORS_BEGIN = frozenset((sre_parse.AT_BEGINNING, sre_parse.AT_BEGINNING_STRING))
 _ANCHORS_END = frozenset((sre_parse.AT_END, sre_parse.AT_END_STRING))
 
-# An unescaped `\z` (PCRE's absolute-end anchor, unknown to the vendored
-# parser): an odd run of backslashes ending in `z`.
-_PCRE_Z_ANCHOR_RE = re.compile(r"(?<!\\)((?:\\\\)*)\\z")
-
 
 def _seq_anchored(seq, anchors, last):
     """True if the token sequence is pinned by one of `anchors` at its
@@ -1227,14 +1223,8 @@ class Regexp(object):
         input; anything else lets the engine retry at every position and match
         URLs it was never meant to match.
         """
-        # PCRE's `\z` end anchor is read as a literal `z` by the vendored
-        # parser; rewrite it to the equivalent `\Z` so the walk can see it.
-        normalized = _PCRE_Z_ANCHOR_RE.sub(r"\1\\Z", self.source)
         try:
-            if normalized != self.source:
-                parsed = Regexp(normalized, case_sensitive=self.case_sensitive).parsed
-            else:
-                parsed = self.parsed
+            parsed = self.parsed
         except Exception:
             return False
         return not _is_anchored(list(parsed))

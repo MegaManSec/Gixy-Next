@@ -8,6 +8,7 @@ import gixy
 import gixy.core.sre_parse.sre_parse as sre_parse
 from gixy.core.regexp import Regexp, RegexpTooComplex
 from gixy.core.utils import bare_variable_name, resolve_variable_chain
+from gixy.core.variable import EXTRACT_RE
 from gixy.directives.block import MapBlock
 from gixy.directives.directive import (
     AddHeaderDirective,
@@ -35,7 +36,7 @@ class origins(Plugin):
         if ($http_origin !~ "^https://yandex\.ru/$") {
             add_header X-Frame-Options SAMEORIGIN;
         }
-        # Invalid (and insecure) header, 'referrer' is the wrong spelling.
+        # Invalid header, 'referrer' is the wrong spelling.
         if ($http_referrer !~ "^https://yandex\.ru/") {
             add_header X-Frame-Options SAMEORIGIN;
         }
@@ -367,11 +368,14 @@ class origins(Plugin):
             return
 
         if self.directive_type == "$http_referrer":
-            reason = "Incorrect header `$http_referrer`; use `$http_referer`."
+            reason = (
+                "Incorrect header `$http_referrer`; use `$http_referer`. "
+                "Browsers send `Referer`, so this check never sees it."
+            )
             self.add_issue(
                 directive=directive,
                 reason=reason,
-                severity=self.severity_insecure_origin,
+                severity=self.severity_invalid_header,
             )
             return
 
@@ -412,6 +416,63 @@ class origins(Plugin):
                 and "$" not in parent.value
             ):
                 return True
+        return self._has_origin_guard(directive)
+
+    def _has_origin_guard(self, directive):
+        """An `if` in the serving location or its server that returns for every origin outside an allowlist."""
+        scopes = [
+            next((parent for parent in directive.parents if parent.name == name), None)
+            for name in ("location", "server")
+        ]
+        for scope in filter(None, scopes):
+            if scope.name == "location" and scope.find_recursive("location"):
+                continue
+            for block in scope.children:
+                if block.name != "if" or not block.variable or not block.find("return"):
+                    continue
+                if not self._is_origin_reflection(block.variable):
+                    if self._origin_flag_rejects(block):
+                        return True
+                    continue
+                if block.operand in ("!~", "!~*"):
+                    analyzed = self._analyze(block.value, block.operand == "!~", "origin")
+                    if analyzed and not (self.insecure_set or self.invalid_set):
+                        return True
+                if (
+                    block.operand == "!="
+                    and block.value.startswith(("http://", "https://"))
+                    and "$" not in block.value
+                ):
+                    return True
+        return False
+
+    def _origin_flag_rejects(self, block):
+        """`if ($flag = X) { return .. }` where `$flag` is a map of $http_origin whose `default`
+        is X and whose regex keys pass the checks."""
+        if block.operand not in ("=", "!="):
+            return False
+
+        def rejects(value):
+            return (value.strip("\"'") == block.value) == (block.operand == "=")
+
+        name = bare_variable_name(block.variable)
+        for mb in self._root.find_recursive("map"):
+            if not isinstance(mb, MapBlock) or mb.variable != name or not self._is_origin_reflection(mb.source):
+                continue
+            entries = [
+                md
+                for md in mb.gather_map_directives(mb.children)
+                if isinstance(md, MapDirective) and md.dest_val is not None
+            ]
+            if not rejects(next((md.dest_val for md in entries if md.src_val == "default"), "")):
+                return False
+            for md in entries:
+                if not md.is_regex or rejects(md.dest_val):
+                    continue
+                analyzed = self._analyze(md.regex.source, md.regex.case_sensitive, "origin")
+                if not analyzed or self.insecure_set or self.invalid_set:
+                    return False
+            return True
         return False
 
     @staticmethod
@@ -448,31 +509,70 @@ class origins(Plugin):
             scope = server.find_recursive("set")
         return list({id(sd): sd for sd in scope if isinstance(sd, SetDirective)}.values())
 
+    @staticmethod
+    def _source_variables(mb):
+        return {match.group(1).strip("{}").lower() for match in EXTRACT_RE.finditer(mb.source)}
+
+    @staticmethod
+    def _origin_copies(root):
+        """`http_origin` plus the variables whose every `set` copies it, directly or through such a copy."""
+        values = {}
+        for sd in root.find_recursive("set"):
+            if isinstance(sd, SetDirective):
+                values.setdefault(sd.variable, set()).add(bare_variable_name(sd.value))
+        copies = {"http_origin"}
+        while True:
+            found = {name for name, assigned in values.items() if name not in copies and assigned <= copies}
+            if not found:
+                return copies
+            copies |= found
+
+    @staticmethod
+    def _matches_empty(pattern, case_sensitive):
+        try:
+            candidates = Regexp(pattern, case_sensitive=case_sensitive).generate("`", anchored=True, max_repeat=5)
+            return any(candidate.lstrip("^").rstrip("$") == "" for candidate in candidates)
+        except (sre_parse.error, OverflowError, RecursionError, RegexpTooComplex):
+            return False
+
     def _origin_assignments(self, root, sets, name):
-        """Unguarded `set $name ...` directives and `default` entries of maps keyed on $http_origin."""
+        """Unguarded `set $name ...` directives, `default` entries of maps keyed on $http_origin,
+        and every entry of maps keyed on variables unrelated to the Origin."""
         for sd in sets:
             if sd.variable != name or self._has_origin_allowlist(sd):
                 continue
             yield sd, sd.value
-        for mb in root.find_recursive("map"):
-            if not isinstance(mb, MapBlock) or mb.variable != name:
+        maps = [mb for mb in root.find_recursive("map") if isinstance(mb, MapBlock)]
+        copies = self._origin_copies(root)
+        origin_keyed = {mb.variable for mb in maps if self._source_variables(mb) & copies}
+        for mb in maps:
+            if mb.variable != name:
                 continue
-            if not self._is_origin_reflection(mb.source):
+            sources = self._source_variables(mb)
+            if sources & origin_keyed:
                 continue
-            # A literal key (`https://trusted.example $http_origin;`) is an
-            # exact-match allowlist, so only `default` reflects unconditionally.
+            keyed_on_origin = bool(sources & copies)
             for md in mb.gather_map_directives(mb.children):
-                if not isinstance(md, MapDirective) or md.is_regex:
+                if not isinstance(md, MapDirective) or md.dest_val is None:
                     continue
-                if md.src_val == "default" and md.dest_val is not None:
-                    yield md, md.dest_val
+                # A literal key (`https://trusted.example $http_origin;`) is an
+                # exact-match allowlist, so only `default` reflects unconditionally.
+                if keyed_on_origin and (md.is_regex or md.src_val != "default"):
+                    continue
+                if not md.is_regex and md.src_val != "default" and bare_variable_name(md.dest_val) in sources:
+                    continue
+                yield md, md.dest_val
 
     def post_audit(self, root):
         """Analyze CORS allowlists: map/set $http_origin -> $var; add_header Access-Control-Allow-Origin $var"""
+        self._root = root
+        cors_variables = set()
         for node, value in self._cors_headers(root):
+            value = value.strip().strip("\"'")
+            dest_var = bare_variable_name(value)
+            cors_variables.add(dest_var)
             if self._has_origin_allowlist(node):
                 continue
-            value = value.strip().strip("\"'")
             if not value.startswith("$"):
                 continue
 
@@ -481,7 +581,6 @@ class origins(Plugin):
                 self._report_reflection(node)
                 continue
 
-            dest_var = bare_variable_name(value)
             if dest_var is None:
                 continue
 
@@ -491,6 +590,7 @@ class origins(Plugin):
             for hops, assigned in resolve_variable_chain(
                 dest_var, lambda name: self._origin_assignments(root, sets, name)
             ):
+                cors_variables.add(bare_variable_name(assigned))
                 if self._is_origin_reflection(assigned.strip().strip("\"'")):
                     self._report_reflection(list(reversed(hops)) + [node])
 
@@ -522,3 +622,17 @@ class origins(Plugin):
                         continue
                     # Analyze as origin regex
                     self._analyze_and_report(pattern, cs, "origin", [md, node])
+
+        for mb in root.find_recursive("map"):
+            if not isinstance(mb, MapBlock) or mb.variable in cors_variables:
+                continue
+            if not self._is_origin_reflection(mb.source):
+                continue
+            for md in mb.gather_map_directives(mb.children):
+                if not isinstance(md, MapDirective) or not md.is_regex:
+                    continue
+                if re.search(r"\$[1-9]", md.dest_val or "") or self._matches_empty(
+                    md.regex.source, md.regex.case_sensitive
+                ):
+                    continue
+                self._analyze_and_report(md.regex.source, md.regex.case_sensitive, "origin", [md])

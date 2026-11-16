@@ -32,7 +32,7 @@ It can also flag values that contain uppercase letters or unusual characters in 
 
 ### Unconditional reflection of the Origin
 
-Reflecting `$http_origin` straight back into `Access-Control-Allow-Origin` accepts *any* origin — there is no allowlist at all. The plugin flags this whether the header is emitted with `add_header` or `more_set_headers`, and whether the request Origin is reflected directly, through one or more `set` directives, or via a non-regex `map` default:
+Reflecting `$http_origin` straight back into `Access-Control-Allow-Origin` accepts *any* origin — there is no allowlist at all. The plugin flags this whether the header is emitted with `add_header` or `more_set_headers`, and whether the request Origin is reflected directly, through one or more `set` directives, or via a `map`:
 
 ```nginx
 # Direct reflection — every origin is allowed
@@ -57,7 +57,11 @@ map $http_origin $cors {
 add_header Access-Control-Allow-Origin $cors always;
 ```
 
-Only hops whose value is a single variable are followed (`set $cors $tmp;`, `default $tmp;`); a `map` hop is followed only when the map is keyed on `$http_origin`. Only `set` directives that can run for the request are considered: those in the same `server` block and in the enclosing `location` chain, including their `if` blocks. A `set` in another `server` or in a sibling `location` is not followed, while a `set` in any `location` counts for a header emitted at `server` level, because that header is inherited into every location. A literal-key `map` allowlist (for example `https://trusted.example $http_origin;` with a safe `default`) is *not* flagged: only the listed origins are echoed back. Like the `map` analysis below, this detection runs only on a full configuration scan (one that includes an `http { .. }` block). Regex `map` entries whose value is empty or fixed (for example `~.* "";` or `~.* https://trusted.example;`) are skipped as well, since they never echo the request Origin.
+Only single-variable hops are followed (`set $cors $tmp;`, `default $tmp;`), and only `set` directives that can run for the request: those in the same `server` and the enclosing `location` chain, or in any of its locations for a header set at `server` level.
+
+In a `map` keyed on `$http_origin` or a `set` copy of it, only `default` is followed, so a literal-key allowlist such as `https://trusted.example $http_origin;` is not flagged. A `map` keyed on an unrelated variable, such as `map $uri $cors { ~^/api/ $http_origin; }`, is followed through every entry, while one keyed on another Origin `map`'s result is not.
+
+This detection runs only on a full configuration scan (one that includes an `http { .. }` block).
 
 Reflection inside an `if` that checks the Origin first is also exempt, as long as that check is a real allowlist: an exact match such as `if ($http_origin = https://trusted.example)`, or a positive regex (`~`, `~*`) that passes the regex checks above. The same exemption applies to a `set` that copies the Origin inside such an `if`. A guard the plugin reports itself does not restrict anything, so reflection inside it is still flagged:
 
@@ -79,7 +83,7 @@ if ($http_origin ~ "^https://trusted\.example$") {
 add_header Access-Control-Allow-Origin $cors always;
 ```
 
-Negative matches (`!~`, `!~*`) and conditions on other variables do not count as guards.
+A negative check whose `if` block returns, such as `if ($http_origin !~ "^https://trusted\.example$") { return 403; }` or `!=` against a fixed origin, also counts. It must sit in the header's `server`, or in its `location` when that location has no nested locations, which would inherit the header but not the `if`. Other negative matches and conditions on other variables do not count as guards.
 
 ## Why this is a problem
 
@@ -133,7 +137,7 @@ if ($http_referrer !~ "^https://yandex\.ru/") {
 }
 ```
 
-The above example is a HIGH finding. The config is using the wrong variable (`referer` vs. `referrer`).
+The above example is a LOW finding. The config is using the wrong variable (`referer` vs. `referrer`): browsers never send a `Referrer` header, so the variable is always empty.
 
 ### `map`-based CORS allowlists that reflect an origin
 
@@ -149,9 +153,7 @@ map $http_origin $allow_origin {
 add_header Access-Control-Allow-Origin $allow_origin always;
 ```
 
-If the `map` regex can be bypassed (or matches invalid Origin forms), you can end up reflecting a hostile origin.
-
-Note: scanning of *this* pattern (defining `access-control-allow-origin` based on a map) occurs only when a full configuration is performed, i.e. when the configuration scanned includes an `http { .. }` block.
+If the `map` regex can be bypassed (or matches invalid Origin forms), you can end up reflecting a hostile origin. The regex keys of other maps keyed on `$http_origin`, such as one that feeds a later `if`, are checked too, except entries that also match an empty Origin, such as a `~.* 0` fallback, or that extract part of it (`$1`).
 
 ## Bad configuration
 
@@ -279,11 +281,10 @@ lower-hostname = true
 
 This plugin uses different severities depending on what it finds, and which header is involved. The logic is generally quite simple:
 
+- Reflecting the request Origin into `Access-Control-Allow-Origin` is HIGH.
 - If the regex matches an *insecure* `Origin`, the severity is HIGH.
 - If the regex matches an *invalid* `Origin` or `Referer`, the severity is LOW.
 - If the regex matches an insecure `Referer`, the severity is MEDIUM.
-- If `$http_referrer` is used, the severity is HIGH.
-
-The check for the invalid `map`-based CORS header is only performed when a full configuration scan occurs, i.e. when the configuration scanned includes an `http { .. }` block.
+- If `$http_referrer` is used, the severity is LOW.
 
 NGINX matches these patterns with PCRE, while gixy analyses them with its own parser. Atomic groups (`(?>...)`) and possessive quantifiers (`a++`) are analysed like their non-capturing and greedy equivalents. A pattern using PCRE-only syntax gixy cannot parse — branch reset `(?|...)`, recursion `(?R)` — is skipped with a warning on stderr rather than analysed. Such a pattern is never reported, so a warning means the origin or referer check did not run for that regex.
