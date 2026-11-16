@@ -5,6 +5,7 @@ from collections import deque
 AUTH_DIRECTIVES = ("auth_basic", "auth_request", "auth_jwt", "auth_oidc")
 PASS_DIRECTIVES = ("proxy_pass", "fastcgi_pass", "uwsgi_pass", "scgi_pass", "grpc_pass")
 TLS_LISTEN_FLAGS = ("ssl", "quic")
+IMPLICIT_LISTEN_SOCKET = "*:80"
 REGEX_ARGUMENT_DIRECTIVES = frozenset((
     "server_name",
     "valid_referers",
@@ -255,7 +256,7 @@ def listen_sockets(servers):
         listens = server.find("listen")
         module = enclosing_module(server)
         if not listens and (module is None or module.name == "http"):
-            sockets.setdefault("*:80", []).append((server, None, False))
+            sockets.setdefault(IMPLICIT_LISTEN_SOCKET, []).append((server, None, False))
         for listen in listens:
             key, is_default = parse_listen_key_and_default(listen.args)
             if key is not None:
