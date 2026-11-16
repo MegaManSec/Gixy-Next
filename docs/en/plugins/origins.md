@@ -85,6 +85,8 @@ add_header Access-Control-Allow-Origin $cors always;
 
 A negative check whose `if` block returns, such as `if ($http_origin !~ "^https://trusted\.example$") { return 403; }` or `!=` against a fixed origin, also counts. It must sit in the header's `server`, or in its `location` when that location has no nested locations, which would inherit the header but not the `if`. Other negative matches and conditions on other variables do not count as guards.
 
+A reflection is HIGH when the same response also carries `Access-Control-Allow-Credentials: true`, and MEDIUM otherwise. An `add_header` list declared in a block replaces the inherited one, so a server-level credentials header does not reach a location or `if` with an `add_header` of its own unless `add_header_inherit merge` (NGINX 1.29.3+) applies; `more_set_headers` from enclosing blocks always applies. A credentials header set by the upstream is not visible to gixy.
+
 ## Why this is a problem
 
 Origin and Referer are attacker-controlled request headers. If your config uses them to decide whether to:
@@ -281,7 +283,7 @@ lower-hostname = true
 
 This plugin uses different severities depending on what it finds, and which header is involved. The logic is generally quite simple:
 
-- Reflecting the request Origin into `Access-Control-Allow-Origin` is HIGH.
+- Reflecting the request Origin into `Access-Control-Allow-Origin` is HIGH when the response also carries `Access-Control-Allow-Credentials: true`, and MEDIUM otherwise: without it the browser does not let the attacker's page read the response, the same exposure as `Access-Control-Allow-Origin: *`.
 - If the regex matches an *insecure* `Origin`, the severity is HIGH.
 - If the regex matches an *invalid* `Origin` or `Referer`, the severity is LOW.
 - If the regex matches an insecure `Referer`, the severity is MEDIUM.

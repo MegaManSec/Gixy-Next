@@ -32,6 +32,25 @@ def resolve_inherited_single(scope, name):
     return None
 
 
+def resolve_inherited_list(scope, name, inherit_name):
+    """Directives of an inheritable list such as `add_header` in effect at `scope`.
+
+    A scope that declares any replaces the inherited list, unless
+    `<inherit_name> merge` applies, which appends it; `<inherit_name> off`
+    stops inheritance (both nginx 1.29.3+).
+    """
+    result = []
+    while scope is not None:
+        own = scope.find(name)
+        result += own
+        mode = resolve_inherited_single(scope, inherit_name)
+        mode = mode.arg(0).lower() if mode else "on"
+        if mode == "off" or own and mode != "merge":
+            break
+        scope = scope.parent
+    return result
+
+
 def parse_listen_key_and_default(args):
     """
     Parse a listen directive arguments list into a normalized socket key and
