@@ -1,6 +1,7 @@
 import gixy
 import gixy.core.sre_parse.sre_parse as sre_parse
 from gixy.core.regexp import Regexp
+from gixy.core.utils import is_error_return
 from gixy.directives.block import IfBlock, LocationBlock, MapBlock
 from gixy.plugins.plugin import Plugin
 
@@ -10,11 +11,7 @@ LOGGING_DIRECTIVES = frozenset(("access_log", "log_not_found"))
 
 
 def _rejects(directive):
-    if directive.name in ("deny", "internal"):
-        return True
-    return directive.name == "return" and bool(directive.args) and directive.args[0].isdigit() and (
-        int(directive.args[0]) >= 400
-    )
+    return directive.name in ("deny", "internal") or is_error_return(directive)
 
 
 def _any_characters(seq):

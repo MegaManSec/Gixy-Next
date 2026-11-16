@@ -34,9 +34,30 @@ def test_referrer_typo_is_low():
     ("reflect_server_credentials_below_merged.conf", "HIGH"),
     ("reflect_server_more_credentials_below.conf", "HIGH"),
     ("reflect_if_credentials_replaced.conf", "MEDIUM"),
+    ("negative_guard_return_200.conf", "HIGH"),
+    ("reflect_map_flag_default.conf", "HIGH"),
+    ("reflect_more_credentials_overridden.conf", "MEDIUM"),
+    ("reflect_more_credentials_cleared.conf", "MEDIUM"),
+    ("reflect_more_credentials_reset.conf", "HIGH"),
 ])
 def test_reflection_is_high_only_with_credentials(fixture, severity):
     assert _severities((FIXTURES / fixture).read_text()) == [severity]
+
+
+@pytest.mark.parametrize("body,severity", [
+    ('more_set_headers "Access-Control-Allow-Credentials: false";', "MEDIUM"),
+    ('more_set_headers "Access-Control-Allow-Credentials";', "MEDIUM"),
+    ("more_clear_headers Access-Control-Allow-Credentials;", "MEDIUM"),
+    ('more_set_headers "Access-Control-Allow-Credentials: false" "Access-Control-Allow-Credentials: true";', "HIGH"),
+    ('more_clear_headers Access-Control-Allow-Credentials; more_set_headers "Access-Control-Allow-Credentials: true";', "HIGH"),
+    ('more_set_headers "Access-Control-Allow-Credentials: false"; add_header Access-Control-Allow-Credentials true;', "HIGH"),
+])
+def test_last_headers_more_command_for_credentials_decides(body, severity):
+    config = (
+        'http { more_set_headers "Access-Control-Allow-Credentials: true"; server { location / { %s'
+        ' more_set_headers "Access-Control-Allow-Origin: $http_origin"; } } }' % body
+    )
+    assert _severities(config) == [severity]
 
 
 @pytest.mark.parametrize("value,severity", [

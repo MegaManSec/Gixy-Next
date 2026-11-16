@@ -254,6 +254,18 @@ class MoreSetHeadersDirective(Directive):
         self.value = self.headers[self.header]
 
 
+class MoreClearHeadersDirective(Directive):
+    """
+    Syntax: more_clear_headers 'Foo' 'Baz*';
+    """
+
+    nginx_name = "more_clear_headers"
+
+    def __init__(self, name, args):
+        super().__init__(name, args)
+        self.headers = MoreSetHeadersDirective.parse_headers(args)
+
+
 class SetDirective(Directive):
     nginx_name = "set"
     provide_variables = True

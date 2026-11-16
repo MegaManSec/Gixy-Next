@@ -216,6 +216,12 @@ def regex_arguments(directive):
             yield args[0][1:], True
 
 
+def is_error_return(directive):
+    """True for a `return` whose status is 4xx or 5xx, 444 included."""
+    status = directive.arg(0, "")
+    return directive.name == "return" and status.isdigit() and int(status) >= 400
+
+
 def bare_variable_name(value):
     """Name of the single variable a script consists of (`$var` or `${var}`),
     lowercased; None for literals, mixed scripts and empty values."""
