@@ -1,7 +1,7 @@
 import re
 
 import gixy
-from gixy.core.utils import enclosing_module, is_tls_listen, tls_sockets
+from gixy.core.utils import dynamic_certificates, enclosing_module, is_tls_listen, resolve_inherited_single, tls_sockets
 from gixy.directives.directive import is_ipv4, is_ipv6
 from gixy.plugins.plugin import Plugin
 
@@ -48,22 +48,19 @@ class ssl_stapling_without_resolver(Plugin):
         if not self._is_ssl_server(server):
             return
 
-        stapling = self._effective(server, "ssl_stapling")
-        if not stapling or not stapling.args or stapling.args[0].lower() != "on":
+        stapling = resolve_inherited_single(server, "ssl_stapling")
+        if not stapling or stapling.arg(0).lower() != "on":
+            return
+        if resolve_inherited_single(server, "ssl_stapling_file") or dynamic_certificates(server):
             return
 
-        # ssl_stapling_file pre-loads the OCSP response; no resolver needed.
-        if self._in_scope(server, "ssl_stapling_file"):
-            return
-
-        # ssl_stapling_responder with an IP-literal or localhost URL has fixed addresses.
-        responder = self._effective(server, "ssl_stapling_responder")
-        if responder and responder.args:
-            host = _responder_host(responder.args[0])
+        responder = resolve_inherited_single(server, "ssl_stapling_responder")
+        if responder:
+            host = _responder_host(responder.arg(0))
             if host and (is_ipv4(host) or is_ipv6(host) or host.lower() == "localhost"):
                 return
 
-        if self._in_scope(server, "resolver"):
+        if resolve_inherited_single(server, "resolver"):
             return
 
         self.add_issue(
@@ -81,21 +78,3 @@ class ssl_stapling_without_resolver(Plugin):
         if id(module) not in self._tls_sockets:
             self._tls_sockets[id(module)] = tls_sockets(module.find_all_contexts_of_type("server"))
         return any(is_tls_listen(listen, self._tls_sockets[id(module)]) for listen in server.find("listen"))
-
-    def _effective(self, server, name):
-        own = server.some(name)
-        if own:
-            return own
-        for parent in server.parents:
-            inherited = parent.some(name, flat=False)
-            if inherited:
-                return inherited
-        return None
-
-    def _in_scope(self, server, name):
-        if server.some(name):
-            return True
-        for parent in server.parents:
-            if parent.some(name, flat=False):
-                return True
-        return False

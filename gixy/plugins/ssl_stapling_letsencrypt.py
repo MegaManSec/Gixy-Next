@@ -1,9 +1,15 @@
 import gixy
-from gixy.core.utils import enclosing_module, is_tls_listen, tls_sockets
+from gixy.core.utils import (
+    dynamic_certificates,
+    enclosing_module,
+    is_tls_listen,
+    resolve_inherited_all,
+    resolve_inherited_single,
+    tls_sockets,
+)
 from gixy.plugins.plugin import Plugin
 
 LETSENCRYPT_PREFIX = "/etc/letsencrypt/"
-CERT_DIRECTIVES = ("ssl_certificate", "ssl_trusted_certificate")
 
 
 def _is_letsencrypt(directive):
@@ -35,8 +41,10 @@ class ssl_stapling_letsencrypt(Plugin):
         if not self._is_ssl_server(server):
             return
 
-        stapling = self._effective(server, "ssl_stapling")
-        if not stapling or not stapling.args or stapling.args[0].lower() != "on":
+        stapling = resolve_inherited_single(server, "ssl_stapling")
+        if not stapling or stapling.arg(0).lower() != "on":
+            return
+        if resolve_inherited_single(server, "ssl_stapling_file") or dynamic_certificates(server):
             return
 
         certificates = self._letsencrypt_certificates(server)
@@ -66,28 +74,14 @@ class ssl_stapling_letsencrypt(Plugin):
             self._tls_sockets[id(module)] = tls_sockets(module.find_all_contexts_of_type("server"))
         return any(is_tls_listen(listen, self._tls_sockets[id(module)]) for listen in server.find("listen"))
 
-    def _effective(self, server, name):
-        own = server.some(name)
-        if own:
-            return own
-        for parent in server.parents:
-            inherited = parent.some(name, flat=False)
-            if inherited:
-                return inherited
-        return None
-
-    def _letsencrypt_certificates(self, server):
-        in_effect = {}
-        for name in CERT_DIRECTIVES:
-            for scope in [server] + list(server.parents):
-                declared = scope.find(name)
-                if declared:
-                    in_effect[name] = declared
-                    break
-        certificates = in_effect.get("ssl_certificate", [])
+    @staticmethod
+    def _letsencrypt_certificates(server):
+        certificates = resolve_inherited_all(server, "ssl_certificate")
         found = [directive for directive in certificates if _is_letsencrypt(directive)]
-        if found or not certificates or any("$" in arg for directive in certificates for arg in directive.args):
+        if found or not certificates:
             found.extend(
-                directive for directive in in_effect.get("ssl_trusted_certificate", []) if _is_letsencrypt(directive)
+                directive
+                for directive in resolve_inherited_all(server, "ssl_trusted_certificate")
+                if _is_letsencrypt(directive)
             )
         return found

@@ -11,7 +11,9 @@ This plugin flags `server` blocks where all of the following are true:
 
 - The server handles TLS: one of its `listen` directives has `ssl`, `quic` or `http3`, or another server has `listen ... ssl` on the same address and port
 - `ssl_stapling on;` is in effect, in the server or inherited from an enclosing block
-- The `ssl_certificate` in effect for the server (its own, or the enclosing block's) points under `/etc/letsencrypt/`, certbot's default layout. An `ssl_trusted_certificate` under that path counts too, unless the `ssl_certificate` in effect is a fixed path elsewhere, since the OCSP URL comes from the certificate
+- The `ssl_certificate` in effect for the server (its own, or the enclosing block's) points under `/etc/letsencrypt/`, certbot's default layout. An `ssl_trusted_certificate` under that path counts too, unless the `ssl_certificate` in effect points elsewhere, since the OCSP URL comes from the certificate
+- No `ssl_stapling_file` is set, since a pre-loaded OCSP response needs no responder
+- The `ssl_certificate` and `ssl_certificate_key` in effect have no variables, since NGINX staples nothing for certificates it loads per request
 
 ## Why this is a problem
 

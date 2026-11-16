@@ -63,6 +63,16 @@ def resolve_inherited_list(scope, name, inherit_name):
     return result
 
 
+def resolve_inherited_all(scope, name):
+    """Every `name` directive of the nearest scope that declares any, following nginx's
+    replace-not-merge inheritance; empty when none is in effect."""
+    for block in (scope, *scope.parents):
+        declared = block.find(name)
+        if declared:
+            return declared
+    return []
+
+
 def enforced_auth(scope):
     """Names of the authentication modules that restrict `scope`.
 
@@ -261,6 +271,17 @@ def default_listens(servers):
         if listen is not None:
             defaults.setdefault(server, []).append(listen)
     return defaults
+
+
+def dynamic_certificates(server):
+    """True when a variable in `ssl_certificate` or `ssl_certificate_key` makes NGINX load the
+    certificates per request, which disables OCSP stapling for all of them."""
+    return any(
+        "$" in arg
+        for name in ("ssl_certificate", "ssl_certificate_key")
+        for directive in resolve_inherited_all(server, name)
+        for arg in directive.args
+    )
 
 
 def enclosing_module(directive):
