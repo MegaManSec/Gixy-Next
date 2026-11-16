@@ -148,12 +148,15 @@ def _hash_values(var):
     return values
 
 
-def _depends_on_host(var):
+def _depends_on_host(var, seen=()):
     if var.name == "host":
         return True
     if isinstance(var.value, list):
-        return any(_depends_on_host(dep) for parts in _hash_values(var) for dep in parts)
-    return any(_depends_on_host(dep) for dep in var.depends or var.alternatives or ())
+        if var in seen:
+            return False
+        seen += (var,)
+        return any(_depends_on_host(dep, seen) for parts in _hash_values(var) for dep in parts)
+    return any(_depends_on_host(dep, seen) for dep in var.depends or var.alternatives or ())
 
 
 class ssrf(Plugin):
@@ -223,25 +226,28 @@ class ssrf(Plugin):
                 return True
         return False
 
-    def _host_tainted(self, var):
+    def _host_tainted(self, var, seen=()):
         """True if the host part of `var` can carry user input, None if the
         variable ends the host part with a mandatory `/` before any such
-        input, False otherwise."""
+        input, False otherwise. A `map` met again is a cycle and may carry anything."""
         if var.name == "host":
             return bool(self._host_explanation)
         if var.alternatives:
-            return self._any_tainted(self._host_tainted(option) for option in var.options)
+            return self._any_tainted(self._host_tainted(option, seen) for option in var.options)
         if isinstance(var.value, list):
-            return self._any_tainted(self._parts_tainted(parts) for parts in _hash_values(var))
+            if var in seen:
+                return True
+            seen += (var,)
+            return self._any_tainted(self._parts_tainted(parts, seen) for parts in _hash_values(var))
         if var.depends:
-            return self._parts_tainted(var.depends)
+            return self._parts_tainted(var.depends, seen)
         if var.must_contain("/"):
             return None
         return bool(var.can_contain("."))
 
-    def _parts_tainted(self, parts):
+    def _parts_tainted(self, parts, seen):
         for part in parts:
-            result = self._host_tainted(part)
+            result = self._host_tainted(part, seen)
             if result is not False:
                 return result
         return False

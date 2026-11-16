@@ -158,11 +158,12 @@ class Variable(object):
                 self.final_value = "".join(all_vars)
 
     @memoize_query
-    def can_contain(self, char):
+    def can_contain(self, char, seen=()):
         """
         Checks if variable can contain the specified char.
 
         :param str char: character to test.
+        :param tuple seen: hash-block variables being expanded; one met again is a cycle and may contain anything.
         :return: True if variable can contain the specified char, False otherwise.
         """
 
@@ -175,44 +176,31 @@ class Variable(object):
             return self.regexp.can_contain(char, skip_literal=True)
 
         if self.alternatives:
-            return any(var.can_contain(char) for var in self.alternatives)
+            return any(var.can_contain(char, seen) for var in self.alternatives)
 
         # Then dependencies
         if self.depends:
-            return any(dep.can_contain(char) for dep in self.depends)
+            return any(dep.can_contain(char, seen) for dep in self.depends)
 
         # If the value is a list (hash block), check all dest_val values
         if isinstance(self.value, list):
-            for var in self.value:
-                if (
-                    not isinstance(var, Variable)
-                    or not var.provider
-                    or var.provider.nginx_name != "map"
-                ):  # import MapDirective would be better but circular import..
-                    continue  # break?
-                if (
-                    var.provider.parent.nginx_name != "map"
-                ):  # import MapBlock would be better but circular import..
-                    continue  # break?
-
-                compiled_val = compile_script(
-                    var.provider.dest_val, ctx=var.provider.src_val
-                )
-                # Doesn't work for 'map $document_uri $v { ~*^[^\r\n]+$ $document_uri; }'
-                # but nothing we can do about that.
-                for dep in compiled_val:
-                    if dep.can_contain(char):
-                        return True
+            if self in seen:
+                return True
+            seen += (self,)
+            # Doesn't work for 'map $document_uri $v { ~*^[^\r\n]+$ $document_uri; }'
+            # but nothing we can do about that.
+            return any(dep.can_contain(char, seen) for entry in self.value for dep in compile_hash_entry(entry) or ())
 
         # Otherwise user can't control value of this variable
         return False
 
     @memoize_query
-    def can_startswith(self, char):
+    def can_startswith(self, char, seen=()):
         """
         Checks if variable can starts with the specified char.
 
         :param str char: character to test.
+        :param tuple seen: hash-block variables being expanded; one met again is a cycle and may start with anything.
         :return: True if variable can starts with the specified char, False otherwise.
         """
 
@@ -225,40 +213,31 @@ class Variable(object):
             return self.regexp.can_startswith(char)
 
         if self.alternatives:
-            return any(var.can_startswith(char) for var in self.alternatives)
+            return any(var.can_startswith(char, seen) for var in self.alternatives)
 
         # Then dependencies
         if self.depends:
-            return self.depends[0].can_startswith(char)
+            return self.depends[0].can_startswith(char, seen)
 
         # If the value is a list (hash block), check all values
         if isinstance(self.value, list):
-            for var in self.value:
-                if (
-                    not isinstance(var, Variable)
-                    or not var.provider
-                    or var.provider.nginx_name != "map"
-                ):
-                    continue
-                if var.provider.parent.nginx_name != "map":
-                    continue
-
-                compiled_val = compile_script(
-                    var.provider.dest_val, ctx=var.provider.src_val
-                )
-                if compiled_val:
-                    if compiled_val[0].can_startswith(char):
-                        return True
+            if self in seen:
+                return True
+            seen += (self,)
+            return any(
+                compiled[0].can_startswith(char, seen) for compiled in map(compile_hash_entry, self.value) if compiled
+            )
 
         # Otherwise user can't control value of this variable
         return False
 
     @memoize_query
-    def must_contain(self, char):
+    def must_contain(self, char, seen=()):
         """
         Checks if variable MUST contain the specified char.
 
         :param str char: character to test.
+        :param tuple seen: hash-block variables being expanded; one met again is a cycle and guarantees nothing.
         :return: True if variable must contain the specified char, False otherwise.
         """
 
@@ -266,14 +245,17 @@ class Variable(object):
             return self.regexp.must_contain(char)
 
         if self.alternatives:
-            return all(var.must_contain(char) for var in self.alternatives)
+            return all(var.must_contain(char, seen) for var in self.alternatives)
 
         # Then dependencies
         if self.depends:
-            return any(dep.must_contain(char) for dep in self.depends)
+            return any(dep.must_contain(char, seen) for dep in self.depends)
 
         # If the value is a list (hash block), check all values
         if isinstance(self.value, list):
+            if self in seen:
+                return False
+            seen += (self,)
             # Ensure that every map value must contain the char
             has_default = False
             for var in self.value:
@@ -281,12 +263,7 @@ class Variable(object):
                 if compiled_val is None:
                     continue
 
-                found_must_contain = False
-                for dep in compiled_val:
-                    if dep.must_contain(char):
-                        found_must_contain = True
-                        break
-                if not found_must_contain:  # A map value doesn't need to contain the char, therefore return False
+                if not any(dep.must_contain(char, seen) for dep in compiled_val):
                     return False
                 if var.provider.src_val == "default":
                     has_default = True
@@ -297,11 +274,12 @@ class Variable(object):
         return self.value and char in self.value
 
     @memoize_query
-    def must_startswith(self, char):
+    def must_startswith(self, char, seen=()):
         """
         Checks if variable MUST starts with the specified char.
 
         :param str char: character to test.
+        :param tuple seen: hash-block variables being expanded; one met again is a cycle and guarantees nothing.
         :return: True if variable must starts with the specified char.
         """
 
@@ -309,21 +287,24 @@ class Variable(object):
             return self.regexp.must_startswith(char)
 
         if self.alternatives:
-            return all(var.must_startswith(char) for var in self.alternatives)
+            return all(var.must_startswith(char, seen) for var in self.alternatives)
 
         # Then dependencies
         if self.depends:
-            return self.depends[0].must_startswith(char)
+            return self.depends[0].must_startswith(char, seen)
 
         # If the value is a list (hash block), check all values
         if isinstance(self.value, list):
+            if self in seen:
+                return False
+            seen += (self,)
             has_default = False
             for var in self.value:
                 compiled_val = compile_hash_entry(var)
                 if compiled_val is None:
                     continue
 
-                if not compiled_val or not compiled_val[0].must_startswith(char):
+                if not compiled_val or not compiled_val[0].must_startswith(char, seen):
                     return False
                 if var.provider.src_val == "default":
                     has_default = True

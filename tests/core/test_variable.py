@@ -5,6 +5,7 @@ from gixy.core.context import get_context, purge_context, push_context
 from gixy.core.regexp import Regexp
 from gixy.core.variable import Variable, subject_boundary
 from gixy.directives.block import Root
+from gixy.parser.nginx_parser import NginxParser
 
 
 def setup_function():
@@ -337,3 +338,31 @@ def test_custom_variable_dropin_more_cases(tmp_path):
 )
 def test_modern_nginx_variables_recognized(name):
     assert builtins.is_builtin(name), f"{name!r} should be a recognized builtin"
+
+
+def _map_variables(config):
+    root = NginxParser(cwd='', allow_includes=False).parse_string(config)
+    variables = [block.variables[0] for block in root.children]
+    for var in variables:
+        get_context().add_var(var.name, var)
+    return variables
+
+
+def test_map_value_is_resolved_through_another_map():
+    var = _map_variables('map $arg_x $a { default $b; } map $arg_y $b { default "/$arg_y"; }')[0]
+    assert var.must_startswith('/')
+    assert var.must_contain('/')
+    assert var.can_contain('.')
+    assert not var.can_startswith('.')
+
+
+@pytest.mark.parametrize("config", [
+    'map $arg_x $a { default $a; }',
+    'map $arg_x $a { default $b; } map $arg_y $b { default $a; }',
+])
+def test_cyclic_map_may_contain_anything_and_guarantees_nothing(config):
+    var = _map_variables(config)[0]
+    assert var.can_contain('/')
+    assert var.can_startswith('/')
+    assert not var.must_contain('/')
+    assert not var.must_startswith('/')
