@@ -175,4 +175,5 @@ If the default server has other locations, each of them has to return 421 too, o
 
 - Both the modern `http2 on;` directive (NGINX 1.25.1+) and the older `listen ... http2;` syntax are recognised.
 - `location = / { return 421; }` on its own is not a safeguard: an exact match covers only `/`, and every other path falls through to NGINX's default handling.
+- An `error_page` for 421 in effect at the `return` undoes the safeguard when it changes the status the client sees: `error_page 421 =200 /ok.html;`, `error_page 421 = @named;` (the target's status) or a redirect to a URL. `error_page 421 /421.html;` without `=` keeps the 421, and a `return 421 "text";` with a body never goes through `error_page`.
 - Listen sockets are matched the way NGINX matches them, as in [default_server_flag](default_server_flag.md): `listen 443`, `listen *:443` and `listen 0.0.0.0:443` name one socket, `listen [::]:443` another, and `listen 443 ssl` and `listen 443 quic` each have their own default server. `listen unix:` sockets are matched by their path.

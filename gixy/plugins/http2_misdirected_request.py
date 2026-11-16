@@ -4,6 +4,7 @@ from gixy.core.utils import (
     is_tls_listen,
     listen_sockets,
     parse_listen_key_and_default,
+    resolve_inherited_all,
     resolve_inherited_single,
     tls_sockets,
 )
@@ -83,8 +84,17 @@ class http2_misdirected_request(Plugin):
             arg.lower() == "http2" for _, other, _ in socket if other for arg in other.args[1:]
         )
 
+    def _rewrites_421(self, block):
+        return any(
+            "421" in page.args[:-1] and (page.args[-2].startswith("=") or not page.args[-1].startswith(("/", "@")))
+            for page in resolve_inherited_all(block, "error_page")
+        )
+
     def _has_return_421(self, block):
-        return any(r.args and r.args[0] == "421" for r in block.find("return"))
+        return any(
+            r.args and r.args[0] == "421" and (any(r.args[1:]) or not self._rewrites_421(block))
+            for r in block.find("return")
+        )
 
     def _routable_locations(self, block):
         return [
