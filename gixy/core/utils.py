@@ -216,6 +216,12 @@ def regex_arguments(directive):
             yield args[0][1:], True
 
 
+def is_error_return(directive):
+    """True for a `return` whose status is 4xx or 5xx, 444 included."""
+    status = directive.arg(0, "")
+    return directive.name == "return" and status.isdigit() and int(status) >= 400
+
+
 def script_arguments(directive):
     """Arguments whose `$var` nginx expands or defines: every argument that is
     neither a regular expression nor a literal name."""

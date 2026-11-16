@@ -59,7 +59,7 @@ add_header Access-Control-Allow-Origin $cors always;
 
 Only single-variable hops are followed (`set $cors $tmp;`, `default $tmp;`), and only `set` directives that can run for the request: those in the same `server` and the enclosing `location` chain, or in any of its locations for a header set at `server` level.
 
-In a `map` keyed on `$http_origin` or a `set` copy of it, only `default` is followed, so a literal-key allowlist such as `https://trusted.example $http_origin;` is not flagged. A `map` keyed on an unrelated variable, such as `map $uri $cors { ~^/api/ $http_origin; }`, is followed through every entry, while one keyed on another Origin `map`'s result is not.
+In a `map` keyed on `$http_origin` or a `set` copy of it, only `default` is followed, so a literal-key allowlist such as `https://trusted.example $http_origin;` is not flagged. A `map` keyed on an unrelated variable, such as `map $uri $cors { ~^/api/ $http_origin; }`, is followed through every entry. One keyed on the result of another Origin `map`, such as a `$cors_allowed` flag, is followed through the single entry an untrusted origin selects: the first map's `default` value looked up among the second map's literal keys, falling back to its `default`.
 
 This detection runs only on a full configuration scan (one that includes an `http { .. }` block).
 
@@ -83,9 +83,9 @@ if ($http_origin ~ "^https://trusted\.example$") {
 add_header Access-Control-Allow-Origin $cors always;
 ```
 
-A negative check whose `if` block returns, such as `if ($http_origin !~ "^https://trusted\.example$") { return 403; }` or `!=` against a fixed origin, also counts. It must sit in the header's `server`, or in its `location` when that location has no nested locations, which would inherit the header but not the `if`. Other negative matches and conditions on other variables do not count as guards.
+A negative check whose `if` block returns an error status (4xx or 5xx, including 444), such as `if ($http_origin !~ "^https://trusted\.example$") { return 403; }` or `!=` against a fixed origin, also counts; a `return` of a 2xx or 3xx still answers the untrusted origin, so it does not. It must sit in the header's `server`, or in its `location` when that location has no nested locations, which would inherit the header but not the `if`. Other negative matches and conditions on other variables do not count as guards.
 
-A reflection is HIGH when the same response also carries `Access-Control-Allow-Credentials: true`, and MEDIUM otherwise. An `add_header` list declared in a block replaces the inherited one, so a server-level credentials header does not reach a location or `if` with an `add_header` of its own unless `add_header_inherit merge` (NGINX 1.29.3+) applies; `more_set_headers` from enclosing blocks always applies. A credentials header set by the upstream is not visible to gixy.
+A reflection is HIGH when the same response also carries `Access-Control-Allow-Credentials: true`, and MEDIUM otherwise. An `add_header` list declared in a block replaces the inherited one, so a server-level credentials header does not reach a location or `if` with an `add_header` of its own unless `add_header_inherit merge` (NGINX 1.29.3+) applies. `more_set_headers` from enclosing blocks always applies, but headers-more runs the enclosing blocks' commands first and each `more_set_headers` replaces the header, so the last `more_set_headers` or `more_clear_headers` for it decides. A credentials header set by the upstream is not visible to gixy.
 
 ## Why this is a problem
 
