@@ -201,6 +201,10 @@ class proxy_pass_normalized(Plugin):
 
         self._report(directive, effective_location, path, host_vars, decoded, rewritten)
 
+    @staticmethod
+    def _host_has_uri(host_vars):
+        return any(v.can_contain("/") or v.must_contain("/") for v in host_vars)
+
     def _report(self, directive, location, path, host_vars, decoded, rewritten):
         issue_directives = [directive] + ([rewritten] if rewritten is not None else [])
         if decoded:
@@ -213,7 +217,7 @@ class proxy_pass_normalized(Plugin):
                 ),
             )
         elif rewritten is not None:
-            if "$" not in path and not any(v.can_contain("/") for v in host_vars):
+            if "$" not in path and not self._host_has_uri(host_vars):
                 self.add_issue(
                     directive=issue_directives,
                     severity=gixy.severity.LOW,
@@ -222,7 +226,7 @@ class proxy_pass_normalized(Plugin):
                         "`proxy_pass` escapes again, so `%2F` reaches the upstream as `%252F`."
                     ),
                 )
-        elif ("$" not in directive.arg(0) or not path) and not any(v.can_contain("/") for v in host_vars):
+        elif ("$" not in directive.arg(0) or not path) and not self._host_has_uri(host_vars):
             self._audit_uri_part(directive, location, path or None)
 
     @staticmethod
