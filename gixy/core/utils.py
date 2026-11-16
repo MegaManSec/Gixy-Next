@@ -175,7 +175,7 @@ def normalize_address(address):
 def regex_arguments(directive):
     """Yield (pattern, case_insensitive) for every regular expression among a
     directive's arguments, as nginx compiles them."""
-    name, args = directive.name, directive.args
+    name, args = directive.nginx_name or directive.name, directive.args
     if name == "location":
         if directive.is_regex:
             yield directive.path, directive.modifier == "~*"
@@ -207,9 +207,9 @@ def regex_arguments(directive):
 
 
 def script_arguments(directive):
-    """Arguments nginx compiles as scripts, expanding `$var` per request: every
-    argument that is neither a regular expression nor a literal name."""
-    name, args = directive.name, directive.args
+    """Arguments whose `$var` nginx expands or defines: every argument that is
+    neither a regular expression nor a literal name."""
+    name, args = directive.nginx_name or directive.name, directive.args
     if name in ("location", "server_name", "valid_referers", "gzip_disable", "fastcgi_split_path_info"):
         return []
     if name == "if":
