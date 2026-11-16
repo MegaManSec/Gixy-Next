@@ -329,10 +329,10 @@ class RewriteDirective(Directive):
 
     @property
     def variables(self):
-        regexp = self._regexp
+        boundary = subject_boundary("$uri")
         return [
-            Variable(name=name, value=group, boundary=None, provider=self)
-            for name, group in regexp.groups.items()
+            Variable(name=name, value=group, boundary=boundary, provider=self)
+            for name, group in self._regexp.groups.items()
         ]
 
 
