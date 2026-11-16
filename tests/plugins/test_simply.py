@@ -5,6 +5,7 @@ from os import path
 import pytest
 
 from gixy.core.config import Config
+from gixy.core.diagnostics import INTERNAL
 from gixy.core.manager import Manager as Gixy
 from gixy.core.plugins_manager import PluginsManager
 from gixy.formatters import BaseFormatter
@@ -86,12 +87,18 @@ def yoda_provider(plugin, plugin_options=None):
     return Gixy(config=config)
 
 
+def assert_no_internal_errors(yoda):
+    internal = [error for error in yoda.errors if error.kind == INTERNAL]
+    assert not internal, 'Plugins must not fail on the fixture: {0!r}'.format(internal)
+
+
 @pytest.mark.parametrize('plugin,config_path,test_config', all_config_cases)
 def test_configuration(plugin, config_path, test_config):
     plugin_options = parse_plugin_options(config_path)
     with yoda_provider(plugin, plugin_options) as yoda:
         with open(config_path, mode='r') as f:
             yoda.audit(config_path, f)
+        assert_no_internal_errors(yoda)
         formatter = BaseFormatter()
         formatter.feed(config_path, yoda)
         _, results = formatter.reports.popitem()
@@ -117,4 +124,5 @@ def test_configuration_fp(plugin, config_path, test_config):
     with yoda_provider(plugin, plugin_options) as yoda:
         with open(config_path, mode='r') as f:
             yoda.audit(config_path, f)
+        assert_no_internal_errors(yoda)
         assert len([x for x in yoda.results]) == 0, 'False positive configuration must not trigger any plugins'
