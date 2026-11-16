@@ -670,3 +670,19 @@ def test_posix_class_location_regex():
     assert mixed.can_contain('5', skip_literal=False)
     assert mixed.can_contain('a', skip_literal=False)
     assert not mixed.can_contain('6', skip_literal=False)
+
+
+@pytest.mark.parametrize('regexp, char, value', (
+    (r'[^.]', '.', 'a'),
+    (r'[^a-z]', 'a', 'A'),
+    (r'[a-z]', '.', 'a'),
+    (r'[0-9]', '.', '0'),
+    (r'\d', '.', '0'),
+    (r'\w', '.', 'a'),
+    (r'\s', '.', ' '),
+    (r'\S', ' ', 'a'),
+    (r'\D', '0', 'a'),
+    (r'\W', 'a', '!'),
+))
+def test_generate_fallback_is_fixed(regexp, char, value):
+    assert list(Regexp(regexp).generate(char)) == [value]

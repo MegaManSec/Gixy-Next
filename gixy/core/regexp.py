@@ -13,12 +13,15 @@ LOG = logging.getLogger(__name__)
 # an anchor lives inside an alternation whose group has sibling tokens (e.g. `($|/).*`)
 # — can be detected and the resulting impossible-match candidates dropped before they
 # reach plugins. Translated back to `^` / `$` at the boundaries of valid candidates.
-# Chosen outside `range(1, 126)` so they can't collide with negated-class output
+# Chosen outside `_GENERATE_ORDER` so they can't collide with negated-class output
 # from `_build_reverse_list`, and outside CATEGORIES["ANY"] so `.` can't emit them.
 _AT_BEGIN_SENTINEL = "\x00"
 _AT_END_SENTINEL = "\x7f"
 
 MAX_CANDIDATES = 10000
+
+_GENERATE_ORDER = string.ascii_letters + string.digits + string.punctuation + " " + "".join(map(chr, range(1, 32)))
+_WORD = string.ascii_letters + string.digits + "_"
 
 
 class RegexpTooComplex(Exception):
@@ -26,9 +29,8 @@ class RegexpTooComplex(Exception):
 
 
 def _build_reverse_list(original):
-    """Printable characters first, so a generated example stays readable; always the same order."""
-    candidates = string.ascii_letters + string.digits + string.punctuation + " " + "".join(map(chr, range(1, 32)))
-    return tuple(c for c in candidates if c not in original)
+    """Characters not in `original`, letters first and control characters last."""
+    return tuple(c for c in _GENERATE_ORDER if c not in original)
 
 
 FIX_NAMED_GROUPS_RE = re.compile(r"(?<!\\)\(\?[<'](\w+)[>']")
@@ -38,18 +40,14 @@ CATEGORIES = {
     # strings, NGINX's PCRE regex engine typically uses ASCII semantics for \w, \d, \s
     # unless explicitly compiled with unicode support. This conservative approach is
     # correct for security analysis since URLs are ASCII (unicode gets percent-encoded).
-    sre_parse.CATEGORY_SPACE: sre_parse.WHITESPACE,
-    sre_parse.CATEGORY_NOT_SPACE: _build_reverse_list(sre_parse.WHITESPACE),
-    sre_parse.CATEGORY_DIGIT: sre_parse.DIGITS,
-    sre_parse.CATEGORY_NOT_DIGIT: _build_reverse_list(sre_parse.DIGITS),
-    sre_parse.CATEGORY_WORD: frozenset(
-        "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_"
-    ),
-    sre_parse.CATEGORY_NOT_WORD: _build_reverse_list(
-        frozenset("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_")
-    ),
-    sre_parse.CATEGORY_LINEBREAK: frozenset("\n"),
-    sre_parse.CATEGORY_NOT_LINEBREAK: _build_reverse_list(frozenset("\n")),
+    sre_parse.CATEGORY_SPACE: tuple(string.whitespace),
+    sre_parse.CATEGORY_NOT_SPACE: _build_reverse_list(string.whitespace),
+    sre_parse.CATEGORY_DIGIT: tuple(string.digits),
+    sre_parse.CATEGORY_NOT_DIGIT: _build_reverse_list(string.digits),
+    sre_parse.CATEGORY_WORD: tuple(_WORD),
+    sre_parse.CATEGORY_NOT_WORD: _build_reverse_list(_WORD),
+    sre_parse.CATEGORY_LINEBREAK: ("\n",),
+    sre_parse.CATEGORY_NOT_LINEBREAK: _build_reverse_list("\n"),
     "ANY": [chr(x) for x in range(1, 127) if x != 10],
 }
 
@@ -328,14 +326,13 @@ class CategoryToken(Token):
         return char in self.char_list
 
     def must_contain(self, char, skip_literal=True):
-        return frozenset([char]) == self.char_list
+        return self.char_list == (char,)
 
     def generate(self, context):
         if self.can_contain(context.char):
             return context.char
 
-        for c in self.char_list:
-            return c
+        return self.char_list[0]
 
     def __str__(self):
         return CATEGORIES_NAMES.get(self.token[1], "\\C")
@@ -789,9 +786,7 @@ class InToken(Token):
             else:
                 LOG.info('Unexpected child "{0!r}"'.format(child))
 
-        for char in _build_reverse_list(set()):
-            if char not in blacklisted:
-                return char
+        return next(iter(_build_reverse_list(blacklisted)), None)
 
     def generate(self, context):
         if self.can_contain(context.char, skip_literal=False):
