@@ -1,3 +1,5 @@
+import re
+
 import gixy
 from gixy.core.utils import AUTH_DIRECTIVES, enforced_auth, satisfy_any
 from gixy.plugins.plugin import Plugin
@@ -33,19 +35,46 @@ class return_bypasses_allow_deny(Plugin):
 
     @staticmethod
     def _is_internal_only_location(node):
-        """True for locations only reachable via internal redirect.
+        """True for named locations and locations carrying `internal`."""
+        return node.name == "location" and (node.path.startswith("@") or node.is_internal)
 
-        Named locations (`location @name`) and locations carrying the
-        `internal` directive cannot be hit by an external request, so a
-        `return` inside them does not bypass the parent's allow/deny: any
-        client that ever reaches the return has already passed the access
-        phase of the originating location.
-        """
-        if getattr(node, "name", None) != "location":
-            return False
-        if getattr(node, "path", "").startswith("@"):
+    @staticmethod
+    def _rewrite_reaches(rewrite, location):
+        """True when the rewrite's replacement can produce a URI the location matches."""
+        literal, variables, _ = rewrite.replace.split("?")[0].partition("$")
+        if location.is_regex:
+            if variables:
+                return True
+            try:
+                return re.search(location.path, literal, 0 if location.modifier == "~" else re.I) is not None
+            except re.error:
+                return True
+        if variables and location.path.startswith(literal):
             return True
-        return bool(getattr(node, "is_internal", False))
+        return literal == location.path if location.modifier == "=" else literal.startswith(location.path)
+
+    @classmethod
+    def _reached_only_after_access(cls, node):
+        """True for a location only entered by an internal redirect issued after
+        the originating location's access phase: a named location, or an
+        `internal` location no `rewrite` can send requests into before access
+        (one at server level, or with `last` or no flag in a location external
+        requests reach)."""
+        if not cls._is_internal_only_location(node):
+            return False
+        if node.path.startswith("@"):
+            return True
+        scopes = list(node.parents)
+        server = next((scope for scope in scopes if scope.name == "server"), scopes[-1])
+        for rewrite in server.find_recursive("rewrite"):
+            locations = [scope for scope in rewrite.parents if scope.name == "location"]
+            if rewrite.redirects or (rewrite.flag == "break" and locations):
+                continue
+            if any(cls._is_internal_only_location(location) for location in locations):
+                continue
+            if cls._rewrite_reaches(rewrite, node):
+                return False
+        return True
 
     @staticmethod
     def _returns_unhandled_error(directive, denial_statuses=()):
@@ -92,7 +121,7 @@ class return_bypasses_allow_deny(Plugin):
     def _find_descendants_excluding_internal_locations(self, node, name, overrides):
         result = []
         for child in node.children:
-            if self._is_internal_only_location(child):
+            if self._reached_only_after_access(child):
                 continue
             if child.name == name:
                 result.append(child)
