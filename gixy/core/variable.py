@@ -64,6 +64,20 @@ def compile_script(script, ctx=None):
     return depends
 
 
+def subject_boundary(script):
+    """
+    Model of the variable a regex in `script` is matched against, to bound its captures.
+
+    :param str script: Nginx script, e.g. the subject of an `if` or a `map`.
+    :return Regexp|None: the variable's regexp, None unless `script` is a single variable that has one.
+    """
+    try:
+        compiled = compile_script(script)
+    except IndexError:
+        return None
+    return compiled[0].regexp if len(compiled) == 1 else None
+
+
 def compile_hash_entry(var):
     """
     Compile a single entry of a map/geo block into the variables it may resolve to.
@@ -207,7 +221,7 @@ class Variable(object):
         """
 
         # First of all check boundary set
-        if self.boundary and not self.boundary.can_startswith(char):
+        if self.boundary and not self.boundary.can_contain(char):
             return False
 
         # Then regexp
@@ -252,11 +266,6 @@ class Variable(object):
         :return: True if variable must contain the specified char, False otherwise.
         """
 
-        # First of all check boundary set
-        if self.boundary and self.boundary.must_contain(char):
-            return True
-
-        # Then regexp
         if self.regexp:
             return self.regexp.must_contain(char)
 
@@ -300,11 +309,6 @@ class Variable(object):
         :return: True if variable must starts with the specified char.
         """
 
-        # First of all check boundary set
-        if self.boundary and self.boundary.must_startswith(char):
-            return True
-
-        # Then regexp
         if self.regexp:
             return self.regexp.must_startswith(char)
 

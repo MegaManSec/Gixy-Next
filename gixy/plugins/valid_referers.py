@@ -13,7 +13,7 @@ def _is_open_regex(pattern):
     that text or does not pin where the host name ends, so a Referer from another site can match it."""
     try:
         regexp = Regexp(END_ANCHOR_RE.sub(r"\1$", pattern), case_sensitive=False)
-        candidates = list(regexp.generate("/", anchored=True))
+        candidates = [candidate for char in "/." for candidate in regexp.generate(char, anchored=True)]
     except (sre_parse.error, OverflowError, RecursionError, RegexpTooComplex):
         return False
     for candidate in candidates:

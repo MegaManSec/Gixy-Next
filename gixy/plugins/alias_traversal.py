@@ -1,7 +1,7 @@
 import gixy
 import gixy.core.sre_parse.sre_parse as sre_parse
 from gixy.core.regexp import Regexp, RegexpTooComplex
-from gixy.core.utils import resolve_inherited_single
+from gixy.core.utils import basic_auth_enforced
 from gixy.core.variable import EXTRACT_RE, compile_script
 from gixy.plugins.plugin import Plugin
 
@@ -67,7 +67,7 @@ class alias_traversal(Plugin):
 
         for part in alias_parts:
             if not getattr(part, "regexp", False) or (
-                part.name == "remote_user" and self._basic_auth_enforced(directive)
+                part.name == "remote_user" and basic_auth_enforced(directive.parent)
             ):
                 prev_part = part
                 continue
@@ -93,19 +93,6 @@ class alias_traversal(Plugin):
                 yield gixy.severity.MEDIUM
 
             prev_part = part
-
-    @staticmethod
-    def _basic_auth_enforced(directive):
-        """True when ngx_http_auth_basic_module rejects every request whose user
-        is not in the password file: realm and file set, and no `satisfy any`."""
-        scope = directive.parent
-        auth = resolve_inherited_single(scope, "auth_basic")
-        if auth is None or auth.args[0].lower() == "off":
-            return False
-        if resolve_inherited_single(scope, "auth_basic_user_file") is None:
-            return False
-        satisfy = resolve_inherited_single(scope, "satisfy")
-        return satisfy is None or satisfy.args[0].lower() == "all"
 
     @staticmethod
     def _from_host(part):

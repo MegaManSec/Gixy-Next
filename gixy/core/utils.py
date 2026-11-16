@@ -3,7 +3,18 @@ import re
 from collections import deque
 
 AUTH_DIRECTIVES = ("auth_basic", "auth_request", "auth_jwt", "auth_oidc")
+REGEX_ARGUMENT_DIRECTIVES = frozenset((
+    "server_name",
+    "valid_referers",
+    "gzip_disable",
+    "fastcgi_split_path_info",
+    "proxy_redirect",
+    "proxy_cookie_domain",
+    "proxy_cookie_path",
+    "proxy_cookie_flags",
+))
 
+_UPPERCASE_RE = re.compile(r"[A-Z]")
 _BARE_VARIABLE_RE = re.compile(r"\$(?:([a-z_][a-z0-9_]*)|\{([a-z_][a-z0-9_]*)\})", re.IGNORECASE)
 
 
@@ -30,6 +41,61 @@ def resolve_inherited_single(scope, name):
             return matches[-1]
         current = getattr(current, "parent", None)
     return None
+
+
+def resolve_inherited_list(scope, name, inherit_name):
+    """Directives of an inheritable list such as `add_header` in effect at `scope`.
+
+    A scope that declares any replaces the inherited list, unless
+    `<inherit_name> merge` applies, which appends it; `<inherit_name> off`
+    stops inheritance (both nginx 1.29.3+).
+    """
+    result = []
+    while scope is not None:
+        own = scope.find(name)
+        result += own
+        mode = resolve_inherited_single(scope, inherit_name)
+        mode = mode.arg(0).lower() if mode else "on"
+        if mode == "off" or (own and mode != "merge"):
+            break
+        scope = scope.parent
+    return result
+
+
+def enforced_auth(scope):
+    """Names of the authentication modules that restrict `scope`.
+
+    A module is on when its nearest declaration is not exactly `off` (nginx
+    compares case-sensitively). `auth_basic` restricts only with an
+    `auth_basic_user_file` in effect; a file without an `http` block is
+    assumed to get it from the main configuration.
+    """
+    enforced = set()
+    for name in AUTH_DIRECTIVES:
+        auth = resolve_inherited_single(scope, name)
+        if auth is not None and auth.arg(0) != "off":
+            enforced.add(name)
+    if not _user_file_in_effect(scope):
+        enforced.discard("auth_basic")
+    return enforced
+
+
+def _user_file_in_effect(scope):
+    if resolve_inherited_single(scope, "auth_basic_user_file") is not None:
+        return True
+    return all(block.name != "http" for block in (scope, *scope.parents))
+
+
+def satisfy_any(scope):
+    """True when `satisfy any` is in effect for `scope`."""
+    satisfy = resolve_inherited_single(scope, "satisfy")
+    return satisfy is not None and satisfy.arg(0).lower() == "any"
+
+
+def basic_auth_enforced(scope):
+    """True when only users listed in the password file reach `scope`:
+    `auth_basic` restricts it and `satisfy all` (the default) applies."""
+    return "auth_basic" in enforced_auth(scope) and not satisfy_any(scope)
 
 
 def parse_listen_key_and_default(args):
@@ -103,6 +169,40 @@ def normalize_address(address):
     if parsed.version == 6:
         return f"[{parsed.compressed}]"
     return parsed.compressed
+
+
+def regex_arguments(directive):
+    """Yield (pattern, case_insensitive) for every regular expression among a
+    directive's arguments, as nginx compiles them."""
+    name, args = directive.name, directive.args
+    if name == "location":
+        if directive.is_regex:
+            yield directive.path, directive.modifier == "~*"
+    elif name == "if":
+        if directive.is_regex and directive.value:
+            yield directive.value, directive.operand.endswith("*")
+    elif name in ("rewrite", "fastcgi_split_path_info"):
+        if args:
+            yield args[0], False
+    elif name == "gzip_disable":
+        for arg in args:
+            if arg not in ("msie6", "degradation"):
+                yield arg, True
+    elif name == "valid_referers":
+        for arg in args:
+            if arg.startswith("~"):
+                yield arg[1:], True
+    elif name == "server_name":
+        for arg in args:
+            if arg.startswith("~"):
+                yield arg[1:], _UPPERCASE_RE.search(arg) is not None
+    elif name in ("proxy_redirect", "proxy_cookie_path"):
+        if args and args[0].startswith("~"):
+            caseless = args[0].startswith("~*")
+            yield args[0][2 if caseless else 1:], caseless
+    elif name in ("proxy_cookie_domain", "proxy_cookie_flags"):
+        if args and args[0].startswith("~"):
+            yield args[0][1:], True
 
 
 def bare_variable_name(value):

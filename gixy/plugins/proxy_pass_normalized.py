@@ -10,9 +10,6 @@ from gixy.plugins.plugin import Plugin
 DECODED_PATH_VARS = frozenset({"uri", "document_uri"})
 
 
-REDIRECT_PREFIXES = ("http://", "https://", "$scheme")
-
-
 def _flatten(seq, group=None):
     for op, av in seq:
         if op == sre_parse.SUBPATTERN:
@@ -217,7 +214,7 @@ class proxy_pass_normalized(Plugin):
         for scope in scopes:
             for i, child in enumerate(scope.children):
                 if isinstance(child, RewriteDirective) and child.flag in (None, "break"):
-                    if child.replace.startswith(REDIRECT_PREFIXES):
+                    if child.redirects:
                         break
                     capture = _rest_capture(child.pattern, location.path)
                     if capture and (

@@ -86,6 +86,25 @@ def test_rewrite_flags():
     assert directive.flag == 'redirect'
 
 
+def test_rewrite_redirects_and_stops_processing():
+    cases = {
+        'rewrite ^ /x;': (False, False),
+        'rewrite ^ /x last;': (False, True),
+        'rewrite ^ /x break;': (False, True),
+        'rewrite ^ /x redirect;': (True, True),
+        'rewrite ^ /x permanent;': (True, True),
+        'rewrite ^ http://x;': (True, True),
+        'rewrite ^ https://x last;': (True, True),
+        'rewrite ^ $scheme://x break;': (True, True),
+        'rewrite ^ Http://x;': (False, False),
+        'rewrite ^ ${scheme}://x;': (False, False),
+    }
+    for config, (redirects, stops_processing) in cases.items():
+        directive = _get_parsed(config)
+        assert directive.redirects is redirects, config
+        assert directive.stops_processing is stops_processing, config
+
+
 def test_root():
     config = 'root /var/www/html;'
 

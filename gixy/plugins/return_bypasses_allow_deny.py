@@ -1,5 +1,5 @@
 import gixy
-from gixy.core.utils import AUTH_DIRECTIVES, resolve_inherited_single
+from gixy.core.utils import AUTH_DIRECTIVES, enforced_auth, satisfy_any
 from gixy.plugins.plugin import Plugin
 
 
@@ -26,11 +26,6 @@ class return_bypasses_allow_deny(Plugin):
     directives = list(ACCESS_RULES) + list(AUTH_DIRECTIVES)
     DENIAL_STATUSES = {"auth_basic": ("401",), "auth_jwt": ("401",), "auth_request": ("401", "403")}
 
-    REDIRECT_FLAGS = ("permanent", "redirect")
-    # nginx also redirects whenever the replacement is an absolute URL,
-    # regardless of flag; its prefix check is case-sensitive (ngx_http_rewrite).
-    REDIRECT_PREFIXES = ("http://", "https://", "$scheme")
-
     def __init__(self, config):
         super(return_bypasses_allow_deny, self).__init__(config)
         self._reported_parents = set()
@@ -51,17 +46,6 @@ class return_bypasses_allow_deny(Plugin):
         if getattr(node, "path", "").startswith("@"):
             return True
         return bool(getattr(node, "is_internal", False))
-
-    @classmethod
-    def _rewrite_emits_redirect(cls, directive):
-        """True when this rewrite responds with a redirect from the rewrite
-        phase: it carries a `permanent`/`redirect` flag, or its replacement
-        is an absolute URL — the latter redirects whatever the flag, `last`
-        and `break` included."""
-        args = directive.args
-        if len(args) >= 3 and args[-1].lower() in cls.REDIRECT_FLAGS:
-            return True
-        return len(args) >= 2 and args[1].startswith(cls.REDIRECT_PREFIXES)
 
     @staticmethod
     def _returns_unhandled_error(directive, denial_statuses=()):
@@ -92,19 +76,12 @@ class return_bypasses_allow_deny(Plugin):
             return True
         return int(code) < 400 and not any(directive.args[1:])
 
-    @staticmethod
-    def _lacks_user_file(directive):
-        if resolve_inherited_single(directive.parent, "auth_basic_user_file") is not None:
-            return False
-        return any(parent.name == "http" for parent in directive.parents)
-
     @classmethod
     def _access_satisfied_for_all(cls, directive):
         """True when `satisfy any` is in effect and the access rules in effect
         start with `allow all`: the access module admits every client, so the
         auth modules never run."""
-        satisfy = resolve_inherited_single(directive.parent, "satisfy")
-        if satisfy is None or satisfy.args[0].lower() != "any":
+        if not satisfy_any(directive.parent):
             return False
         for scope in directive.parents:
             rules = [c for c in scope.children if c.name in cls.ACCESS_RULES]
@@ -140,7 +117,7 @@ class return_bypasses_allow_deny(Plugin):
             for d in self._find_descendants_excluding_internal_locations(
                 parent, "rewrite", overrides
             )
-            if self._rewrite_emits_redirect(d)
+            if d.redirects
         ]
         return [d for d in bypassing if id(d) not in self._reported_directives]
 
@@ -169,12 +146,13 @@ class return_bypasses_allow_deny(Plugin):
                 bypassing += found
         for name in AUTH_DIRECTIVES:
             auth = parent.some(name, flat=False)
-            if auth is None or not auth.args or auth.args[0] == "off":
+            if auth is None:
                 continue
-            found = self._bypassing(parent, (name,), self.DENIAL_STATUSES.get(name, ()))
-            found = [d for d in found if not self._access_satisfied_for_all(d)]
-            if name == "auth_basic":
-                found = [d for d in found if not self._lacks_user_file(d)]
+            found = [
+                d
+                for d in self._bypassing(parent, (name,), self.DENIAL_STATUSES.get(name, ()))
+                if name in enforced_auth(d.parent) and not self._access_satisfied_for_all(d)
+            ]
             if found:
                 restrictions.append(("`{0}`".format(name), [auth]))
                 bypassing += found

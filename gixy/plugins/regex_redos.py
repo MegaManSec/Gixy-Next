@@ -6,6 +6,7 @@ except Exception:
     requests = None  # requests is optional; plugin will auto-skip without it
     _REQUESTS_AVAILABLE = False
 import gixy
+from gixy.core.utils import regex_arguments
 from gixy.directives.directive import MapDirective
 from gixy.plugins.plugin import Plugin
 
@@ -57,6 +58,10 @@ class regex_redos(Plugin):
         "gzip_disable",
         "valid_referers",
         "fastcgi_split_path_info",
+        "proxy_redirect",
+        "proxy_cookie_domain",
+        "proxy_cookie_path",
+        "proxy_cookie_flags",
     ]
     options = {"url": ""}
     options_help = {
@@ -71,56 +76,15 @@ class regex_redos(Plugin):
 
     @staticmethod
     def _regexes(directive):
-        """Yield (pattern, modifier) for every regex a directive carries.
-
-        `modifier` is "i" for case-insensitive matches (~*, !~*) and "" otherwise,
-        matching the recheck request format.
-        """
-        name = directive.name
-        if name == "location":
-            if directive.modifier in ("~", "~*"):
-                yield directive.path, "i" if directive.modifier == "~*" else ""
-        elif name == "if":
-            if directive.operand in ("~", "~*", "!~", "!~*") and directive.value:
-                yield directive.value, "i" if directive.operand in ("~*", "!~*") else ""
-        elif name == "rewrite":
-            if directive.args:
-                yield directive.args[0], ""
-        elif name == "server_name":
-            args = directive.args
-            i = 0
-            while i < len(args):
-                arg = args[i]
-                if arg in ("~", "~*"):  # "~* regex" — prefix split from the pattern
-                    if i + 1 < len(args):
-                        yield args[i + 1], "i" if arg == "~*" else ""
-                    i += 2
-                    continue
-                if arg.startswith("~*"):  # "~*regex" — prefix attached
-                    yield arg[2:], "i"
-                elif arg.startswith("~"):
-                    yield arg[1:], ""
-                i += 1
-        elif name == "map":
+        """Yield (pattern, modifier) for every regex a directive carries; `modifier` is
+        "i" for case-insensitive matches, matching the recheck request format."""
+        if directive.name == "map":
             for child in directive.gather_map_directives(directive.children):
-                if not isinstance(child, MapDirective) or not child.is_regex:
-                    continue
-                src = child.src_val
-                if src.startswith("~*"):
-                    yield src[2:], "i"
-                elif src.startswith("~"):
-                    yield src[1:], ""
-        elif name == "gzip_disable":
-            for arg in directive.args:
-                if arg not in ("msie6", "degradation"):
-                    yield arg, "i"
-        elif name == "valid_referers":
-            for arg in directive.args:
-                if arg.startswith("~"):
-                    yield arg[1:], "i"
-        elif name == "fastcgi_split_path_info":
-            if directive.args:
-                yield directive.args[0], ""
+                if isinstance(child, MapDirective) and child.is_regex:
+                    yield child.regex.source, "" if child.regex.case_sensitive else "i"
+            return
+        for pattern, caseless in regex_arguments(directive):
+            yield pattern, "i" if caseless else ""
 
     def audit(self, directive):
         # If requests is not available, skip.
