@@ -12,7 +12,7 @@ from gixy.core.utils import (
     resolve_inherited_single,
     rewrites_into,
 )
-from gixy.core.variable import compile_hash_entry, compile_script
+from gixy.core.variable import compile_hash_entry, compile_script, memoize_query
 from gixy.plugins.plugin import Plugin
 
 
@@ -119,6 +119,7 @@ class ssrf(Plugin):
                 return True
         return False
 
+    @memoize_query(on_cycle=False)
     def _host_tainted(self, var):
         """True if the host part of `var` can carry user input, None if the
         variable ends the host part with a mandatory `/` before any such

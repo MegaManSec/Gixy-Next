@@ -15,23 +15,27 @@ GEO_PARAMETERS = frozenset(
 _query_results = None
 
 
-def memoize_query(method):
-    @functools.wraps(method)
-    def wrapper(*args):
-        global _query_results
-        if _query_results is None:
-            _query_results = {}
-            try:
-                return wrapper(*args)
-            finally:
-                _query_results = None
-        key = (method,) + args
-        if key not in _query_results:
-            _query_results[key] = False
-            _query_results[key] = method(*args)
-        return _query_results[key]
+def memoize_query(on_cycle):
+    """Memoize a query within its outermost call; one met again while being answered is a cycle worth `on_cycle`."""
+    def decorator(method):
+        @functools.wraps(method)
+        def wrapper(*args):
+            global _query_results
+            if _query_results is None:
+                _query_results = {}
+                try:
+                    return wrapper(*args)
+                finally:
+                    _query_results = None
+            key = (method,) + args
+            if key not in _query_results:
+                _query_results[key] = on_cycle
+                _query_results[key] = method(*args)
+            return _query_results[key]
 
-    return wrapper
+        return wrapper
+
+    return decorator
 
 
 def compile_script(script, ctx=None):
@@ -158,7 +162,7 @@ class Variable(object):
                 all_vars = [str(i.value) for i in new_depends]
                 self.final_value = "".join(all_vars)
 
-    @memoize_query
+    @memoize_query(on_cycle=True)
     def can_contain(self, char):
         """
         Checks if variable can contain the specified char.
@@ -184,31 +188,14 @@ class Variable(object):
 
         # If the value is a list (hash block), check all dest_val values
         if isinstance(self.value, list):
-            for var in self.value:
-                if (
-                    not isinstance(var, Variable)
-                    or not var.provider
-                    or var.provider.nginx_name != "map"
-                ):  # import MapDirective would be better but circular import..
-                    continue  # break?
-                if (
-                    var.provider.parent.nginx_name != "map"
-                ):  # import MapBlock would be better but circular import..
-                    continue  # break?
-
-                compiled_val = compile_script(
-                    var.provider.dest_val, ctx=var.provider
-                )
-                # Doesn't work for 'map $document_uri $v { ~*^[^\r\n]+$ $document_uri; }'
-                # but nothing we can do about that.
-                for dep in compiled_val:
-                    if dep.can_contain(char):
-                        return True
+            # Doesn't work for 'map $document_uri $v { ~*^[^\r\n]+$ $document_uri; }'
+            # but nothing we can do about that.
+            return any(dep.can_contain(char) for entry in self.value for dep in compile_hash_entry(entry) or ())
 
         # Otherwise user can't control value of this variable
         return False
 
-    @memoize_query
+    @memoize_query(on_cycle=True)
     def can_startswith(self, char):
         """
         Checks if variable can starts with the specified char.
@@ -234,27 +221,12 @@ class Variable(object):
 
         # If the value is a list (hash block), check all values
         if isinstance(self.value, list):
-            for var in self.value:
-                if (
-                    not isinstance(var, Variable)
-                    or not var.provider
-                    or var.provider.nginx_name != "map"
-                ):
-                    continue
-                if var.provider.parent.nginx_name != "map":
-                    continue
-
-                compiled_val = compile_script(
-                    var.provider.dest_val, ctx=var.provider
-                )
-                if compiled_val:
-                    if compiled_val[0].can_startswith(char):
-                        return True
+            return any(compiled[0].can_startswith(char) for compiled in map(compile_hash_entry, self.value) if compiled)
 
         # Otherwise user can't control value of this variable
         return False
 
-    @memoize_query
+    @memoize_query(on_cycle=False)
     def must_contain(self, char):
         """
         Checks if variable MUST contain the specified char.
@@ -282,12 +254,7 @@ class Variable(object):
                 if compiled_val is None:
                     continue
 
-                found_must_contain = False
-                for dep in compiled_val:
-                    if dep.must_contain(char):
-                        found_must_contain = True
-                        break
-                if not found_must_contain:  # A map value doesn't need to contain the char, therefore return False
+                if not any(dep.must_contain(char) for dep in compiled_val):
                     return False
                 if var.provider.src_val == "default":
                     has_default = True
@@ -297,7 +264,7 @@ class Variable(object):
         # Otherwise checks literal
         return self.value and char in self.value
 
-    @memoize_query
+    @memoize_query(on_cycle=False)
     def must_startswith(self, char):
         """
         Checks if variable MUST starts with the specified char.
