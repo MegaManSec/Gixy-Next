@@ -1,4 +1,5 @@
 import gixy
+from gixy.core.utils import default_listens, parse_listen_key_and_default, resolve_inherited_single
 from gixy.plugins.plugin import Plugin
 
 PQ_GROUP_MARKERS = ("MLKEM", "KYBER")
@@ -10,6 +11,8 @@ REMOVE_PREFIX = "-"
 GROUP_PREFIXES = "?*-"
 DEFAULT_KEYWORD = "DEFAULT"
 GROUPS_CONF_COMMANDS = ("groups", "curves")
+CLIENT_CONF_COMMANDS = ("proxy_ssl_conf_command", "grpc_ssl_conf_command", "uwsgi_ssl_conf_command")
+TLS_LISTEN_FLAGS = ("ssl", "quic", "http3")
 
 
 def _group_name(group):
@@ -68,24 +71,35 @@ def _removes_hybrid_after_default(groups):
     return False
 
 
-def _groups_overridden(directive):
-    scope = directive.parent
-    while scope:
+def _sets_groups(command):
+    return len(command.args) > 1 and command.args[0].lower() in GROUPS_CONF_COMMANDS
+
+
+def _effective_group_list(scope):
+    current = scope
+    while current:
         commands = [
             child
-            for child in getattr(scope, "children", [])
+            for child in getattr(current, "children", [])
             if (child.name or "").lower() == "ssl_conf_command" and child.args
         ]
         if commands:
-            return any(command.args[0].lower() in GROUPS_CONF_COMMANDS for command in commands)
-        scope = getattr(scope, "parent", None)
-    return False
+            groups = [command for command in commands if _sets_groups(command)]
+            if groups:
+                return groups[-1]
+            break
+        current = getattr(current, "parent", None)
+    return resolve_inherited_single(scope, "ssl_ecdh_curve")
+
+
+def _is_tls_listen(listen):
+    return any(arg.lower() in TLS_LISTEN_FLAGS for arg in listen.args[1:])
 
 
 class ssl_ecdh_curve(Plugin):
     """Flag ssl_ecdh_curve lists that stop NGINX from starting or turn off post-quantum key exchange."""
 
-    summary = "Post-quantum `ssl_ecdh_curve` group stops NGINX from starting on older OpenSSL."
+    summary = "Post-quantum group in `ssl_ecdh_curve` stops NGINX from starting on older OpenSSL."
     severity = gixy.severity.MEDIUM
     description = (
         "NGINX passes `ssl_ecdh_curve` straight to OpenSSL's `SSL_CTX_set1_curves_list()`, which "
@@ -96,15 +110,17 @@ class ssl_ecdh_curve(Plugin):
         "pre-standard `X25519Kyber768*` drafts; Debian 12, Ubuntu 22.04 and 24.04, RHEL 8, RHEL 9.0-9.6 "
         "and RHEL 10.0 ship OpenSSL 1.1.1 to 3.2. The `?` prefix makes OpenSSL skip "
         "groups it does not recognise, but `?` itself is only understood from OpenSSL 3.3 onwards — on "
-        "older OpenSSL do not name post-quantum groups at all, and leave `ssl_ecdh_curve auto;`."
+        "older OpenSSL do not name post-quantum groups at all, and leave `ssl_ecdh_curve auto;`. "
+        "`ssl_conf_command Groups` and its upstream counterparts fail the same way."
     )
     help_url = "https://gixy.io/plugins/ssl_ecdh_curve/"
-    directives = ["ssl_ecdh_curve"]
+    directives = ["ssl_ecdh_curve", "ssl_conf_command"] + list(CLIENT_CONF_COMMANDS)
 
     rejected_summary = "`ssl_ecdh_curve` value is rejected by OpenSSL, so NGINX does not start."
     rejected_description = (
         "NGINX passes every `ssl_ecdh_curve` value except the exact string `auto` to OpenSSL's "
-        "`SSL_CTX_set1_curves_list()` and refuses to load the configuration when OpenSSL rejects it. "
+        "`SSL_CTX_set1_curves_list()`, and every `ssl_conf_command Groups` value, `auto` included, to "
+        "`SSL_CONF_cmd()`, and refuses to load the configuration when OpenSSL rejects it. "
         "A cold start fails and a reload silently keeps serving the old configuration, on every OpenSSL "
         "version."
     )
@@ -120,7 +136,8 @@ class ssl_ecdh_curve(Plugin):
 
     classical_summary = "`ssl_ecdh_curve` turns off post-quantum key exchange on OpenSSL 3.5+."
     classical_description = (
-        "An explicit `ssl_ecdh_curve` list replaces OpenSSL's default group list instead of extending it. "
+        "An explicit `ssl_ecdh_curve` or `ssl_conf_command Groups` list replaces OpenSSL's default group list "
+        "instead of extending it, and NGINX uses the default server's list for every server on its address:port. "
         "On OpenSSL 3.5+, whose default starts with a preference tier of post-quantum hybrids led by "
         "`X25519MLKEM768`, a list that offers no ML-KEM group, or ranks every one below a classical group, "
         "makes NGINX negotiate classical key exchange with clients that support the hybrid. `nginx -t` reports "
@@ -147,12 +164,18 @@ class ssl_ecdh_curve(Plugin):
         "drop `X25519` with it."
     )
 
-    def audit(self, directive):
-        if not directive.args:
-            return
+    partial_note = " This applies where it is the list of a listen socket's default server."
 
-        curve_list = directive.args[0]
-        if curve_list == "auto":
+    def audit(self, directive):
+        if directive.name == "ssl_ecdh_curve":
+            if not directive.args:
+                return
+            curve_list = directive.args[0]
+            if curve_list == "auto":
+                return
+        elif _sets_groups(directive):
+            curve_list = directive.args[1]
+        else:
             return
 
         tiers = _parse_tiers(curve_list)
@@ -173,12 +196,15 @@ class ssl_ecdh_curve(Plugin):
             self._report_startup_failure(directive, curve_list, groups, risky)
             return
 
+        if directive.name in CLIENT_CONF_COMMANDS:
+            return
+
         offered = _offered_tiers(tiers)
         offered_groups = [group for tier in offered for group in tier]
         if not has_default and offered_groups and all(_is_post_quantum(group) for group in offered_groups):
             self.add_issue(
                 directive=directive,
-                summary=self.pq_only_summary,
+                summary=self._summary(self.pq_only_summary, directive),
                 description=self.pq_only_description,
                 reason=(
                     "`{curve_list}` names no classical group. It does not load on OpenSSL before 3.5, and on "
@@ -189,7 +215,8 @@ class ssl_ecdh_curve(Plugin):
             )
             return
 
-        if _groups_overridden(directive):
+        where = self._negotiation_scope(directive)
+        if where is None:
             return
 
         if has_default:
@@ -198,7 +225,7 @@ class ssl_ecdh_curve(Plugin):
                     directive,
                     "`{curve_list}` removes `{hybrid}` from the OpenSSL default, so NGINX negotiates classical "
                     "key exchange with clients that support only that hybrid, which includes current "
-                    "browsers.".format(curve_list=curve_list, hybrid=HYBRID_GROUP),
+                    "browsers.".format(curve_list=curve_list, hybrid=HYBRID_GROUP) + where,
                 )
             return
 
@@ -207,7 +234,7 @@ class ssl_ecdh_curve(Plugin):
                 directive,
                 "`{curve_list}` offers no ML-KEM group, so NGINX linked against OpenSSL 3.5+ never "
                 "negotiates `X25519MLKEM768`, even with clients that offer it. Remove the directive to "
-                "use the OpenSSL default.".format(curve_list=curve_list),
+                "use the OpenSSL default.".format(curve_list=curve_list) + where,
             )
             return
 
@@ -219,7 +246,7 @@ class ssl_ecdh_curve(Plugin):
                 "against OpenSSL 3.5+ negotiates a classical group with every client that supports one "
                 "from a higher tier. Remove the directive to use the OpenSSL default.".format(
                     curve_list=curve_list, classical=":".join(first_tier)
-                ),
+                ) + where,
             )
             return
 
@@ -227,19 +254,64 @@ class ssl_ecdh_curve(Plugin):
         if classical:
             self.add_issue(
                 directive=directive,
-                summary=self.shared_tier_summary,
+                summary=self._summary(self.shared_tier_summary, directive),
                 severity=gixy.severity.INFORMATION,
                 description=self.shared_tier_description,
                 reason=(
                     "The first preference tier of `{curve_list}` also holds `{classical}`, so a client that "
                     "leads with a classical key share negotiates it instead of the post-quantum hybrid on "
-                    "OpenSSL 3.5+.".format(curve_list=curve_list, classical="`, `".join(classical))
+                    "OpenSSL 3.5+.".format(curve_list=curve_list, classical="`, `".join(classical)) + where
                 ),
             )
 
+    def _negotiation_scope(self, directive):
+        module = next((parent for parent in directive.parents if parent.name in ("http", "stream", "mail")), None)
+        if module is not None and module.name == "mail":
+            return "" if _effective_group_list(directive.parent) is directive else None
+        servers = list(module.find_all_contexts_of_type("server")) if module is not None else []
+        defaults = default_listens(servers)
+        tls_sockets = {
+            parse_listen_key_and_default(listen.args)[0]
+            for server in servers
+            for listen in server.find("listen")
+            if _is_tls_listen(listen)
+        } - {None}
+        tls_defaults = {}
+        for server in servers:
+            listens = [
+                listen
+                for listen in defaults.get(server, ())
+                if _is_tls_listen(listen) or parse_listen_key_and_default(listen.args)[0] in tls_sockets
+            ]
+            if listens:
+                tls_defaults[server] = listens
+        if not tls_defaults:
+            return self.partial_note if _effective_group_list(directive.parent) is directive else None
+        sockets = []
+        for server, listens in tls_defaults.items():
+            if _effective_group_list(server) is directive:
+                sockets.extend("listen " + listen.args[0] for listen in listens)
+        if not sockets:
+            return None
+        return " It is the default server's list for `{sockets}`, so it applies to every server there.".format(
+            sockets="`, `".join(dict.fromkeys(sockets))
+        )
+
+    def _summary(self, summary, directive):
+        if directive.name == "ssl_ecdh_curve":
+            return summary
+        return summary.replace("`ssl_ecdh_curve`", "`{name} {command}`".format(
+            name=directive.name, command=directive.args[0]
+        ))
+
     def _report_rejected(self, directive, curve_list, groups):
         reason = None
-        if curve_list.lower() == "auto":
+        if curve_list.lower() == "auto" and directive.name != "ssl_ecdh_curve":
+            reason = (
+                "OpenSSL has no group named `{value}`: only `ssl_ecdh_curve` treats `auto` as the OpenSSL "
+                "default, so NGINX fails to load this configuration. Remove the command.".format(value=curve_list)
+            )
+        elif curve_list.lower() == "auto":
             reason = (
                 "NGINX only treats lowercase `auto` as the OpenSSL default and passes `{value}` to OpenSSL, "
                 "which rejects it. Write `auto`, or remove the directive.".format(value=curve_list)
@@ -255,7 +327,7 @@ class ssl_ecdh_curve(Plugin):
             return False
         self.add_issue(
             directive=directive,
-            summary=self.rejected_summary,
+            summary=self._summary(self.rejected_summary, directive),
             description=self.rejected_description,
             reason=reason,
         )
@@ -292,12 +364,18 @@ class ssl_ecdh_curve(Plugin):
                 "The list also uses OpenSSL 3.5 syntax (`/`, `*` or `-`), so no prefix makes it load on "
                 "older OpenSSL."
             )
-        self.add_issue(directive=directive, reason=" ".join(reason))
+        if directive.name in CLIENT_CONF_COMMANDS:
+            reason.append(
+                "`{name}` fails this way wherever it applies to a TLS connection to an upstream.".format(
+                    name=directive.name
+                )
+            )
+        self.add_issue(directive=directive, summary=self._summary(self.summary, directive), reason=" ".join(reason))
 
     def _report_classical(self, directive, reason):
         self.add_issue(
             directive=directive,
-            summary=self.classical_summary,
+            summary=self._summary(self.classical_summary, directive),
             severity=gixy.severity.LOW,
             description=self.classical_description,
             reason=reason,

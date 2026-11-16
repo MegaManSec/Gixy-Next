@@ -31,9 +31,23 @@ class invalid_regex(Plugin):
         "set",
         "return",
         "proxy_pass",
+        "fastcgi_pass",
+        "uwsgi_pass",
+        "scgi_pass",
+        "grpc_pass",
         "add_header",
         "more_set_headers",
+        "proxy_set_header",
+        "grpc_set_header",
+        "fastcgi_param",
+        "uwsgi_param",
+        "scgi_param",
         "try_files",
+        "alias",
+        "root",
+        "error_page",
+        "auth_request_set",
+        "if",
         "map",
     ]
 
@@ -43,6 +57,9 @@ class invalid_regex(Plugin):
     CAPTURE_GROUP_REF = re.compile(r"\$([1-9])")
 
     REGEX_OPERATORS = ("~", "~*", "!~", "!~*")
+    IF_FILE_OPERATORS = ("-f", "!-f", "-d", "!-d", "-e", "!-e", "-x", "!-x")
+    STOPPING_FLAGS = ("last", "break", "redirect", "permanent")
+    REDIRECT_PREFIXES = ("http://", "https://", "$scheme")
 
     def __init__(self, config):
         super(invalid_regex, self).__init__(config)
@@ -59,6 +76,12 @@ class invalid_regex(Plugin):
                 # conservative whole-scope check.
                 if len(directive.args) >= 2:
                     self._audit_scope(directive, directive.args[1:2])
+        elif directive.name == "if":
+            args = directive.args
+            if len(args) == 3 and args[1] in ("=", "!="):
+                self._audit_scope(directive, args[2:])
+            elif len(args) == 2 and args[0] in self.IF_FILE_OPERATORS:
+                self._audit_scope(directive, args[1:])
         else:
             self._audit_scope(directive, directive.args)
 
@@ -209,18 +232,38 @@ class invalid_regex(Plugin):
             return True
 
         pattern = if_directive.args[2]
+        source = "if condition"
+        case_sensitive = operator in ["~", "!~"]
+        negative = operator in ("!~", "!~*")
+        stopping_rewrite = False
+        for child in if_directive.children:
+            if child is directive:
+                break
+            if child.name == "rewrite" and child.args:
+                pattern, source, case_sensitive, negative = child.args[0], "preceding rewrite", True, False
+                stopping_rewrite = self._rewrite_stops(child)
+
+        if stopping_rewrite:
+            refs = ", ".join(f"${g}" for g in sorted(referenced_groups))
+            self.add_issue(
+                directive=directive,
+                reason=(
+                    f"The set directive references capture group(s) {refs} after a rewrite that "
+                    f"stops processing when it matches, so the set only runs after that rewrite "
+                    f"failed and cleared the numbered captures."
+                ),
+            )
+            return True
 
         # Parse the regex to determine available groups
-        available_groups = self._regex_groups(
-            pattern, case_sensitive=(operator in ["~", "!~"])
-        )
+        available_groups = self._regex_groups(pattern, case_sensitive=case_sensitive)
         if available_groups is None:
             return True
 
         # For negative match operators the block only executes when the regex did
         # NOT match — and a failed evaluation clears the request's numbered
         # captures — so any capture groups from this pattern are never populated.
-        if operator in ("!~", "!~*"):
+        if negative:
             never_set = referenced_groups & available_groups
             if never_set:
                 refs = ", ".join(f"${g}" for g in sorted(never_set))
@@ -242,13 +285,13 @@ class invalid_regex(Plugin):
             if len(available_groups) == 0:
                 reason = (
                     f"The set directive references capture group(s) {invalid_list}, "
-                    f'but the if condition pattern "{pattern}" has no capturing groups.'
+                    f'but the {source} pattern "{pattern}" has no capturing groups.'
                 )
             else:
                 available_list = ", ".join(f"${g}" for g in sorted(available_groups))
                 reason = (
                     f"The set directive references capture group(s) {invalid_list}, "
-                    f'but the if condition pattern "{pattern}" only has {available_list}.'
+                    f'but the {source} pattern "{pattern}" only has {available_list}.'
                 )
 
             self.add_issue(directive=directive, reason=reason)
@@ -264,7 +307,7 @@ class invalid_regex(Plugin):
         guaranteed empty — only that case is reported.
         """
         referenced_groups = self._find_refs(strings)
-        if not referenced_groups:
+        if not referenced_groups or not self._in_scope(directive):
             return
 
         available_groups = self._collect_scope_groups(directive)
@@ -284,6 +327,23 @@ class invalid_regex(Plugin):
                     f"is always empty."
                 ),
             )
+
+    @classmethod
+    def _rewrite_stops(cls, directive):
+        if len(directive.args) > 2 and directive.args[2] in cls.STOPPING_FLAGS:
+            return True
+        return len(directive.args) > 1 and directive.args[1].startswith(cls.REDIRECT_PREFIXES)
+
+    @staticmethod
+    def _in_scope(directive):
+        node = directive.parent
+        while node:
+            if getattr(node, "name", None) in ("server", "http"):
+                return True
+            if getattr(node, "name", None) == "location" and getattr(node, "modifier", None) in ("~", "~*"):
+                return True
+            node = getattr(node, "parent", None)
+        return False
 
     def _collect_scope_groups(self, directive):
         """Union of capture groups defined by every regex that could populate
@@ -341,8 +401,8 @@ class invalid_regex(Plugin):
             name = (getattr(child, "name", None) or "").lower()
             args = getattr(child, "args", None) or []
 
-            if name == "location" and len(args) == 2 and args[0] in ("~", "~*"):
-                yield args[1], args[0] == "~"
+            if name == "location" and getattr(child, "modifier", None) in ("~", "~*"):
+                yield child.path, child.modifier == "~"
             elif name == "if" and len(args) == 3 and args[1] in self.REGEX_OPERATORS:
                 yield args[2], args[1] in ("~", "!~")
             elif name == "rewrite" and args:

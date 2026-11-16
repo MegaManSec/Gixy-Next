@@ -188,6 +188,14 @@ def test_request_line_and_header_values_are_client_input_without_line_breaks(nam
     assert not var.can_contain("\n")
 
 
+def test_http_host_is_a_host_without_slash_or_controls():
+    var = builtins.builtin_var("http_host")
+    for char in ".:[]%A?@\\":
+        assert var.can_contain(char)
+    for char in "/ \t\r\n":
+        assert not var.can_contain(char)
+
+
 def test_ssl_server_name_is_the_raw_sni():
     var = builtins.builtin_var("ssl_server_name")
     assert var.can_contain(".")

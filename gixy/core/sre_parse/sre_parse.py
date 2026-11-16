@@ -14,6 +14,8 @@ from __future__ import print_function
 
 """Internal support module for sre"""
 
+import unicodedata
+
 from gixy.core.sre_parse.sre_constants import *
 
 SPECIAL_CHARS = ".\\[{()*+?^$|"
@@ -29,11 +31,11 @@ WHITESPACE = set(" \t\n\r\v\f")
 ESCAPES = {
     r"\a": (LITERAL, ord("\a")),
     r"\b": (LITERAL, ord("\b")),
+    r"\e": (LITERAL, 0x1B),
     r"\f": (LITERAL, ord("\f")),
     r"\n": (LITERAL, ord("\n")),
     r"\r": (LITERAL, ord("\r")),
     r"\t": (LITERAL, ord("\t")),
-    r"\v": (LITERAL, ord("\v")),
     r"\\": (LITERAL, ord("\\")),
 }
 
@@ -48,6 +50,33 @@ CATEGORIES = {
     r"\w": (IN, [(CATEGORY, CATEGORY_WORD)]),
     r"\W": (IN, [(CATEGORY, CATEGORY_NOT_WORD)]),
     r"\Z": (AT, AT_END_STRING),  # end of string
+    r"\z": (AT, AT_END_STRING),
+    r"\G": (AT, AT_BEGINNING_STRING),
+    r"\h": (IN, [(LITERAL, 0x09), (LITERAL, 0x20), (LITERAL, 0xA0)]),
+    r"\H": (IN, [(NEGATE, None), (LITERAL, 0x09), (LITERAL, 0x20), (LITERAL, 0xA0)]),
+    r"\v": (IN, [(RANGE, (0x0A, 0x0D)), (LITERAL, 0x85)]),
+    r"\V": (IN, [(NEGATE, None), (RANGE, (0x0A, 0x0D)), (LITERAL, 0x85)]),
+    r"\R": (IN, [(RANGE, (0x0A, 0x0D)), (LITERAL, 0x85)]),
+    r"\N": (NOT_LITERAL, 0x0A),
+    r"\X": (ANY_ALL, None),
+    r"\C": (ANY_ALL, None),
+}
+
+CLASS_CATEGORIES = {
+    r"\H": (
+        IN,
+        [
+            (RANGE, (0x01, 0x08)),
+            (RANGE, (0x0A, 0x1F)),
+            (RANGE, (0x21, 0x7E)),
+            (RANGE, (0x80, 0x9F)),
+            (RANGE, (0xA1, 0xFF)),
+        ],
+    ),
+    r"\V": (
+        IN,
+        [(RANGE, (0x01, 0x09)), (RANGE, (0x0E, 0x7E)), (RANGE, (0x80, 0x84)), (RANGE, (0x86, 0xFF))],
+    ),
 }
 
 FLAGS = {
@@ -205,6 +234,17 @@ class Tokenizer:
     def tell(self):
         return self.index, self.next
 
+    def getquoted(self):
+        start = self.index - len(self.next) if self.next is not None else self.index
+        end = self.string.find("\\E", start)
+        if end < 0:
+            end = len(self.string)
+            self.index = end
+        else:
+            self.index = end + 2
+        self.__next()
+        return self.string[start:end]
+
     def seek(self, index):
         self.index, self.next = index
 
@@ -227,15 +267,110 @@ def isname(name):
     return True
 
 
+def _pcre_escape(source, escape):
+    c = escape[1:2]
+    if c in ("x", "o") and source.next == "{":
+        source.get()
+        digits = ""
+        while source.next and source.next != "}":
+            digits = digits + source.get()
+        if not source.match("}"):
+            raise error("bogus escape: %s" % repr(escape))
+        return LITERAL, int(digits, 16 if c == "x" else 8) & 0xFF
+    if c == "c" and source.next:
+        return LITERAL, ord(source.get()[-1].upper()) ^ 0x40
+    return None
+
+
+def _property_chars(name):
+    name = name.replace(" ", "").replace("_", "").replace("-", "").lower()
+    chars = [chr(c) for c in range(0x01, 0x100) if c != 0x7F]
+    if name == "any":
+        return chars
+    if name in ("l&", "lc"):
+        return [c for c in chars if unicodedata.category(c) in ("Lu", "Ll", "Lt")]
+    if name == "xan":
+        return [c for c in chars if unicodedata.category(c)[0] in "LN"]
+    if name == "xwd":
+        return [c for c in chars if unicodedata.category(c)[0] in "LN" or c == "_"]
+    if name in ("xsp", "xps"):
+        return [c for c in chars if unicodedata.category(c)[0] == "Z" or c in "\t\n\v\f\r"]
+    if len(name) in (1, 2) and name[0] in "lmnpszc":
+        return [c for c in chars if unicodedata.category(c).lower().startswith(name)]
+    if name in ("common", "zyyy"):
+        return [c for c in chars if unicodedata.category(c)[0] != "L"]
+    return [c for c in chars if unicodedata.category(c)[0] in "LM"]
+
+
+def _property(source, escape):
+    if source.match("{"):
+        name = ""
+        while source.next and source.next != "}":
+            name = name + source.get()
+        if not source.match("}"):
+            raise error("bogus escape: %s" % repr(escape))
+    elif source.next:
+        name = source.get()
+    else:
+        raise error("bogus escape: %s" % repr(escape))
+    negate = escape == r"\P"
+    if name.startswith("^"):
+        negate = not negate
+        name = name[1:]
+    chars = set(_property_chars(name))
+    if negate:
+        chars = set(_property_chars("any")) - chars
+    items = []
+    for c in sorted(ord(c) for c in chars):
+        if items and items[-1][1] == c - 1:
+            items[-1][1] = c
+        else:
+            items.append([c, c])
+    return IN, [(LITERAL, lo) if lo == hi else (RANGE, (lo, hi)) for lo, hi in items]
+
+
+def _group_reference(source, escape, state):
+    closing = {"{": "}", "<": ">", "'": "'"}
+    if source.next in closing:
+        if escape == r"\g" and source.next != "{":
+            raise error("subroutine calls are not supported")
+        end = closing[source.get()]
+        ref = ""
+        while source.next and source.next != end:
+            ref = ref + source.get()
+        if not source.match(end):
+            raise error("bogus escape: %s" % repr(escape))
+    elif escape == r"\g":
+        ref = source.get() if source.next == "-" else ""
+        while source.next in DIGITS:
+            ref = ref + source.get()
+    else:
+        raise error("bogus escape: %s" % repr(escape))
+    if ref.lstrip("-").isdigit():
+        group = int(ref)
+        if group < 0:
+            group = state.groups + group
+    else:
+        group = state.groupdict.get(ref)
+    if not group or group < 0 or not state.checkgroup(group):
+        raise error("bogus group reference: %s" % repr(ref))
+    return GROUPREF, group
+
+
 def _class_escape(source, escape):
     # handle escape code inside character class
     code = ESCAPES.get(escape)
     if code:
         return code
-    code = CATEGORIES.get(escape)
+    code = CLASS_CATEGORIES.get(escape) or CATEGORIES.get(escape)
     if code and code[0] == IN:
         return code
+    if escape in (r"\p", r"\P"):
+        return _property(source, escape)
     try:
+        code = _pcre_escape(source, escape)
+        if code:
+            return code
         c = escape[1:2]
         if c == "x":
             # hexadecimal escape (exactly two digits)
@@ -268,7 +403,14 @@ def _escape(source, escape, state):
     code = ESCAPES.get(escape)
     if code:
         return code
+    if escape in (r"\p", r"\P"):
+        return _property(source, escape)
+    if escape in (r"\g", r"\k"):
+        return _group_reference(source, escape, state)
     try:
+        code = _pcre_escape(source, escape)
+        if code:
+            return code
         c = escape[1:2]
         if c == "x":
             # hexadecimal escape
@@ -445,6 +587,12 @@ def _parse(source, state):
                 this = sourceget()
                 if this == "]" and set != start:
                     break
+                elif this == "\\Q":
+                    for char in source.getquoted():
+                        setappend((LITERAL, ord(char)))
+                    continue
+                elif this == "\\E":
+                    continue
                 elif this and this[0] == "\\":
                     code1 = _class_escape(source, this)
                 elif this:
@@ -456,8 +604,9 @@ def _parse(source, state):
                     this = sourceget()
                     if this == "]":
                         if code1[0] is IN:
-                            code1 = code1[1][0]
-                        setappend(code1)
+                            set.extend(code1[1])
+                        else:
+                            setappend(code1)
                         setappend((LITERAL, ord("-")))
                         break
                     elif this:
@@ -476,8 +625,9 @@ def _parse(source, state):
                         raise error("unexpected end of regular expression")
                 else:
                     if code1[0] is IN:
-                        code1 = code1[1][0]
-                    setappend(code1)
+                        set.extend(code1[1])
+                    else:
+                        setappend(code1)
 
             # XXX: <fl> should move set optimization to compiler!
             if _len(set) == 1 and set[0][0] is LITERAL:
@@ -728,6 +878,13 @@ def _parse(source, state):
 
         elif this == "$":
             subpattern.append((AT, AT_END))
+
+        elif this == "\\Q":
+            for char in source.getquoted():
+                subpatternappend((LITERAL, ord(char)))
+
+        elif this in ("\\E", "\\K"):
+            continue
 
         elif this and this[0] == "\\":
             code = _escape(source, this, state)

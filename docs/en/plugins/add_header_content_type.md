@@ -1,6 +1,6 @@
 ---
 title: "Duplicate Content-Type"
-description: "Flags setting Content-Type via add_header, which creates a duplicate Content-Type header unless the upstream's header is hidden by the matching *_hide_header. Prefer default_type."
+description: "Flags setting Content-Type via add_header, which creates a duplicate Content-Type header unless the upstream's header is hidden by the matching *_hide_header. Prefer an empty types block with default_type."
 ---
 
 # [add_header_content_type] Using `add_header` to set `Content-Type`
@@ -15,7 +15,7 @@ The hide list in effect is the one from the nearest level (`location`, `server`,
 
 ## Why this is a problem
 
-NGINX can end up sending two `Content-Type` headers: one from the upstream, and one you added. Different clients handle duplicates differently, and caches may store an unexpected value. If you are trying to set a fallback MIME type for static content, `default_type` is the right tool.
+NGINX can end up sending two `Content-Type` headers: one from the upstream, and one you added. Different clients handle duplicates differently, and caches may store an unexpected value. For static content, set the type with an empty `types` block and `default_type` instead.
 
 ## Bad configuration
 
@@ -74,16 +74,18 @@ The `location` inherits the hide list, but its `proxy_pass_header Content-Type` 
 
 ## Better configuration
 
+### static content
+
 ```nginx
-# Sets the default MIME type for responses that do not already have one
-default_type text/plain;
+location /downloads/ {
+    types { }
+    default_type text/plain;
+}
 ```
 
-`default_type` applies when there is no explicit content type, so you avoid duplicates.
+`default_type` applies only to extensions missing from `types`, so on its own it does not change a `.html` file. The empty `types` block makes every response in the location use it.
 
-## Safe exception
-
-If you are intentionally replacing the upstream header, hide it with the directive of the module you proxy with, then add your own:
+### proxied content
 
 ```nginx
 location / {
@@ -93,21 +95,7 @@ location / {
 }
 ```
 
-This pattern removes the upstream `Content-Type` before adding a new one, so the client sees only a single value.
-
-The hide list is inherited as long as the `location` does not declare its own `proxy_hide_header`; `proxy_pass_header` leaves it intact:
-
-```nginx
-server {
-    proxy_hide_header Content-Type;
-
-    location / {
-        proxy_pass_header X-Other;
-        proxy_pass http://127.0.0.1:8080;
-        add_header Content-Type "application/octet-stream";
-    }
-}
-```
+`default_type` does not change a proxied response. Hide the upstream header with the `*_hide_header` directive of the module you proxy with, then add your own.
 
 ## Additional notes
 

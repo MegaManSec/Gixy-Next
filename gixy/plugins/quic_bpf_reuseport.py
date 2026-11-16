@@ -5,13 +5,12 @@ from gixy.plugins.plugin import Plugin
 class quic_bpf_reuseport(Plugin):
     """Flag quic_bpf + reuseport + multi-worker combinations that silently drop QUIC connections after reload."""
 
-    summary = "quic_bpf with reuseport and multiple workers silently drops QUIC connections after reload."
-    severity = gixy.severity.HIGH
+    summary = "quic_bpf with reuseport and multiple workers drops QUIC connections after reload before NGINX 1.31.7."
+    severity = gixy.severity.MEDIUM
     description = (
-        "When quic_bpf is enabled alongside reuseport on a QUIC listen socket "
-        "and multiple worker processes, NGINX silently drops ~50% of QUIC connections "
-        "after every reload due to stale BPF reuseport maps (nginx/nginx#425). "
-        "Disable quic_bpf to resolve this."
+        "With quic_bpf on, reuseport on a QUIC listen socket and multiple workers, NGINX before 1.31.7 "
+        "drops ~50% of new QUIC connections after every reload (nginx/nginx#425, fixed in 1.31.7). "
+        "Upgrade to NGINX 1.31.7 or later, or disable quic_bpf."
     )
     help_url = "https://gixy.io/plugins/quic_bpf_reuseport/"
     directives = []
@@ -43,7 +42,8 @@ class quic_bpf_reuseport(Plugin):
                         directive=quic_bpf,
                         reason=(
                             "quic_bpf on with reuseport on a QUIC listener and multiple workers "
-                            "causes ~50% QUIC connection drops after reload (nginx/nginx#425)."
+                            "causes ~50% QUIC connection drops after reload on NGINX before 1.31.7 "
+                            "(nginx/nginx#425)."
                         ),
                     )
                     return

@@ -90,10 +90,14 @@ class add_header_redefinition(Plugin):
 
     def _audit_family(self, directive, field_directive, inherit_directive, kind):
         current_fields = self.get_fields(directive, field_directive)
+        mode = self.effective_inherit_mode(directive, inherit_directive)
+        if mode == "off" and self.declared_inherit_mode(directive, inherit_directive) is None:
+            self._audit_inherited_off(directive, current_fields, field_directive, inherit_directive, kind)
+            return
+
         if not current_fields:
             return
 
-        mode = self.effective_inherit_mode(directive, inherit_directive)
         # 'merge', parent fields are appended.
         # 'off', inheritance is explicitly cancelled.
         if mode in ("merge", "off"):
@@ -122,7 +126,32 @@ class add_header_redefinition(Plugin):
         if diff:
             self._report_issue(directive, parent, diff, field_directive, inherit_directive, kind)
 
-    def _report_issue(self, current, parent, diff, field_directive, inherit_directive, kind):
+    def _audit_inherited_off(self, directive, current_fields, field_directive, inherit_directive, kind):
+        parent = getattr(directive, "parent", None)
+        if not parent:
+            return
+
+        diff = self.effective_fields(parent, field_directive, inherit_directive) - current_fields
+        if self.interesting_headers:
+            diff = diff & self.interesting_headers
+
+        if diff:
+            declaring = next(
+                node for node in directive.parents
+                if self.declared_inherit_mode(node, inherit_directive) is not None
+            )
+            reason = "{kind}s `{fields}` from the level above are dropped here.".format(
+                kind=kind.capitalize(), fields="`, `".join(sorted(diff))
+            )
+            summary = 'Inherited "{inherit} off" drops parent {kind}s.'.format(inherit=inherit_directive, kind=kind)
+            self._report_issue(
+                directive, parent, diff, field_directive, inherit_directive, kind,
+                reason=reason, extra=declaring.find(inherit_directive) + [directive], summary=summary,
+            )
+
+    def _report_issue(
+        self, current, parent, diff, field_directive, inherit_directive, kind, reason=None, extra=(), summary=None
+    ):
         directives = []
         # Use the parent's scope so we pick up server-level fields and includes.
         scope_fields = parent.find_imperative_directives_in_scope(field_directive)
@@ -135,6 +164,7 @@ class add_header_redefinition(Plugin):
 
         directives.extend(parent.find(inherit_directive))
         directives.extend(current.find(inherit_directive))
+        directives.extend(d for d in extra if d not in directives)
 
         is_secure_header_dropped = kind == "header" and any(
             h in self.secure_headers for h in diff
@@ -143,15 +173,14 @@ class add_header_redefinition(Plugin):
             gixy.severity.MEDIUM if is_secure_header_dropped else self.severity
         )
 
-        summary = None
-        if kind == "trailer":
+        if summary is None and kind == "trailer":
             summary = 'Nested "add_trailer" drops parent trailers.'
 
-        if self.merge_reported_headers:
+        if reason is None and self.merge_reported_headers:
             reason = "{kind}s declared in higher scopes `{fields}` are not effective here.".format(
                 kind=kind.capitalize(), fields="`, `".join(sorted(diff))
             )
-        else:
+        elif reason is None:
             reason = "Parent {kind}s `{fields}` were dropped at this level.".format(
                 kind=kind, fields="`, `".join(sorted(diff))
             )
@@ -183,20 +212,25 @@ class add_header_redefinition(Plugin):
             return set()
         return {self.field_name(d) for d in fields if self.field_name(d)}
 
+    @staticmethod
+    def declared_inherit_mode(node, inherit_directive):
+        """The inherit mode declared at this level, None when it declares none."""
+        mode = None
+        # If multiple are present at the same level, the last valid one wins.
+        for d in node.find(inherit_directive):
+            if getattr(d, "args", None):
+                v = d.args[0].lower()
+                if v in ("on", "off", "merge"):
+                    mode = v
+        return mode
+
     def effective_inherit_mode(self, directive, inherit_directive):
         """
         The inherit directive itself is inherited "normally" (nearest definition wins).
         """
         node = directive
         while node is not None:
-            inherit_directives = node.find(inherit_directive)
-            mode = None
-            # If multiple are present at the same level, the last valid one wins.
-            for d in inherit_directives:
-                if getattr(d, "args", None):
-                    v = d.args[0].lower()
-                    if v in ("on", "off", "merge"):
-                        mode = v
+            mode = self.declared_inherit_mode(node, inherit_directive)
             if mode is not None:
                 return mode
             node = getattr(node, "parent", None)

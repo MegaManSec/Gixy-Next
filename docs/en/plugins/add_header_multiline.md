@@ -1,60 +1,43 @@
 ---
-title: "Multiline Response Headers"
-description: "Detects response headers written across multiple lines. Multiline headers are deprecated and can break clients; use variables to keep long values readable without inserting newlines."
+title: "Multiline Headers"
+description: "Detects header values that contain a line break. NGINX sends the value as it is, which breaks clients and upstreams; use variables to keep long values readable."
 ---
 
-# [add_header_multiline] Multiline response headers
+# [add_header_multiline] Multiline headers
 
 ## What this check looks for
 
-This plugin flags response headers that contain a literal newline in the header value. The usual culprits are `add_header`, `more_set_headers`, or string values that span multiple lines for readability.
+This plugin flags header values that contain a newline (including obsolete line folding) or a carriage return, whether the value is written across several lines or uses the `\n` and `\r` escapes.
+
+It checks `add_header`, `add_trailer` and `more_set_headers`, and the request headers sent upstream with `proxy_set_header`, `grpc_set_header` and `more_set_input_headers`.
 
 ## Why this is a problem
 
-Multiline headers are deprecated and not reliably supported by clients. Some browsers and HTTP stacks will reject or truncate the response, and some intermediaries can mis-parse the header stream. In practice, this turns into hard-to-debug compatibility issues.
+A header value must not contain CR or LF (RFC 9110), and NGINX sends it as it is. Over HTTP/1.1 the line break ends the header, so the rest of the value goes out as a header line of its own, which clients drop or reject; a value that ends with a line break ends the header block, and every later header lands in the body. Over HTTP/2 the field is invalid. An upstream receives the same split request header, and a gRPC upstream rejects the request with 400.
 
 ## Bad configuration
-
-```nginx
-# Multiline header value (contains a newline)
-more_set_headers 'X-Foo: Bar
-  multiline';
-```
-
-Even if it "works" in a quick test, it is not safe to rely on.
 
 ```nginx
 add_header 'Access-Control-Allow-Headers' 'Content-Disposition,Content-Range,DNT,X-CustomHeader,Keep-Alive,
 User-Agent,X-Requested-With,If-Modified-Since,Cache-Control,Content-Type';
 ```
 
-This is also an unsafe usage, which may result in the header being completely cut off.
+The header ends at `Keep-Alive,`; the second line goes out as a header line without a colon, so the client never sees the rest of the list.
 
 ## Better configuration
 
-Keep the configuration readable, but make the actual header value a single line by composing it with variables.
-
-Option 1: build the value from separate pieces:
+Keep the configuration readable, but make the actual header value a single line by composing it with variables:
 
 ```nginx
 set $csp_default "default-src 'self'";
 set $csp_script  "script-src 'self' https://cdn.example.com";
 set $csp_style   "style-src 'self' https://cdn.example.com";
-set $csp_img     "img-src 'self' data: https://cdn.example.com";
-set $csp_font    "font-src 'self' https://cdn.example.com";
 
-set $csp "${csp_default}; ${csp_script}; ${csp_style}; ${csp_img}; ${csp_font}";
+set $csp "${csp_default}; ${csp_script}; ${csp_style}";
 add_header Content-Security-Policy $csp;
 ```
 
-Option 2: progressive concatenation:
+## Additional notes
 
-```nginx
-set $csp "default-src 'self'; ";
-set $csp "${csp}script-src 'self' https://cdn.example.com; ";
-set $csp "${csp}style-src 'self' https://cdn.example.com; ";
-set $csp "${csp}img-src 'self' data: https://cdn.example.com; ";
-set $csp "${csp}font-src 'self'";
-
-add_header Content-Security-Policy $csp;
-```
+- A line break that arrives through a variable, such as `add_header X-Path $uri;`, is reported by [http_splitting](http_splitting.md) instead.
+- `fastcgi_param`, `uwsgi_param` and `scgi_param` are not checked: those protocols send length-prefixed values, so a line break cannot end a header.

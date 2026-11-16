@@ -1,3 +1,5 @@
+import ipaddress
+
 import gixy
 from gixy.core.utils import AUTH_DIRECTIVES, resolve_inherited_single
 from gixy.plugins.plugin import Plugin
@@ -21,15 +23,33 @@ class status_page_exposed(Plugin):
         ("::/0", ("inet6",)),
     )
 
-    def _server_uses_only_unix_sockets(self, directive):
-        """True if the enclosing server listens only on unix: sockets."""
+    @staticmethod
+    def _is_local_address(address):
+        """True for a `listen` address on a unix: socket or a loopback interface."""
+        address = address.lower()
+        if address.startswith("unix:"):
+            return True
+        if address.startswith("["):
+            host = address[1:].split("]", 1)[0]
+        else:
+            host = address.rsplit(":", 1)[0]
+        if host == "localhost":
+            return True
+        try:
+            ip = ipaddress.ip_address(host)
+        except ValueError:
+            return False
+        return (getattr(ip, "ipv4_mapped", None) or ip).is_loopback
+
+    def _server_listens_only_locally(self, directive):
+        """True if the enclosing server listens only on unix: sockets or loopback addresses."""
         for parent in directive.parents:
             if parent.name == "server":
                 listen_directives = parent.find("listen")
                 if not listen_directives:
                     return False
                 return all(
-                    d.args and d.args[0].lower().startswith("unix:")
+                    d.args and self._is_local_address(d.args[0])
                     for d in listen_directives
                 )
         return False
@@ -163,7 +183,7 @@ class status_page_exposed(Plugin):
         return has_allow, has_deny_all
 
     def audit(self, directive):
-        if self._server_uses_only_unix_sockets(directive):
+        if self._server_listens_only_locally(directive):
             return
 
         if self._location_is_internal_only(directive):

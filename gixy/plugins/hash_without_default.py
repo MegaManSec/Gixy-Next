@@ -4,11 +4,16 @@ from gixy.directives.block import GeoBlock, MapBlock
 from gixy.directives.directive import MapDirective
 from gixy.plugins.plugin import Plugin
 
+MAP_PARAMETERS = frozenset(("hostnames", "volatile"))
+
 
 class hash_without_default(Plugin):
     summary = "Missing default value in hash blocks (map/geo)."
-    severity = gixy.severity.MEDIUM
-    description = "A hash block without a default value may allow the bypassing of security controls."
+    severity = gixy.severity.LOW
+    description = (
+        "A hash block without a default value yields an empty string for unmatched input, "
+        "which may bypass security controls when the safe fallback is non-empty."
+    )
     help_url = "https://gixy.io/plugins/hash_without_default/"
     directives = ["map", "geo"]
 
@@ -35,6 +40,9 @@ class hash_without_default(Plugin):
                 found_default = True
                 break
 
+        if not found_default and isinstance(directive, GeoBlock):
+            found_default = self._geo_covers_all(entries)
+
         if found_default:
             return
 
@@ -50,6 +58,8 @@ class hash_without_default(Plugin):
                     continue
                 if child.src_val == "default":
                     continue
+                if child.src_val in MAP_PARAMETERS and child.dest_val is None:
+                    continue
                 entries_count += 1
 
             # Do not warn for single-entry maps without default
@@ -63,3 +73,8 @@ class hash_without_default(Plugin):
                 directive.name, directive.variable
             ),
         )
+
+    @staticmethod
+    def _geo_covers_all(entries):
+        keys = {child.src_val for child in entries if isinstance(child, MapDirective) and child.dest_val is not None}
+        return "0.0.0.0/0" in keys and "::/0" in keys

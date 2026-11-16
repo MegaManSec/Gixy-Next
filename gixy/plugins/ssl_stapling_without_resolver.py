@@ -1,10 +1,12 @@
 import re
 
 import gixy
+from gixy.core.utils import parse_listen_key_and_default
 from gixy.directives.directive import is_ipv4, is_ipv6
 from gixy.plugins.plugin import Plugin
 
 _SCHEME_RE = re.compile(r'^https?://', re.IGNORECASE)
+TLS_LISTEN_FLAGS = ("ssl", "quic", "http3")
 
 
 def _responder_host(url):
@@ -23,20 +25,26 @@ def _responder_host(url):
     return url or None
 
 
+def _is_tls_listen(listen):
+    return any(arg.lower() in TLS_LISTEN_FLAGS for arg in listen.args)
+
+
 class ssl_stapling_without_resolver(Plugin):
     """Flag SSL servers where ssl_stapling is on but no resolver is reachable in scope."""
 
-    summary = "ssl_stapling enabled without a resolver — OCSP stapling silently fails."
-    severity = gixy.severity.MEDIUM
+    summary = "ssl_stapling enabled without a resolver — the OCSP responder is only resolved at startup."
+    severity = gixy.severity.LOW
     description = (
-        "`ssl_stapling on` requires a `resolver` directive reachable in the same or a parent "
-        "scope. Without it nginx cannot fetch the OCSP response and stapling silently fails — "
-        "clients fall back to their own OCSP queries, adding handshake latency. "
-        "Add `resolver` to the server or http block, or pre-load the stapled response with "
-        "`ssl_stapling_file`."
+        "Without a `resolver` in scope, nginx resolves the OCSP responder only at startup; if its "
+        "addresses change, stapling stops once the last response expires. Add `resolver` to the "
+        "server or http block, or pre-load the response with `ssl_stapling_file`."
     )
     help_url = "https://gixy.io/plugins/ssl_stapling_without_resolver/"
     directives = ["server"]
+
+    def __init__(self, config):
+        super(ssl_stapling_without_resolver, self).__init__(config)
+        self._tls_sockets = {}
 
     def audit(self, server):
         if not server.is_block:
@@ -53,11 +61,11 @@ class ssl_stapling_without_resolver(Plugin):
         if self._in_scope(server, "ssl_stapling_file"):
             return
 
-        # ssl_stapling_responder with an IP-literal URL connects directly — no DNS needed.
+        # ssl_stapling_responder with an IP-literal or localhost URL has fixed addresses.
         responder = self._effective(server, "ssl_stapling_responder")
         if responder and responder.args:
             host = _responder_host(responder.args[0])
-            if host and (is_ipv4(host) or is_ipv6(host)):
+            if host and (is_ipv4(host) or is_ipv6(host) or host.lower() == "localhost"):
                 return
 
         if self._in_scope(server, "resolver"):
@@ -67,15 +75,25 @@ class ssl_stapling_without_resolver(Plugin):
             directive=stapling,
             reason=(
                 "ssl_stapling is enabled but no `resolver` is reachable in this server's scope — "
-                "OCSP stapling will silently fail at runtime."
+                "the OCSP responder is resolved only at startup and never refreshed."
             ),
         )
 
     def _is_ssl_server(self, server):
-        for listen in server.find("listen"):
-            if any(arg.lower() in ("ssl", "quic", "http3") for arg in listen.args):
-                return True
-        return False
+        listens = server.find("listen")
+        if any(_is_tls_listen(listen) for listen in listens):
+            return True
+        module = next((parent for parent in server.parents if parent.name in ("http", "stream", "mail")), None)
+        if module is None:
+            return False
+        if id(module) not in self._tls_sockets:
+            self._tls_sockets[id(module)] = {
+                parse_listen_key_and_default(listen.args)[0]
+                for other in module.find_all_contexts_of_type("server")
+                for listen in other.find("listen")
+                if _is_tls_listen(listen)
+            } - {None}
+        return any(parse_listen_key_and_default(listen.args)[0] in self._tls_sockets[id(module)] for listen in listens)
 
     def _effective(self, server, name):
         own = server.some(name)

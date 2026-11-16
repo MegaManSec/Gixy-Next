@@ -133,10 +133,10 @@ class PluginsManager(object):
         ))
 
     def _is_full_config(self, root):
-        """Detect if this is a full nginx config by checking for http block."""
-        # Check if root has an http block child
+        """Detect if this is a full nginx config by checking for http or events block."""
+        # Check if root has an http or events block child
         for child in root.children:
-            if child.name == "http":
+            if child.name in ("http", "events"):
                 return True
         return False
 
