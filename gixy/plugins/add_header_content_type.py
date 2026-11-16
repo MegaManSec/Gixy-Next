@@ -1,6 +1,5 @@
-import re
-
 import gixy
+from gixy.directives.directive import quote_arg
 from gixy.plugins.plugin import Plugin
 
 UPSTREAM_FAMILIES = ("proxy", "fastcgi", "uwsgi", "scgi", "grpc")
@@ -29,22 +28,22 @@ class add_header_content_type(Plugin):
         if ct_value is None:
             return
 
-        if self._upstream_hides_content_type(directive):
-            return
-
         families = self._upstream_families(directive)
-        if families is None:
+        if families is not None:
+            families = {family for family in families if not self._hides_content_type(directive, family)}
+            if not families:
+                return
+        else:
             families = {
                 family
                 for family, pass_directive in self._inherited_passes(directive.parent)
                 if not self._hides_content_type(pass_directive, family)
             }
+            if not families and any(self._hides_content_type(directive, family) for family in UPSTREAM_FAMILIES):
+                return
+
         if families:
-            hide = " / ".join(
-                "`{0}_hide_header Content-Type;`".format(family)
-                for family in sorted(families)
-                if not self._hides_content_type(directive, family)
-            )
+            hide = " / ".join("`{0}_hide_header Content-Type;`".format(family) for family in sorted(families))
             reason = (
                 "Also hide the upstream header with {hide}, or the response carries two Content-Type headers."
             ).format(hide=hide)
@@ -54,18 +53,10 @@ class add_header_content_type(Plugin):
                 "map the type with a `types` block instead."
             )
         else:
-            if re.search(r"[\s;{}'\"]", ct_value):
-                ct_value = '"{0}"'.format(ct_value)
             reason = (
                 "Use `types {{}} default_type {default_type};` instead of `add_header` to set Content-Type."
-            ).format(default_type=ct_value)
+            ).format(default_type=quote_arg(ct_value))
         self.add_issue(directive=directive, reason=reason)
-
-    def _upstream_hides_content_type(self, directive):
-        families = self._upstream_families(directive)
-        if families is None:
-            return any(self._hides_content_type(directive, family) for family in UPSTREAM_FAMILIES)
-        return all(self._hides_content_type(directive, family) for family in families)
 
     @staticmethod
     def _upstream_families(directive):
