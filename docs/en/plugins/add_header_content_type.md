@@ -79,7 +79,7 @@ location = /health {
 }
 ```
 
-`proxy_hide_header` affects only proxied responses. This `return` answers the request itself with the `default_type`, so the client receives two headers; `empty_gif` and `stub_status` answer the same way. A `return 204` sends no type, and `add_header` without `always` is not sent on error statuses, so neither is reported.
+`proxy_hide_header` affects only proxied responses. This `return` answers the request itself with the `default_type`, so the client receives two headers; `empty_gif` and `stub_status` answer the same way. `return 204` sends no type and, without `always`, error statuses do not carry the added header, so those are not reported.
 
 ## Better configuration
 

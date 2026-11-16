@@ -1,9 +1,9 @@
 import gixy
-from gixy.core.utils import resolve_inherited_list
+from gixy.core.utils import PASS_DIRECTIVES, resolve_inherited_list
 from gixy.directives.directive import quote_arg
 from gixy.plugins.plugin import Plugin
 
-UPSTREAM_FAMILIES = ("proxy", "fastcgi", "uwsgi", "scgi", "grpc")
+UPSTREAM_FAMILIES = tuple(name.removesuffix("_pass") for name in PASS_DIRECTIVES)
 TYPED_RETURN_STATUSES = ("200", "201", "206", "301", "302", "303", "304", "307", "308")
 
 
@@ -30,7 +30,7 @@ class add_header_content_type(Plugin):
         if ct_value is None:
             return
 
-        families = self._upstream_families(directive)
+        families = set() if directive.parent.find("return") else self._upstream_families(directive)
         if families is not None:
             blocks = [directive.parent]
             families = {family for family in families if not self._hides_content_type(directive, family)}
