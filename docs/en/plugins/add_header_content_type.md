@@ -9,7 +9,7 @@ description: "Flags setting Content-Type via add_header, which creates a duplica
 
 This plugin flags `add_header` directives that set the `Content-Type` response header. The header name is matched case-insensitively.
 
-A location that proxies to an upstream is not reported when the upstream's `Content-Type` is hidden by the `*_hide_header` directive of the module that does the proxying: `proxy_hide_header` for `proxy_pass`, `fastcgi_hide_header` for `fastcgi_pass`, and likewise for `uwsgi_pass`, `scgi_pass` and `grpc_pass`. When the scope has no `*_pass` directive, a `Content-Type` hidden by any of the five modules is accepted, unless a nested location that inherits the `add_header` proxies without hiding it.
+A location that proxies to an upstream is not reported when the upstream's `Content-Type` is hidden by the `*_hide_header` directive of the module that does the proxying: `proxy_hide_header` for `proxy_pass`, `fastcgi_hide_header` for `fastcgi_pass`, and likewise for `uwsgi_pass`, `scgi_pass` and `grpc_pass`. When the scope has no `*_pass` directive, a `Content-Type` hidden by any of the five modules is accepted, unless the `add_header` also applies to a response NGINX builds itself (`return`, `empty_gif`, `stub_status`) or to a nested location that proxies without hiding the header. A nested location keeps the `add_header` when it declares none of its own or uses `add_header_inherit merge`.
 
 ## Why this is a problem
 
@@ -68,6 +68,18 @@ server {
 ```
 
 The `location` inherits the hide list, but its `proxy_pass_header Content-Type` takes the header out of it again, so the upstream header reaches the client alongside the added one.
+
+### hide without an upstream response
+
+```nginx
+location = /health {
+    proxy_hide_header Content-Type;
+    add_header Content-Type text/plain;
+    return 200 "ok";
+}
+```
+
+`proxy_hide_header` affects only proxied responses. This `return` answers the request itself with the `default_type`, so the client receives two headers; `empty_gif` and `stub_status` answer the same way. A `return 204` sends no type, and `add_header` without `always` is not sent on error statuses, so neither is reported.
 
 ## Better configuration
 
