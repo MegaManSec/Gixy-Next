@@ -37,7 +37,7 @@ def _issues(config):
     ("server { if ($uri !~ ^/$x) { return 403; } }", "MEDIUM"),
     ("http { geo $g { ranges; default 1; 10.0.0.1-10.0.0.9 $x; } }", "MEDIUM"),
     ("server { location / { valid_referers ~^$host/; } }", "MEDIUM"),
-    ("server { server_name ~*^$sub\\.example\\.com$; }", "MEDIUM"),
+    ("server { server_name ~^(?i)$sub\\.example\\.com$; }", "MEDIUM"),
     ("server { location / { proxy_cookie_path ~*^/$app/(.*)$ /$1; } }", "MEDIUM"),
     ('server { location / { gzip_disable "^$bad_agent"; } }', "LOW"),
 ])

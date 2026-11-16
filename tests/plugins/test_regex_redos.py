@@ -21,7 +21,8 @@ def _regexes(config, name):
     ('if ($http_user_agent ~ "(a+)+x") { }', "if", [("(a+)+x", "")]),
     ('if ($http_user_agent ~* "(a+)+x") { }', "if", [("(a+)+x", "i")]),
     ("rewrite ^/(a+)+$ /x last;", "rewrite", [("^/(a+)+$", "")]),
-    ("server_name ~*^(a+)+\\.ex$ www.ex.com;", "server_name", [("^(a+)+\\.ex$", "i")]),
+    # a server_name regex is case-insensitive when it contains an uppercase letter
+    ("server_name ~^(A+)+\\.ex$ www.ex.com;", "server_name", [("^(A+)+\\.ex$", "i")]),
     ("server_name ~^(a+)+x;", "server_name", [("^(a+)+x", "")]),
     ("map $uri $x { ~*^(a+)+$ 1; ~^/b 2; default 0; }", "map", [("^(a+)+$", "i"), ("^/b", "")]),
     # gzip_disable and valid_referers regexes are always case-insensitive

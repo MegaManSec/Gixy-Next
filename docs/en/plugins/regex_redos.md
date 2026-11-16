@@ -10,7 +10,7 @@ description: "Detects regular expressions that can backtrack catastrophically (R
 Regular expressions that may backtrack catastrophically ([ReDoS](https://en.wikipedia.org/wiki/ReDoS)), in:
 
 - `location ~ ...`, `if ($var ~ ...)`, `server_name ~ ...`, `rewrite ...` and `map` regex keys,
-- `gzip_disable` (matched against `User-Agent`), `valid_referers ~...` (matched against `Referer`) and `fastcgi_split_path_info` (matched against the URI).
+- `gzip_disable` (matched against `User-Agent`), `valid_referers ~...` (matched against `Referer`), `fastcgi_split_path_info` (matched against the URI), and `proxy_redirect ~...` and `proxy_cookie_*` regexes (matched against upstream `Location` and `Set-Cookie` headers).
 
 ## Why this is a problem
 

@@ -14,6 +14,7 @@ REGEX_ARGUMENT_DIRECTIVES = frozenset((
     "proxy_cookie_flags",
 ))
 
+_UPPERCASE_RE = re.compile(r"[A-Z]")
 _BARE_VARIABLE_RE = re.compile(r"\$(?:([a-z_][a-z0-9_]*)|\{([a-z_][a-z0-9_]*)\})", re.IGNORECASE)
 
 
@@ -115,12 +116,6 @@ def normalize_address(address):
     return parsed.compressed
 
 
-def _strip_tilde(arg):
-    if arg.startswith("~*"):
-        return arg[2:], True
-    return arg[1:], False
-
-
 def regex_arguments(directive):
     """Yield (pattern, case_insensitive) for every regular expression among a
     directive's arguments, as nginx compiles them."""
@@ -145,10 +140,11 @@ def regex_arguments(directive):
     elif name == "server_name":
         for arg in args:
             if arg.startswith("~"):
-                yield _strip_tilde(arg)
+                yield arg[1:], _UPPERCASE_RE.search(arg) is not None
     elif name in ("proxy_redirect", "proxy_cookie_path"):
         if args and args[0].startswith("~"):
-            yield _strip_tilde(args[0])
+            caseless = args[0].startswith("~*")
+            yield args[0][2 if caseless else 1:], caseless
     elif name in ("proxy_cookie_domain", "proxy_cookie_flags"):
         if args and args[0].startswith("~"):
             yield args[0][1:], True

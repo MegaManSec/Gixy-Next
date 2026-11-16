@@ -58,6 +58,10 @@ class regex_redos(Plugin):
         "gzip_disable",
         "valid_referers",
         "fastcgi_split_path_info",
+        "proxy_redirect",
+        "proxy_cookie_domain",
+        "proxy_cookie_path",
+        "proxy_cookie_flags",
     ]
     options = {"url": ""}
     options_help = {
@@ -77,8 +81,7 @@ class regex_redos(Plugin):
         if directive.name == "map":
             for child in directive.gather_map_directives(directive.children):
                 if isinstance(child, MapDirective) and child.is_regex:
-                    src = child.src_val
-                    yield (src[2:], "i") if src.startswith("~*") else (src[1:], "")
+                    yield child.regex.source, "" if child.regex.case_sensitive else "i"
             return
         for pattern, caseless in regex_arguments(directive):
             yield pattern, "i" if caseless else ""
