@@ -419,3 +419,21 @@ map "$request_method $uri" $some_var {
 
     directive = _get_parsed(config)
     assert str(directive) == 'map "$request_method $uri" $some_var {'
+
+
+def test_map_hostnames_applies_to_later_keys():
+    config = '''
+map $http_host $h {
+    example.* a;
+    hostnames;
+    *.example.com b;
+    default c;
+}
+    '''
+
+    directive = _get_parsed(config)
+    assert [(e.src_val, e.hostnames) for e in directive.entries] == [
+        ("example.*", False),
+        ("*.example.com", True),
+        ("default", True),
+    ]

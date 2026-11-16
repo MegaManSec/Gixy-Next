@@ -60,7 +60,7 @@ class host_spoofing(Plugin):
     @staticmethod
     def _map_values(mb):
         for md in mb.entries:
-            wildcard = md in mb.hostname_entries and md.src_val.endswith(".*")
+            wildcard = md.hostnames and md.src_val.endswith(".*")
             pinned = md.src_val != "default" and not md.is_regex and not wildcard
             if pinned and bare_variable_name(md.dest_val) == bare_variable_name(mb.source):
                 continue

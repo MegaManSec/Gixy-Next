@@ -162,8 +162,7 @@ class non_expanding_variable(Plugin):
             )
 
     def _audit_geo(self, block):
-        entries = block.gather_geo_directives(block.children)
-        self._audit_values(block, block.variable, [entry.dest_val for entry in entries if entry.dest_val])
+        self._audit_values(block, block.variable, [entry.dest_val for entry in block.entries])
 
     def _audit_split_clients(self, block):
         if len(block.args) == 2:

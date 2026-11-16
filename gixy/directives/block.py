@@ -281,19 +281,15 @@ class MapBlock(Block):
             elif isinstance(node, IncludeBlock):
                 yield from self.gather_map_directives(node.children)
 
-    @property
+    @cached_property
     def entries(self):
-        return [child for child in self.gather_map_directives(self.children) if child.dest_val is not None]
-
-    @property
-    def hostname_entries(self):
-        """Entries declared after `hostnames`, whose keys nginx reads as host names."""
-        after, result = False, []
+        hostnames, result = False, []
         for child in self.gather_map_directives(self.children):
             if child.dest_val is None:
-                after = after or child.src_val == "hostnames"
-            elif after:
-                result.append(child)
+                hostnames = hostnames or child.src_val == "hostnames"
+                continue
+            child.hostnames = hostnames
+            result.append(child)
         return result
 
     @cached_property
@@ -348,7 +344,7 @@ class GeoBlock(Block):
             elif isinstance(node, IncludeBlock):
                 yield from self.gather_geo_directives(node.children)
 
-    @property
+    @cached_property
     def entries(self):
         return [
             child
@@ -359,7 +355,7 @@ class GeoBlock(Block):
     @cached_property
     def variables(self):
         vars = []
-        for child in self.gather_geo_directives(self.children):
+        for child in self.entries:
             src_val = child.src_val
             dest_val = child.dest_val
 
