@@ -18,6 +18,8 @@ _MISSING = object()
 _BRACED_VARIABLE_RE = re.compile(r"\$\{\w+\}")
 _SHARED_ADDRESS_SPACE = ipaddress.IPv4Network("100.64.0.0/10")
 
+REDIRECT_PREFIXES = ("http://", "https://", "$scheme")
+
 
 def get_overrides():
     """Get a list of all directives that override the default behavior"""
@@ -326,6 +328,14 @@ class RewriteDirective(Directive):
     @cached_property
     def _regexp(self):
         return Regexp(self.pattern, case_sensitive=True)
+
+    @property
+    def redirects(self):
+        return self.flag in ("redirect", "permanent") or self.replace.startswith(REDIRECT_PREFIXES)
+
+    @property
+    def stops_processing(self):
+        return self.flag in ("last", "break") or self.redirects
 
     @property
     def variables(self):
