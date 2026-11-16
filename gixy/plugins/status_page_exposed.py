@@ -1,7 +1,7 @@
 import ipaddress
 
 import gixy
-from gixy.core.utils import AUTH_DIRECTIVES, resolve_inherited_single
+from gixy.core.utils import enforced_auth, satisfy_any
 from gixy.plugins.plugin import Plugin
 
 
@@ -52,14 +52,6 @@ class status_page_exposed(Plugin):
                     d.args and self._is_local_address(d.args[0])
                     for d in listen_directives
                 )
-        return False
-
-    def _has_inherited_auth(self, directive):
-        """True if an authentication module is enabled at or above this scope."""
-        for name in AUTH_DIRECTIVES:
-            match = resolve_inherited_single(directive.parent, name)
-            if match is not None and match.args[0].lower() != "off":
-                return True
         return False
 
     @staticmethod
@@ -150,8 +142,7 @@ class status_page_exposed(Plugin):
     @classmethod
     def _satisfy_any_allows_all(cls, directive):
         """True if `satisfy any` applies and the first universal access rule is an allow."""
-        satisfy = resolve_inherited_single(directive.parent, "satisfy")
-        if satisfy is None or satisfy.args[0].lower() != "any":
+        if not satisfy_any(directive.parent):
             return False
         rules = cls._access_rules(directive)
         return any(
@@ -189,7 +180,7 @@ class status_page_exposed(Plugin):
         if self._location_is_internal_only(directive):
             return
 
-        has_auth = self._has_inherited_auth(directive)
+        has_auth = bool(enforced_auth(directive.parent))
 
         if has_auth and not self._satisfy_any_allows_all(directive):
             return

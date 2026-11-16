@@ -32,6 +32,42 @@ def resolve_inherited_single(scope, name):
     return None
 
 
+def enforced_auth(scope):
+    """Authentication directives that restrict `scope`, by module name.
+
+    A module is on when its nearest declaration is not exactly `off` (nginx
+    compares case-sensitively). `auth_basic` restricts only with an
+    `auth_basic_user_file` in effect; a file without an `http` block is
+    assumed to get it from the main configuration.
+    """
+    enforced = {}
+    for name in AUTH_DIRECTIVES:
+        auth = resolve_inherited_single(scope, name)
+        if auth is not None and auth.arg(0) != "off":
+            enforced[name] = auth
+    if not _user_file_in_effect(scope):
+        enforced.pop("auth_basic", None)
+    return enforced
+
+
+def _user_file_in_effect(scope):
+    if resolve_inherited_single(scope, "auth_basic_user_file") is not None:
+        return True
+    return all(block.name != "http" for block in (scope, *scope.parents))
+
+
+def satisfy_any(scope):
+    """True when `satisfy any` is in effect for `scope`."""
+    satisfy = resolve_inherited_single(scope, "satisfy")
+    return satisfy is not None and satisfy.arg(0).lower() == "any"
+
+
+def basic_auth_enforced(scope):
+    """True when only users listed in the password file reach `scope`:
+    `auth_basic` restricts it and `satisfy all` (the default) applies."""
+    return "auth_basic" in enforced_auth(scope) and not satisfy_any(scope)
+
+
 def parse_listen_key_and_default(args):
     """
     Parse a listen directive arguments list into a normalized socket key and

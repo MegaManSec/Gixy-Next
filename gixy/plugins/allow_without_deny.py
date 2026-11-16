@@ -1,7 +1,7 @@
 import ipaddress
 
 import gixy
-from gixy.core.utils import AUTH_DIRECTIVES, resolve_inherited_single
+from gixy.core.utils import enforced_auth, satisfy_any
 from gixy.plugins.plugin import Plugin
 
 ALL_RULE = "all"
@@ -94,32 +94,6 @@ class allow_without_deny(Plugin):
         super(allow_without_deny, self).__init__(config)
         self._reported_parents = set()
 
-    def _is_satisfy_any_with_auth(self, scope):
-        """True for the intended 'IP allowlist OR authentication' pattern.
-
-        Under `satisfy any`, clients outside the allow list get NGX_DECLINED
-        from the access module and fall through to the auth modules, so a
-        missing `deny all` changes nothing: they still must authenticate.
-        Without an auth module the allow list is decorative and the warning
-        stands.
-        """
-        satisfy = resolve_inherited_single(scope, "satisfy")
-        if satisfy is None or satisfy.args[0].lower() != "any":
-            return False
-        for name in AUTH_DIRECTIVES:
-            auth = resolve_inherited_single(scope, name)
-            if auth is not None and auth.args[0].lower() != "off":
-                if name == "auth_basic" and self._lacks_user_file(scope):
-                    continue
-                return True
-        return False
-
-    @staticmethod
-    def _lacks_user_file(scope):
-        if resolve_inherited_single(scope, "auth_basic_user_file") is not None:
-            return False
-        return scope.name == "http" or any(parent.name == "http" for parent in scope.parents)
-
     @staticmethod
     def _simulate(rules):
         """Walk each family's rule list the way nginx does.
@@ -196,7 +170,7 @@ class allow_without_deny(Plugin):
             for rule in rules
             if rule.allow and rule.directive.args[0] not in ALLOW_ALL_RULES and rule not in shadowed
         ]
-        if not allows or self._is_satisfy_any_with_auth(parent):
+        if not allows or (satisfy_any(parent) and enforced_auth(parent)):
             return
         if any(rule in effective for rule in allows):
             return
