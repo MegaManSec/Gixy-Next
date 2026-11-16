@@ -19,6 +19,7 @@ _AT_BEGIN_SENTINEL = "\x00"
 _AT_END_SENTINEL = "\x7f"
 
 MAX_CANDIDATES = 10000
+PARSE_ERRORS = (sre_parse.error, OverflowError, RecursionError)
 
 _GENERATE_ORDER = string.ascii_letters + string.digits + string.punctuation + " " + "".join(map(chr, range(1, 32)))
 _WORD = string.ascii_letters + string.digits + "_"

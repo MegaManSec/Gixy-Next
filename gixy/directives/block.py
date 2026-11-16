@@ -1,8 +1,7 @@
 from functools import cached_property
 
-import gixy.core.sre_parse.sre_parse as sre_parse
 from gixy.core.exceptions import MalformedDirective
-from gixy.core.regexp import Regexp
+from gixy.core.regexp import PARSE_ERRORS, Regexp
 from gixy.core.variable import GEO_PARAMETERS, Variable, subject_boundary
 from gixy.directives.directive import Directive, MapDirective, quote_arg
 
@@ -251,7 +250,7 @@ class IncludeBlock(Block):
 def _key_parses(entry):
     try:
         entry.regex.groups
-    except (sre_parse.error, OverflowError, RecursionError):
+    except PARSE_ERRORS:
         return False
     return True
 

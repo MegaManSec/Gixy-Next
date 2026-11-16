@@ -1,8 +1,7 @@
 import re
 
 import gixy
-import gixy.core.sre_parse.sre_parse as sre_parse
-from gixy.core.regexp import Regexp, RegexpTooComplex
+from gixy.core.regexp import PARSE_ERRORS, Regexp, RegexpTooComplex
 from gixy.plugins.plugin import Plugin
 
 END_ANCHOR_RE = re.compile(r"(?<!\\)((?:\\\\)*)\\[zZ]")
@@ -14,7 +13,7 @@ def _is_open_regex(pattern):
     try:
         regexp = Regexp(END_ANCHOR_RE.sub(r"\1$", pattern), case_sensitive=False)
         candidates = [candidate for char in "/." for candidate in regexp.generate(char, anchored=True)]
-    except (sre_parse.error, OverflowError, RecursionError, RegexpTooComplex):
+    except (*PARSE_ERRORS, RegexpTooComplex):
         return False
     for candidate in candidates:
         if not candidate.startswith("^"):

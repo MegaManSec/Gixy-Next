@@ -5,8 +5,7 @@ from urllib.parse import urlparse
 import tldextract
 
 import gixy
-import gixy.core.sre_parse.sre_parse as sre_parse
-from gixy.core.regexp import Regexp, RegexpTooComplex
+from gixy.core.regexp import PARSE_ERRORS, Regexp, RegexpTooComplex
 from gixy.core.utils import bare_variable_name, resolve_inherited_list, resolve_variable_chain
 from gixy.core.variable import EXTRACT_RE
 from gixy.directives.block import MapBlock
@@ -150,7 +149,7 @@ class origins(Plugin):
         try:
             regexp = Regexp(pattern, case_sensitive=case_sensitive)
             candidates = list(regexp.generate("`", anchored=True, max_repeat=5))
-        except (sre_parse.error, OverflowError, RecursionError) as e:
+        except PARSE_ERRORS as e:
             LOG.warning("Failed to parse regex: %s (%s)", pattern, str(e))
             return False
         except RegexpTooComplex as e:
@@ -551,7 +550,7 @@ class origins(Plugin):
         try:
             candidates = Regexp(pattern, case_sensitive=case_sensitive).generate("`", anchored=True, max_repeat=5)
             return any(candidate.lstrip("^").rstrip("$") == "" for candidate in candidates)
-        except (sre_parse.error, OverflowError, RecursionError, RegexpTooComplex):
+        except (*PARSE_ERRORS, RegexpTooComplex):
             return False
 
     def _origin_assignments(self, root, sets, name):

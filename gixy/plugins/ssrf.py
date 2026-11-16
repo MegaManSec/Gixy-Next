@@ -11,6 +11,7 @@ from gixy.core.regexp import (
     LiteralToken,
     MaxRepeatToken,
     MinRepeatToken,
+    PARSE_ERRORS,
     Regexp,
     RegexpTooComplex,
     SubpatternToken,
@@ -35,7 +36,7 @@ def _is_catch_all_name(name):
     try:
         regexp = Regexp(pattern)
         return not any(regexp.must_contain(char) for char in HOST_NAME_CHARS)
-    except (sre_parse.error, OverflowError, RecursionError):
+    except PARSE_ERRORS:
         return False
 
 
@@ -130,7 +131,7 @@ def _is_open_suffix_name(name):
     try:
         regexp = Regexp(END_ANCHOR_RE.sub(r"\1$", name[1:]), case_sensitive=False)
         return any(_open_tail(items) for items in _flatten(regexp.root.childs))
-    except (sre_parse.error, OverflowError, RecursionError, RegexpTooComplex):
+    except (*PARSE_ERRORS, RegexpTooComplex):
         return False
 
 
@@ -155,7 +156,7 @@ def _literal_start(location):
         return location.path
     try:
         seq = list(Regexp(location.path).parsed)
-    except (sre_parse.error, OverflowError, RecursionError):
+    except PARSE_ERRORS:
         return ""
     if not seq or seq[0] != (sre_parse.AT, sre_parse.AT_BEGINNING):
         return ""

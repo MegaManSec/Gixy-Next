@@ -3,7 +3,7 @@ from itertools import takewhile
 
 import gixy
 import gixy.core.sre_parse.sre_parse as sre_parse
-from gixy.core.regexp import Regexp
+from gixy.core.regexp import PARSE_ERRORS, Regexp
 from gixy.core.utils import AUTH_DIRECTIVES, regex_arguments
 from gixy.core.variable import EXTRACT_RE
 from gixy.directives.block import GeoBlock, IfBlock, LocationBlock, MapBlock
@@ -92,7 +92,7 @@ def _regex_variable(pattern):
         return None
     try:
         return _dead_variable(list(Regexp(pattern).parsed))
-    except (sre_parse.error, OverflowError, RecursionError):
+    except PARSE_ERRORS:
         return None
 
 
