@@ -27,6 +27,7 @@ def memoize_query(method):
                 _query_results = None
         key = (method,) + args
         if key not in _query_results:
+            _query_results[key] = False
             _query_results[key] = method(*args)
         return _query_results[key]
 
@@ -98,7 +99,7 @@ def compile_hash_entry(var):
         # ngx_http_geo_module stores values verbatim, they are not nginx scripts
         return [Variable(name=None, value=provider.dest_val, have_script=False)]
 
-    return compile_script(provider.dest_val, ctx=provider.src_val)
+    return compile_script(provider.dest_val, ctx=provider)
 
 
 class Variable(object):
@@ -196,7 +197,7 @@ class Variable(object):
                     continue  # break?
 
                 compiled_val = compile_script(
-                    var.provider.dest_val, ctx=var.provider.src_val
+                    var.provider.dest_val, ctx=var.provider
                 )
                 # Doesn't work for 'map $document_uri $v { ~*^[^\r\n]+$ $document_uri; }'
                 # but nothing we can do about that.
@@ -244,7 +245,7 @@ class Variable(object):
                     continue
 
                 compiled_val = compile_script(
-                    var.provider.dest_val, ctx=var.provider.src_val
+                    var.provider.dest_val, ctx=var.provider
                 )
                 if compiled_val:
                     if compiled_val[0].can_startswith(char):

@@ -503,6 +503,6 @@ class MapDirective(Directive):
 
         boundary = subject_boundary(self.block.source)
         return [
-            Variable(name=name, value=group, provider=self, boundary=boundary, ctx=self.src_val)
+            Variable(name=name, value=group, provider=self, boundary=boundary, ctx=self)
             for name, group in self.regex.groups.items()
         ]

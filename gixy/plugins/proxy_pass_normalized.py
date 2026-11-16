@@ -98,9 +98,9 @@ class proxy_pass_normalized(Plugin):
 
     @classmethod
     @memoize_query
-    def _carries_decoded_path(cls, var, seen=()):
+    def _carries_decoded_path(cls, var):
         if var.alternatives:
-            return any(cls._carries_decoded_path(option, seen) for option in var.alternatives)
+            return any(cls._carries_decoded_path(option) for option in var.alternatives)
         provider = var.provider
         if provider is None:
             return var.name in DECODED_PATH_VARS
@@ -111,14 +111,12 @@ class proxy_pass_normalized(Plugin):
         if isinstance(provider, MapDirective):
             return provider.block.source.lstrip("$") in DECODED_PATH_VARS
         if isinstance(var.value, list):
-            return var not in seen and any(
-                cls._carries_decoded_path(dep, seen + (var,))
-                for entry in var.value
-                for dep in compile_hash_entry(entry) or ()
+            return any(
+                cls._carries_decoded_path(dep) for entry in var.value for dep in compile_hash_entry(entry) or ()
             )
         if provider.name == "set":
             return any(
-                cls._carries_decoded_path(dep, seen)
+                cls._carries_decoded_path(dep)
                 for dep in var.depends or ()
                 if not (isinstance(dep.name, int) and provider.escapes_captures)
             )
