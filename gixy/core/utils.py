@@ -3,6 +3,7 @@ import re
 from collections import deque
 
 AUTH_DIRECTIVES = ("auth_basic", "auth_request", "auth_jwt", "auth_oidc")
+TLS_LISTEN_FLAGS = ("ssl", "quic")
 REGEX_ARGUMENT_DIRECTIVES = frozenset((
     "server_name",
     "valid_referers",
@@ -104,7 +105,7 @@ def parse_listen_key_and_default(args):
     whether it contains the default flag.
 
     Returns: (key, is_default) where key is a string like "*:80",
-    "127.0.0.1:80", "[::]:443". If parsing fails, key is None.
+    "127.0.0.1:80", "[::]:443" or "unix:/path". If parsing fails, key is None.
     """
     if not args:
         return None, False
@@ -113,8 +114,7 @@ def parse_listen_key_and_default(args):
     is_default = any(p in ("default_server", "default") for p in params)
 
     if args[0].lower().startswith("unix:"):
-        # Not supported for ambiguity check
-        return None, is_default
+        return "unix:" + args[0][5:], is_default
 
     address, port = split_address_port(args[0])
     if address is None:
@@ -236,24 +236,50 @@ def resolve_variable_chain(name, assignments):
                 pending.append((following, chain))
 
 
-def default_listens(servers):
-    """Map each server to the `listen` directives on whose socket it is the default server:
-    the one flagged `default_server`, otherwise the first server on that socket."""
+def listen_sockets(servers):
+    """Map each listen socket to its (server, listen, is_default) entries in configuration
+    order; a server without `listen` sits on `*:80` with listen None."""
     sockets = {}
-    defaults = {}
     for server in servers:
         listens = server.find("listen")
-        if not listens:
+        module = enclosing_module(server)
+        if not listens and (module is None or module.name == "http"):
             sockets.setdefault("*:80", []).append((server, None, False))
         for listen in listens:
             key, is_default = parse_listen_key_and_default(listen.args)
-            if key is None:
-                if is_default:
-                    defaults.setdefault(server, []).append(listen)
-                continue
-            sockets.setdefault(key, []).append((server, listen, is_default))
-    for entries in sockets.values():
+            if key is not None:
+                sockets.setdefault(key, []).append((server, listen, is_default))
+    return sockets
+
+
+def default_listens(servers):
+    """Map each server to the `listen` directives on whose socket it is the default server:
+    the one flagged `default_server`, otherwise the first server on that socket."""
+    defaults = {}
+    for entries in listen_sockets(servers).values():
         server, listen, _ = next((entry for entry in entries if entry[2]), entries[0])
         if listen is not None:
             defaults.setdefault(server, []).append(listen)
     return defaults
+
+
+def enclosing_module(directive):
+    """The `http`, `stream` or `mail` block holding `directive`, or None in a snippet."""
+    return next((parent for parent in directive.parents if parent.name in ("http", "stream", "mail")), None)
+
+
+def is_tls_listen(listen, sockets=()):
+    """Whether a `listen` accepts TLS: it carries `ssl` or `quic`, or its socket is in `sockets`,
+    since nginx applies those flags to every server on the address:port."""
+    if any(arg.lower() in TLS_LISTEN_FLAGS for arg in listen.args[1:]):
+        return True
+    return parse_listen_key_and_default(listen.args)[0] in sockets
+
+
+def tls_sockets(servers):
+    """Socket keys on which any of `servers` has a TLS `listen`."""
+    return {
+        key
+        for key, entries in listen_sockets(servers).items()
+        if any(listen is not None and is_tls_listen(listen) for _, listen, _ in entries)
+    }

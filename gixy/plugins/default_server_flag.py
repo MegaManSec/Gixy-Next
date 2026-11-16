@@ -1,5 +1,5 @@
 import gixy
-from gixy.core.utils import parse_listen_key_and_default
+from gixy.core.utils import enclosing_module, listen_sockets
 from gixy.plugins.plugin import Plugin
 
 
@@ -30,60 +30,21 @@ class default_server_flag(Plugin):
         return
 
     def post_audit(self, root):
-        # Gather all server blocks recursively
-        server_blocks = list(root.find_all_contexts_of_type("server"))
-        if len(server_blocks) < 2:
-            # Single server cannot be ambiguous
-            return
-
-        # Map (module, listen socket) -> list of (server_block, listen_directive, is_default)
-        listen_groups = {}
-
-        for srv in server_blocks:
-            module = self._enclosing_module(srv)
-            if module in self.MODULES_WITHOUT_DEFAULT_SERVER:
-                continue
-            listens = srv.find("listen")
-            if not listens:
-                # Only http gives a listen-less server an implicit socket
-                if module != "http":
+        modules = {}
+        for server in root.find_all_contexts_of_type("server"):
+            module = enclosing_module(server)
+            if module is not None and module.name not in self.MODULES_WITHOUT_DEFAULT_SERVER:
+                modules.setdefault(module.name, []).append(server)
+        for servers in modules.values():
+            for key, entries in listen_sockets(servers).items():
+                if len({server for server, _, _ in entries}) < 2 or any(is_default for _, _, is_default in entries):
                     continue
-                listen_groups.setdefault((module, "*:80"), []).append(
-                    (srv, srv, False)
+                self.add_issue(
+                    directive=[listen or server for server, listen, _ in entries],
+                    summary=self.summary,
+                    description=(
+                        f"No server marked as default_server for listen {key}. "
+                        "Add 'default_server' to one server block listening on this socket."
+                    ),
+                    help_url=self.help_url,
                 )
-                continue
-            for listen in listens:
-                key, is_default = parse_listen_key_and_default(listen.args)
-                if not key:
-                    # Could not parse a concrete socket
-                    continue
-                listen_groups.setdefault((module, key), []).append(
-                    (srv, listen, is_default)
-                )
-
-        # For each listen group with multiple servers and none marked default_server,
-        # raise one issue per group (pointing to the first listen directive).
-        for (_, key), entries in listen_groups.items():
-            if len({srv for (srv, _, _) in entries}) < 2:
-                continue
-            has_default = any(is_def for (_, _, is_def) in entries)
-            if has_default:
-                continue
-            # Report once per ambiguous listen group
-            listen_directives = [listen for (srv, listen, is_def) in entries]
-            self.add_issue(
-                directive=listen_directives,
-                summary=self.summary,
-                description=(
-                    f"No server marked as default_server for listen {key}. "
-                    "Add 'default_server' to one server block listening on this socket."
-                ),
-                help_url=self.help_url,
-            )
-
-    def _enclosing_module(self, server):
-        """Return the module context ('http', 'stream', 'mail') holding a server block."""
-        for parent in server.parents:
-            if parent.name in ("http", "stream", "mail"):
-                return parent.name
-        return None

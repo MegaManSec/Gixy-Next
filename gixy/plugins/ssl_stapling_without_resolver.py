@@ -1,12 +1,11 @@
 import re
 
 import gixy
-from gixy.core.utils import parse_listen_key_and_default
+from gixy.core.utils import enclosing_module, is_tls_listen, tls_sockets
 from gixy.directives.directive import is_ipv4, is_ipv6
 from gixy.plugins.plugin import Plugin
 
 _SCHEME_RE = re.compile(r'^https?://', re.IGNORECASE)
-TLS_LISTEN_FLAGS = ("ssl", "quic", "http3")
 
 
 def _responder_host(url):
@@ -23,10 +22,6 @@ def _responder_host(url):
         return url[:bracket_end + 1]
     url = url.rsplit(':', 1)[0]
     return url or None
-
-
-def _is_tls_listen(listen):
-    return any(arg.lower() in TLS_LISTEN_FLAGS for arg in listen.args)
 
 
 class ssl_stapling_without_resolver(Plugin):
@@ -80,20 +75,12 @@ class ssl_stapling_without_resolver(Plugin):
         )
 
     def _is_ssl_server(self, server):
-        listens = server.find("listen")
-        if any(_is_tls_listen(listen) for listen in listens):
-            return True
-        module = next((parent for parent in server.parents if parent.name in ("http", "stream", "mail")), None)
+        module = enclosing_module(server)
         if module is None:
-            return False
+            return any(is_tls_listen(listen) for listen in server.find("listen"))
         if id(module) not in self._tls_sockets:
-            self._tls_sockets[id(module)] = {
-                parse_listen_key_and_default(listen.args)[0]
-                for other in module.find_all_contexts_of_type("server")
-                for listen in other.find("listen")
-                if _is_tls_listen(listen)
-            } - {None}
-        return any(parse_listen_key_and_default(listen.args)[0] in self._tls_sockets[id(module)] for listen in listens)
+            self._tls_sockets[id(module)] = tls_sockets(module.find_all_contexts_of_type("server"))
+        return any(is_tls_listen(listen, self._tls_sockets[id(module)]) for listen in server.find("listen"))
 
     def _effective(self, server, name):
         own = server.some(name)

@@ -93,9 +93,9 @@ This plugin only runs on a full configuration, one with a top-level `http` or `e
 
 Sockets are compared the way NGINX itself compares them. `listen 80`, `listen *:80`, `listen 0.0.0.0:80` and `listen 0.0.0.0` all name one socket, as do `listen [::]:80`, `listen [::0]:80` and `listen [::]`; an argument with no port implies port 80. The IPv4 and IPv6 wildcards on one port stay separate, and so do sockets of different types: `listen 443 ssl` and `listen 443 quic` each have their own default server, as do `listen 12345` and `listen 12345 udp` in `stream`.
 
-`listen localhost` is compared as `127.0.0.1`. Whether it also binds `[::1]` depends on the target's resolver, so that is not assumed. Other hostnames are compared by name.
+`listen localhost` is compared as `127.0.0.1`. Depending on the libc and the host's IPv6 setup, NGINX may also bind `[::1]`; that socket is not assumed. Other hostnames are compared by name.
 
-`listen unix:/path` sockets are not checked.
+`listen unix:/path` sockets are matched by their path.
 
 An `http` `server` block with no `listen` directive at all still takes part in the check: NGINX gives it `*:80` when running as the superuser (`*:8000` otherwise), so it shares the socket with any `listen 80;` sibling. Because the scanned configuration says nothing about the user NGINX will run as, the check assumes the `*:80` case.
 
