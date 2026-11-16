@@ -1,6 +1,6 @@
 import logging
-import random  # noqa: S311 - used for example generation, not security
 import re
+import string
 from functools import cached_property
 from itertools import product
 
@@ -26,12 +26,9 @@ class RegexpTooComplex(Exception):
 
 
 def _build_reverse_list(original):
-    result = []
-    for c in range(1, 126):
-        c = chr(c)
-        if c not in original:
-            result.append(c)
-    return frozenset(result)
+    """Printable characters first, so a generated example stays readable; always the same order."""
+    candidates = string.ascii_letters + string.digits + string.punctuation + " " + "".join(map(chr, range(1, 32)))
+    return tuple(c for c in candidates if c not in original)
 
 
 FIX_NAMED_GROUPS_RE = re.compile(r"(?<!\\)\(\?[<'](\w+)[>']")
@@ -277,7 +274,7 @@ class NotLiteralToken(Token):
 
     def _parse(self):
         self.char = chr(self.token[1])
-        self.gen_char_list = list(_build_reverse_list(frozenset(self.char)))
+        self.gen_char_list = _build_reverse_list(frozenset(self.char))
 
     def can_contain(self, char, skip_literal=True):
         return self.char != char
@@ -290,7 +287,7 @@ class NotLiteralToken(Token):
         if self.can_contain(context.char):
             return context.char
 
-        return random.choice(self.gen_char_list)
+        return self.gen_char_list[0]
 
     def __str__(self):
         return "[^{char}]".format(char=self.char)
@@ -315,7 +312,7 @@ class RangeToken(Token):
         if self.can_contain(context.char):
             return context.char
 
-        return chr(random.randint(self.token[1][0], self.token[1][1]))
+        return self.left
 
     def __str__(self):
         return "{left}-{right}".format(left=self.left, right=self.right)
