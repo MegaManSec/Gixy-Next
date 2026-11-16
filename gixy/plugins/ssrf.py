@@ -29,7 +29,6 @@ from gixy.plugins.plugin import Plugin
 
 HOST_NAME_CHARS = string.ascii_lowercase + string.digits + "-."
 LABEL_CHARS = HOST_NAME_CHARS.replace(".", "")
-END_ANCHOR_RE = re.compile(r"(?<!\\)((?:\\\\)*)\\[zZ]")
 
 
 def _is_catch_all_name(name):
@@ -135,7 +134,7 @@ def _is_open_suffix_name(name):
     if not name.startswith("~"):
         return name.endswith(".*")
     try:
-        regexp = Regexp(END_ANCHOR_RE.sub(r"\1$", name[1:]), case_sensitive=False)
+        regexp = Regexp(name[1:], case_sensitive=False)
         return any(_open_tail(items) for items in _flatten(regexp.root.childs))
     except (*PARSE_ERRORS, RegexpTooComplex):
         return False

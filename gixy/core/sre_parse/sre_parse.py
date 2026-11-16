@@ -300,11 +300,16 @@ def _pcre_escape(source, escape):
     return None
 
 
+_GENERAL_CATEGORIES = frozenset(
+    "lu ll lt lm lo mn mc me nd nl no pc pd ps pe pi pf po sm sc sk so zs zl zp cc cf cs co cn".split()
+)
+
+
 def _property_chars(name):
     name = name.replace(" ", "").replace("_", "").replace("-", "").lower()
     chars = [chr(c) for c in range(0x01, 0x100) if c != 0x7F]
-    if name == "any":
-        return chars
+    if name == "ascii":
+        return [c for c in chars if c < "\x80"]
     if name in ("l&", "lc"):
         return [c for c in chars if unicodedata.category(c) in ("Lu", "Ll", "Lt")]
     if name == "xan":
@@ -313,11 +318,13 @@ def _property_chars(name):
         return [c for c in chars if unicodedata.category(c)[0] in "LN" or c == "_"]
     if name in ("xsp", "xps"):
         return [c for c in chars if unicodedata.category(c)[0] == "Z" or c in "\t\n\v\f\r"]
-    if len(name) in (1, 2) and name[0] in "lmnpszc":
+    if name in _GENERAL_CATEGORIES or (len(name) == 1 and name in "lmnpszc"):
         return [c for c in chars if unicodedata.category(c).lower().startswith(name)]
     if name in ("common", "zyyy"):
         return [c for c in chars if unicodedata.category(c)[0] != "L"]
-    return [c for c in chars if unicodedata.category(c)[0] in "LM"]
+    if name == "latin":
+        return [c for c in chars if unicodedata.category(c)[0] == "L"]
+    return chars
 
 
 def _char_set(chars, negate):

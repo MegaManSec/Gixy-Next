@@ -4,14 +4,12 @@ import gixy
 from gixy.core.regexp import PARSE_ERRORS, Regexp, RegexpTooComplex
 from gixy.plugins.plugin import Plugin
 
-END_ANCHOR_RE = re.compile(r"(?<!\\)((?:\\\\)*)\\[zZ]")
-
 
 def _is_open_regex(pattern):
     """True if `pattern`, matched against the Referer after its scheme, is not pinned to the start of
     that text or does not pin where the host name ends, so a Referer from another site can match it."""
     try:
-        regexp = Regexp(END_ANCHOR_RE.sub(r"\1$", pattern), case_sensitive=False)
+        regexp = Regexp(pattern, case_sensitive=False)
         candidates = [candidate for char in "/." for candidate in regexp.generate(char, anchored=True)]
     except (*PARSE_ERRORS, RegexpTooComplex):
         return False
