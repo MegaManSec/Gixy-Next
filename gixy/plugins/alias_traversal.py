@@ -2,7 +2,7 @@ import gixy
 import gixy.core.sre_parse.sre_parse as sre_parse
 from gixy.core.regexp import Regexp, RegexpTooComplex
 from gixy.core.utils import basic_auth_enforced
-from gixy.core.variable import compile_script
+from gixy.core.variable import compile_hash_entry, compile_script
 from gixy.plugins.plugin import Plugin
 
 _PATTERN_START = (sre_parse.AT, sre_parse.AT_BEGINNING)
@@ -46,13 +46,10 @@ class alias_traversal(Plugin):
     def check_prefix_location(self, directive, location):
         alias_parts = compile_script(directive.path)
         severities = list(self._variable_severities(directive, location, alias_parts))
+        tail = self._literal_tail(alias_parts[-1]) if alias_parts else None
         if not location.path.endswith("/"):
-            severities.append(
-                gixy.severity.HIGH
-                if directive.path.endswith("/")
-                else gixy.severity.MEDIUM
-            )
-        elif alias_parts and self._literal_tail(alias_parts[-1]) not in (None, "/"):
+            severities.append(gixy.severity.HIGH if tail == "/" else gixy.severity.MEDIUM)
+        elif tail not in (None, "/"):
             severities.append(gixy.severity.MEDIUM)
         if severities:
             self.report_issue(directive, location, max(severities, key=gixy.severity.ALL.index))
@@ -66,40 +63,51 @@ class alias_traversal(Plugin):
         """The last character of the fixed text a part ends with, or None when its value is not fixed."""
         while part.depends:
             part = part.depends[-1]
-        if part.alternatives or part.regexp or not isinstance(part.value, str) or not part.value:
-            return None
-        return part.value[-1]
+        if part.name is None and part.value:
+            return part.value[-1]
+        return None
 
     @classmethod
-    def _client_controlled(cls, part):
+    def _request_sources(cls, part, seen=()):
+        """The request-controlled variables a part is built from, through `set`, `if` and `map`."""
         if part.regexp:
-            return True
-        return any(cls._client_controlled(child) for child in (part.alternatives or []) + (part.depends or []))
+            yield part
+            return
+        if part in seen:
+            return
+        children = part.alternatives or part.depends or ()
+        if isinstance(part.value, list):
+            children = [dep for entry in part.value for dep in compile_hash_entry(entry) or ()]
+        for child in children:
+            yield from cls._request_sources(child, seen + (part,))
 
     def _variable_severities(self, directive, location, alias_parts):
         prev_part = None
 
         for part in alias_parts:
-            if not self._client_controlled(part) or (
-                part.name == "remote_user" and basic_auth_enforced(directive.parent)
-            ):
+            sources = [
+                source for source in self._request_sources(part)
+                if not self._from_host(source)
+                and not (source.name == "remote_user" and basic_auth_enforced(directive.parent))
+            ]
+            if not sources:
                 prev_part = part
                 continue
 
-            location_has_slash_before = part.must_startswith("/") or (
-                self._literal_before_capture(location, part) == "/"
+            location_has_slash_before = part.must_startswith("/") or all(
+                self._literal_before_capture(location, source) == "/" for source in sources
             )
 
             if prev_part is None:
                 yield gixy.severity.HIGH
-            elif str(prev_part.value).endswith("/"):
+            elif self._literal_tail(prev_part) == "/":
                 # location /bar(.*) ~ { alias /foo/$1; }
                 # only dangerous if the captured part can start with "."
-                if not location_has_slash_before and part.can_startswith(".") and not self._from_host(part):
+                if not location_has_slash_before and part.can_startswith("."):
                     if part.can_contain("/"):
                         # location /site(.*) ~ { alias /lol/$1; }
                         yield gixy.severity.HIGH
-                    elif self._can_be_parent_dir(part):
+                    elif any(self._can_be_parent_dir(source) for source in sources):
                         # location /site([^/]*) ~ { alias /lol/$1; }
                         yield gixy.severity.MEDIUM
             elif not part.must_startswith("/"):
@@ -116,8 +124,6 @@ class alias_traversal(Plugin):
 
     @staticmethod
     def _can_be_parent_dir(part):
-        if part.regexp is None:
-            return True
         try:
             return ".." in part.regexp.generate(".", max_repeat=2)
         except RegexpTooComplex:
