@@ -3,6 +3,8 @@ import re
 from collections import deque
 
 import gixy.core.sre_parse.sre_parse as sre_parse
+import tldextract
+
 from gixy.core.regexp import ANCHORS_BEGIN, PARSE_ERRORS, Regexp
 
 AUTH_DIRECTIVES = ("auth_basic", "auth_request", "auth_jwt", "auth_oidc")
@@ -12,6 +14,8 @@ IMPLICIT_LISTEN_SOCKET = "*:80"
 
 _UPPERCASE_RE = re.compile(r"[A-Z]")
 _BARE_VARIABLE_RE = re.compile(r"\$(?:([a-z_][a-z0-9_]*)|\{([a-z_][a-z0-9_]*)\})", re.IGNORECASE)
+_EXTRACT = tldextract.TLDExtract(include_psl_private_domains=True, suffix_list_urls=(), cache_dir=None)
+HOST_PROBES = "b1"
 
 
 def is_indexed_name(name):
@@ -214,6 +218,56 @@ def regex_arguments(directive):
     elif name in ("proxy_cookie_domain", "proxy_cookie_flags"):
         if args and args[0].startswith("~"):
             yield args[0][1:], True
+
+
+def registrable_domain(name):
+    """`example.co.uk` for `www.example.co.uk`, lowercased, with the public suffix list's private
+    suffixes such as `github.io` counted; the whole name when its last label is on no list, since
+    nothing then says where registration starts."""
+    name = name.strip(".").lower()
+    return _EXTRACT(name).top_domain_under_public_suffix or name
+
+
+def _class_probes(seq):
+    """The last member of every character class that lists none of `HOST_PROBES`: the generator fills
+    such a class the same way in every round, so it gets a round of its own."""
+    for op, av in seq:
+        if op == sre_parse.IN:
+            if any(kind not in (sre_parse.LITERAL, sre_parse.RANGE) for kind, _ in av):
+                continue
+            ranges = [(value, value) if kind == sre_parse.LITERAL else value for kind, value in av]
+            if sum(hi - lo + 1 for lo, hi in ranges) > 1 and not any(
+                lo <= ord(probe) <= hi for lo, hi in ranges for probe in HOST_PROBES
+            ):
+                yield chr(max(hi for _, hi in ranges))
+        elif op == sre_parse.SUBPATTERN:
+            yield from _class_probes(av[-1])
+        elif op in (sre_parse.MAX_REPEAT, sre_parse.MIN_REPEAT, sre_parse.POSSESSIVE_REPEAT):
+            yield from _class_probes(av[2])
+        elif op == sre_parse.BRANCH:
+            for alternative in av[1]:
+                yield from _class_probes(alternative)
+        elif op == sre_parse.ATOMIC_GROUP:
+            yield from _class_probes(av)
+
+
+def pins_registrable_domain(pattern, probes=HOST_PROBES, host=lambda text: text):
+    """True when every name the case-insensitive regex `pattern` matches has the same registrable
+    domain, so no name under a domain the client registers matches. Each probe character fills the
+    wildcards and classes of one round of candidates and stands in for the text an unanchored end
+    leaves open; the rounds must agree. `HOST_PROBES` are host characters no common class lists
+    first, so a class yields different text per round. `host` reads the host name out of a
+    candidate. Raises PARSE_ERRORS or RegexpTooComplex."""
+    regexp = Regexp(pattern, case_sensitive=False)
+    rounds = set()
+    for probe in dict.fromkeys((*probes, *_class_probes(regexp.parsed))):
+        domains = set()
+        for candidate in regexp.generate(probe, anchored=True):
+            text = candidate if candidate.startswith("^") else probe + candidate
+            text = text if text.endswith("$") else text + probe
+            domains.add(registrable_domain(host(text.strip("^$"))))
+        rounds.add(frozenset(domains))
+    return len(rounds) == 1 and all(rounds.pop())
 
 
 def is_error_return(directive):

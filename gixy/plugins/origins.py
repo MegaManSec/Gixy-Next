@@ -2,11 +2,15 @@ import logging
 import re
 from urllib.parse import urlparse
 
-import tldextract
-
 import gixy
 from gixy.core.regexp import PARSE_ERRORS, Regexp, RegexpTooComplex
-from gixy.core.utils import bare_variable_name, is_error_return, resolve_inherited_list, resolve_variable_chain
+from gixy.core.utils import (
+    bare_variable_name,
+    is_error_return,
+    registrable_domain,
+    resolve_inherited_list,
+    resolve_variable_chain,
+)
 from gixy.core.variable import EXTRACT_RE
 from gixy.directives.block import MapBlock
 from gixy.directives.directive import (
@@ -19,10 +23,6 @@ from gixy.directives.directive import (
 from gixy.plugins.plugin import Plugin
 
 LOG = logging.getLogger(__name__)
-
-_EXTRACT = tldextract.TLDExtract(
-    include_psl_private_domains=True, suffix_list_urls=(), cache_dir=None
-)  # include private domains, because we only care about origin; not domain ownership
 
 
 class origins(Plugin):
@@ -76,7 +76,6 @@ class origins(Plugin):
 
     def __init__(self, config):
         super(origins, self).__init__(config)
-        self.extract = _EXTRACT
 
         self.directive_type = None
         self.insecure_set = set()
@@ -92,27 +91,7 @@ class origins(Plugin):
         self.lower_hostname_pattern = re.compile(r"^[a-z0-9.:\[\]-]+$")  # :][ for IPv6
 
     def same_origin(self, i, j):
-        if not i or not j:
-            return False
-
-        i = i.strip(".").lower()
-        j = j.strip(".").lower()
-
-        if i == j:
-            return True
-
-        xi = self.extract(i)
-        xj = self.extract(j)
-
-        def _top_domain_under_public_suffix(x):
-            domain = getattr(x, "domain", None) or ""
-            suffix = getattr(x, "suffix", None) or ""
-            return f"{domain}.{suffix}" if domain and suffix else None
-
-        ei = _top_domain_under_public_suffix(xi)
-        ej = _top_domain_under_public_suffix(xj)
-
-        return ei is not None and ei == ej
+        return bool(i and j) and registrable_domain(i) == registrable_domain(j)
 
     def parse_url(self, url):
         try:

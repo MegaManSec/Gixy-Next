@@ -1,28 +1,24 @@
 import re
 
 import gixy
-from gixy.core.regexp import PARSE_ERRORS, Regexp, RegexpTooComplex
+from gixy.core.regexp import PARSE_ERRORS, RegexpTooComplex
+from gixy.core.utils import HOST_PROBES, pins_registrable_domain
 from gixy.plugins.plugin import Plugin
+
+
+def _referer_host(text):
+    return re.split(r"[/:]", text, maxsplit=1)[0]
 
 
 def _is_open_regex(pattern):
     """True if `pattern`, matched against the Referer after its scheme, is not pinned to the start of
-    that text or does not pin where the host name ends, so a Referer from another site can match it."""
+    that text, does not pin where the host name ends, or leaves part of the host's registrable domain
+    to the client, so a Referer from another site can match it. `/` joins the probes because a
+    wildcard that admits it ends the host name early."""
     try:
-        regexp = Regexp(pattern, case_sensitive=False)
-        candidates = [candidate for char in "/." for candidate in regexp.generate(char, anchored=True)]
+        return not pins_registrable_domain(pattern, HOST_PROBES + "/", _referer_host)
     except (*PARSE_ERRORS, RegexpTooComplex):
         return False
-    for candidate in candidates:
-        if not candidate.startswith("^"):
-            return True
-        body = candidate[1:]
-        pinned_end = body.endswith("$")
-        body = body[:-1] if pinned_end else body
-        host = re.split(r"[/:]", body, maxsplit=1)[0]
-        if not host or (host == body and not pinned_end):
-            return True
-    return False
 
 
 class valid_referers(Plugin):
