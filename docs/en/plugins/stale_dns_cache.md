@@ -11,6 +11,7 @@ This plugin reports hostnames that NGINX resolves only once, at startup, so requ
 
 - `proxy_pass` points at a literal hostname, for example `proxy_pass https://api.example.com;`
 - `proxy_pass` points to an `upstream` whose `server` entries are hostnames without the `resolve` parameter
+- `proxy_pass` uses a variable, but another `proxy_pass` names the same host and port without one, so NGINX uses the addresses it resolved for that one at startup, even with a `resolver`
 - `proxy_pass` uses a variable, or an `upstream` uses `server ... resolve`, but no `resolver` is set, so the lookup cannot happen at all
 
 `fastcgi_pass`, `uwsgi_pass`, `scgi_pass` and `grpc_pass` are checked the same way.
@@ -94,7 +95,7 @@ http {
 }
 ```
 
-With any variable in `proxy_pass`, NGINX resolves the name at request time through the `resolver`. It honors the record's TTL unless `valid=` overrides it.
+With any variable in `proxy_pass`, NGINX resolves the name at request time through the `resolver`, unless another `proxy_pass` names the same host and port without variables. It honors the record's TTL unless `valid=` overrides it.
 
 ### upstream server ... resolve (open source NGINX 1.27.3+)
 

@@ -4,13 +4,19 @@ import tldextract
 
 import gixy
 import gixy.core.builtin_variables as builtins
-from gixy.core.utils import PASS_DIRECTIVES
+from gixy.core.utils import PASS_DIRECTIVES, enclosing_module
 from gixy.core.variable import compile_hash_entry, compile_script
-from gixy.directives.directive import is_ipv4, is_ipv6
+from gixy.directives.directive import MapDirective, is_ipv4, is_ipv6
 from gixy.plugins.plugin import Plugin
 
 _EXTRACT = tldextract.TLDExtract(include_psl_private_domains=True, suffix_list_urls=(), cache_dir=None)
 _UNIX_SOCKET_RE = re.compile(r"^(?:[a-z][a-z0-9+.-]*://)?unix:", re.IGNORECASE)
+_DEFAULT_PORTS = {"http": 80, "https": 443}
+
+
+def _tail(tails):
+    tails = [tail for tail in tails if tail is not None]
+    return all(tails) if tails else None
 
 
 class stale_dns_cache(Plugin):
@@ -36,6 +42,7 @@ class stale_dns_cache(Plugin):
             r"^(?P<scheme>[a-z][a-z0-9+.-]*://)?(?P<host>\[[0-9a-fA-F:.]+\]|[^/?#:]+)(?::(?P<port>[0-9]+))?",
             re.IGNORECASE,
         )
+        self._groups = {}
 
     def _needs_dns(self, target, startup=True):
         if _UNIX_SOCKET_RE.match(target):
@@ -47,21 +54,25 @@ class stale_dns_cache(Plugin):
         host = host.lower().rstrip(".")
         return not startup or (host not in ("localhost", "ip6-localhost") and not host.endswith(".localhost"))
 
-    def _targets(self, script, seen=()):
+    def _targets(self, script, seen=(), top=False):
         targets = [""]
-        for var in script:
+        multiple = False
+        for index, var in enumerate(script):
             options = var.options
-            if not options or var in seen or (var.name and builtins.is_builtin(var.name)):
-                break
-            values = list(
-                dict.fromkeys(value for option in options for value in self._option_values(option, seen + (var,)))
-            )
+            if (multiple and var.name) or not options or var in seen or (var.name and builtins.is_builtin(var.name)):
+                return targets, bool(var.must_startswith("/"))
+            expanded = [self._option_values(option, seen + (var,)) for option in options]
+            values = list(dict.fromkeys(value for option_values, _ in expanded for value in option_values))
             if not all(isinstance(value, str) for value in values):
-                break
+                return targets, bool(var.must_startswith("/"))
             targets = [target + value for target in targets for value in values]
-            if len(values) > 1:
-                break
-        return targets
+            tail = _tail(tail for _, tail in expanded)
+            if tail is not None:
+                return targets, tail
+            multiple = multiple or len(values) > 1
+            if multiple and not top and index + 1 < len(script):
+                return targets, bool(script[index + 1].must_startswith("/"))
+        return targets, None
 
     def _option_values(self, option, seen):
         if option not in self._values:
@@ -70,14 +81,41 @@ class stale_dns_cache(Plugin):
 
     def _expand(self, option, seen):
         if isinstance(option.value, list):
-            return [target for entry in option.value for target in self._targets(compile_hash_entry(entry) or [], seen)]
+            expanded = [self._targets(compile_hash_entry(entry) or [], seen) for entry in option.value]
+            return [target for targets, _ in expanded for target in targets], _tail(tail for _, tail in expanded)
         if option.depends:
             return self._targets(option.depends, seen)
-        return [option.final_value]
+        return [option.final_value], None
 
     def _upstream_host(self, target):
         url = self.parse_uri_re.match(target)
         return url.group("host").lower() if url and not url.group("port") else None
+
+    def _socket(self, target, scheme="", bounded=True):
+        url = self.parse_uri_re.match(target)
+        if not url or not (target[url.end():url.end() + 1] in ("/", "?") or (url.end() == len(target) and bounded)):
+            return None
+        if url.group("port"):
+            port = int(url.group("port"))
+        else:
+            port = _DEFAULT_PORTS.get((url.group("scheme") or scheme).lower().rstrip(":/"))
+        return (url.group("host").lower(), port) if port else None
+
+    def _static_groups(self, directive):
+        scope = enclosing_module(directive) or list(directive.parents)[-1]
+        if scope in self._groups:
+            return self._groups[scope]
+        named = {block.args[0].lower() for block in scope.find_recursive("upstream") if len(block.args) == 1}
+        groups = self._groups[scope] = {}
+        for name in PASS_DIRECTIVES:
+            for other in scope.find_recursive(name):
+                if isinstance(other, MapDirective):
+                    continue
+                target = other.args[0] if other.args else ""
+                socket = None if "$" in target or _UNIX_SOCKET_RE.match(target) else self._socket(target)
+                if socket and socket[0] not in named:
+                    groups.setdefault(socket, other)
+        return groups
 
     def audit(self, directive):
         if not getattr(directive, "args", None):
@@ -89,8 +127,8 @@ class stale_dns_cache(Plugin):
             return
 
         self._values = {}
-        _, sep, rest = proxy_target.partition("://")
-        targets = self._targets(compile_script(rest if sep else proxy_target))
+        scheme, sep, rest = proxy_target.partition("://")
+        targets, tail = self._targets(compile_script(rest if sep else proxy_target), top=True)
 
         if not any(self._needs_dns(target, startup="$" not in proxy_target) for target in targets):
             return
@@ -145,7 +183,24 @@ class stale_dns_cache(Plugin):
         if (
             not found_upstream and "$" in proxy_target
         ):  # https://host/$1 is OK, as long as 'host' is not an 'upstream'.
-            if not resolver:
+            groups = self._static_groups(directive)
+            runtime, shared = [], {}
+            for target in targets:
+                group = groups.get(self._socket(target, scheme if sep else "", tail is not False))
+                if group is None:
+                    runtime.append(target)
+                elif self._needs_dns(target):
+                    shared.setdefault(group, target)
+            for group, target in shared.items():
+                self.add_issue(
+                    severity=gixy.severity.MEDIUM if self.extract(target).suffix else self.severity,
+                    directive=[directive, group],
+                    reason=(
+                        "`{} {}` names the same host and port without variables, so nginx sends this {} "
+                        "to the addresses it resolved at startup.".format(group.name, group.args[0], directive.name)
+                    ),
+                )
+            if not resolver and any(self._needs_dns(target, startup=False) for target in runtime):
                 self.add_issue(
                     severity=gixy.severity.MEDIUM,
                     directive=directive,
